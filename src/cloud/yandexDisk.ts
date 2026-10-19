@@ -18,6 +18,17 @@ export class YandexDiskError extends Error {
   }
 }
 
+/** Браузер не сообщает причину сетевой ошибки («Load failed»), поэтому указываем шаг и сервер. */
+async function send(url: string, init: RequestInit, purpose: string): Promise<Response> {
+  try {
+    return await fetch(url, init)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    const host = new URL(url).host
+    throw new YandexDiskError(0, `${purpose}: нет ответа от ${host} — браузер заблокировал запрос (CORS) или пропала сеть`, 'network')
+  }
+}
+
 export function redirectUri(): string {
   return `${location.origin}${location.pathname}`
 }
@@ -71,10 +82,11 @@ export class YandexDisk {
   }
 
   private async request<T>(method: string, path: string, params: Record<string, string> = {}): Promise<T> {
-    const response = await fetch(`${API}${path}?${new URLSearchParams(params)}`, {
-      method,
-      headers: { Authorization: `OAuth ${this.token}`, Accept: 'application/json' },
-    })
+    const response = await send(
+      `${API}${path}?${new URLSearchParams(params)}`,
+      { method, headers: { Authorization: `OAuth ${this.token}`, Accept: 'application/json' } },
+      `Запрос ${method} ${path || '/'} к API Диска`,
+    )
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as { message?: string; description?: string; error?: string }
       throw new YandexDiskError(response.status, body.message ?? body.description ?? response.statusText, body.error)
@@ -115,13 +127,13 @@ export class YandexDisk {
 
   async upload(path: string, data: Blob, signal?: AbortSignal): Promise<void> {
     const target = await this.request<{ href: string; method: string }>('GET', '/resources/upload', { path, overwrite: 'true' })
-    const response = await fetch(target.href, { method: target.method || 'PUT', body: data, signal })
+    const response = await send(target.href, { method: target.method || 'PUT', body: data, signal }, 'Загрузка файла на сервер Диска')
     if (!response.ok) throw new YandexDiskError(response.status, `Загрузка не принята: ${response.statusText}`)
   }
 
   async download(path: string, signal?: AbortSignal): Promise<Blob> {
     const target = await this.request<{ href: string }>('GET', '/resources/download', { path })
-    const response = await fetch(target.href, { signal })
+    const response = await send(target.href, { signal }, 'Скачивание файла с сервера Диска')
     if (!response.ok) throw new YandexDiskError(response.status, `Скачивание не удалось: ${response.statusText}`)
     return response.blob()
   }
