@@ -76,6 +76,10 @@ export async function runYandexSuite(disk: YandexDisk, log: StepLog, photo?: Blo
   const retryOk = await verifyRemote(disk, `${LAB_FOLDER}/file-20mb.bin`, bigSha)
   log(`Повторная загрузка 20 МБ: ${formatMs(retryMs)}, SHA-256 ${retryOk ? 'совпал' : 'НЕ совпал'}`)
   if (!retryOk) throw new Error('После повтора файл на Диске повреждён')
+  const [bigBack, bigDownMs] = await timed(() => disk.download(`${LAB_FOLDER}/file-20mb.bin`))
+  const bigBackOk = (await sha256Hex(bigBack)) === bigSha
+  log(`Скачивание 20 МБ через посредника: ${formatMs(bigDownMs)}, SHA-256 ${bigBackOk ? 'совпал' : 'НЕ совпал'}`)
+  if (!bigBackOk) throw new Error('Скачанный файл 20 МБ отличается от загруженного')
 
   const items = await disk.list(LAB_FOLDER)
   log(`В папке файлов: ${items.length} (${items.map((item) => item.name).join(', ')})`)

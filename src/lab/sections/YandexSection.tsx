@@ -16,7 +16,7 @@ export function YandexSection({ results }: { results: Record<string, LabResult> 
     <Section
       title="Яндекс Диск"
       result={results.yandex ?? results['yandex-auth']}
-      hint="Проверяются вход через Яндекс ID, запись и чтение файлов прямо из браузера, сверка контрольных сумм и повтор после оборванной загрузки. Тестовая папка DachaBook/lab в конце удаляется."
+      hint="Проверяются вход через Яндекс ID, загрузка файлов из браузера, скачивание через посредника Supabase, сверка контрольных сумм и повтор после оборванной загрузки. Тестовая папка DachaBook/lab в конце удаляется."
     >
       <dl className="facts">
         <dt>Адрес возврата</dt>

@@ -1,3 +1,5 @@
+import { YANDEX_DOWNLOAD_PROXY } from './yandexConfig'
+
 const API = 'https://cloud-api.yandex.net/v1/disk'
 const AUTH = 'https://oauth.yandex.ru/authorize'
 
@@ -133,8 +135,12 @@ export class YandexDisk {
 
   async download(path: string, signal?: AbortSignal): Promise<Blob> {
     const target = await this.request<{ href: string }>('GET', '/resources/download', { path })
-    const response = await send(target.href, { signal }, 'Скачивание файла с сервера Диска')
-    if (!response.ok) throw new YandexDiskError(response.status, `Скачивание не удалось: ${response.statusText}`)
+    const url = `${YANDEX_DOWNLOAD_PROXY}?${new URLSearchParams({ url: target.href })}`
+    const response = await send(url, { signal }, 'Скачивание файла через посредника')
+    if (response.status === 404) {
+      throw new YandexDiskError(404, 'Посредник скачивания не установлен: в Supabase нет функции yandex-download')
+    }
+    if (!response.ok) throw new YandexDiskError(response.status, `Скачивание не удалось: ${response.status} ${await response.text()}`)
     return response.blob()
   }
 
