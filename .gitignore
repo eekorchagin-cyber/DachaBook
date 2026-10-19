@@ -1,0 +1,12 @@
+# ТЗ и материалы заказчика содержат личные данные — только локально
+DOCS/
+FromEvernote/
+
+.DS_Store
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.local
