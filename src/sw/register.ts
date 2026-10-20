@@ -25,10 +25,46 @@ export function registerServiceWorker(timeoutMs = 15_000): void {
   }, timeoutMs)
   navigator.serviceWorker
     .register('./sw.js', { scope: './' })
-    .then(() => navigator.serviceWorker.ready)
+    .then((registration) => {
+      watchForUpdates(registration)
+      return navigator.serviceWorker.ready
+    })
     .then(() => setState({ kind: 'ready', controlled: !!navigator.serviceWorker.controller }))
     .catch((error: unknown) => setState({ kind: 'error', message: error instanceof Error ? error.message : String(error) }))
     .finally(() => clearTimeout(timer))
+}
+
+let updateReady = false
+const updateListeners = new Set<() => void>()
+
+function markUpdateReady(): void {
+  if (updateReady || !navigator.serviceWorker.controller) return
+  updateReady = true
+  for (const listener of updateListeners) listener()
+}
+
+/** Новая версия скачивается в фоне и ждёт; приложение показывает полосу «Обновить». */
+function watchForUpdates(registration: ServiceWorkerRegistration): void {
+  if (registration.waiting) markUpdateReady()
+  registration.addEventListener('updatefound', () => {
+    const worker = registration.installing
+    worker?.addEventListener('statechange', () => {
+      if (worker.state === 'installed') markUpdateReady()
+    })
+  })
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void registration.update().catch(() => undefined)
+  })
+}
+
+export function useUpdateReady(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      updateListeners.add(listener)
+      return () => updateListeners.delete(listener)
+    },
+    () => updateReady,
+  )
 }
 
 export function useServiceWorkerState(): SwState {

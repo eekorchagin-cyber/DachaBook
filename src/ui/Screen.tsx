@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { HelpButton } from './HelpButton'
+import { UpdateBanner } from './UpdateBanner'
 
 const TABS = [
   { path: '/', label: 'Главная', icon: '⌂' },
@@ -26,6 +27,7 @@ export function Screen(props: { title: string; help?: string; back?: string; act
           {props.help && <HelpButton topic={props.help} />}
         </div>
       </header>
+      <UpdateBanner />
       <main className="content">{props.children}</main>
       <nav className="tabbar" aria-label="Разделы">
         {TABS.map((tab) => (
