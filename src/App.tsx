@@ -6,6 +6,8 @@ import { LabScreen } from './lab/LabScreen'
 import { DiaryScreen } from './screens/diary/DiaryScreen'
 import { EventEditor } from './screens/diary/EventEditor'
 import { HomeScreen } from './screens/HomeScreen'
+import { LibraryScreen } from './screens/library/LibraryScreen'
+import { ReferenceEditor, ReferenceView } from './screens/library/ReferenceScreen'
 import { ComingSoon, MoreScreen, TrashScreen } from './screens/MoreScreen'
 import { ObjectsScreen } from './screens/ObjectsScreen'
 import { SettingsScreen, WelcomeScreen } from './screens/SettingsScreen'
@@ -44,7 +46,10 @@ export default function App() {
     case 'objects':
       return <ObjectsScreen />
     case 'library':
-      return <ComingSoon title="Справочник" text="Справочные материалы появятся в следующем обновлении этапа 2." />
+      if (param === 'new') return <ReferenceEditor />
+      if (param && route.path[2] === 'edit') return <ReferenceEditor id={param} />
+      if (param) return <ReferenceView id={param} />
+      return <LibraryScreen />
     case 'plan':
       return <ComingSoon title="Черновик плана" text="Черновик сезонного плана появится вместе с импортом из Evernote." />
     case 'import':

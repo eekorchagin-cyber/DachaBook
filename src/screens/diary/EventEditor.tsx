@@ -5,9 +5,10 @@ import { repo, type AppSettings } from '../../app/store'
 import { todayAtSite } from '../../domain/dates'
 import type { DiaryEvent, DocInput, EventType } from '../../domain/types'
 import { addAttachment, addPhoto, openFile } from '../../files/files'
-import { errorText, formatBytes } from '../../lib/format'
+import { errorText } from '../../lib/format'
 import { ConflictError } from '../../storage/repository'
 import { db } from '../../storage/db'
+import { AttachmentRow } from '../../ui/AttachmentRow'
 import { Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
 import { EVENT_TYPES } from '../../domain/labels'
@@ -83,20 +84,6 @@ function problems(draft: Draft): string[] {
     list.push('введите температуру или влажность')
   }
   return list
-}
-
-function AttachmentRow({ id, onRemove }: { id: string; onRemove: () => void }) {
-  const file = useLiveQuery(() => db.files.get(id), [id])
-  return (
-    <li className="attachment">
-      <button type="button" className="link" onClick={() => void openFile(id)}>
-        {file?.fileName ?? 'Файл'} {file && <span className="muted">({formatBytes(file.size)})</span>}
-      </button>
-      <button type="button" className="icon-button" aria-label="Убрать файл" onClick={onRemove}>
-        ×
-      </button>
-    </li>
-  )
 }
 
 export function EventEditor({ id, initialType, settings }: { id?: string; initialType: EventType; settings: AppSettings }) {

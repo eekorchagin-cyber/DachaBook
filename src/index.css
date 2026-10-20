@@ -647,3 +647,51 @@ body {
   border-radius: 8px;
   padding: 10px;
 }
+
+.reference-body {
+  overflow-wrap: anywhere;
+}
+
+.reference-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.reference-body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.reference-body td,
+.reference-body th {
+  border: 1px solid var(--border);
+  padding: 6px;
+  vertical-align: top;
+}
+
+.reference-body a {
+  color: var(--accent);
+}
+
+.excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.88rem;
+}
+
+.chips > button.chip {
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.chips > button.chip.active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
