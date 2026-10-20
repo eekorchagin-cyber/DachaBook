@@ -31,6 +31,32 @@ async function send(url: string, init: RequestInit, purpose: string): Promise<Re
   }
 }
 
+export interface RetryOptions {
+  attempts?: number
+  delaysMs?: number[]
+  onFailure?: (attempt: number, elapsedMs: number, error: unknown) => void
+}
+
+/**
+ * Повторяет действие при сетевом сбое, 429 и ошибках сервера 5xx.
+ * Пауза перед повтором нужна, чтобы сервер успел отпустить оборванную передачу.
+ */
+export async function withRetry<T>(action: () => Promise<T>, options: RetryOptions = {}): Promise<[T, number]> {
+  const attempts = options.attempts ?? 3
+  const delays = options.delaysMs ?? [3000, 10000]
+  for (let attempt = 1; ; attempt++) {
+    const start = performance.now()
+    try {
+      return [await action(), attempt]
+    } catch (error) {
+      options.onFailure?.(attempt, performance.now() - start, error)
+      const retriable = error instanceof YandexDiskError && (error.status === 0 || error.status === 429 || error.status >= 500)
+      if (!retriable || attempt >= attempts) throw error
+      await new Promise((resolve) => setTimeout(resolve, delays[Math.min(attempt - 1, delays.length - 1)]))
+    }
+  }
+}
+
 export function redirectUri(): string {
   return `${location.origin}${location.pathname}`
 }
@@ -133,29 +159,15 @@ export class YandexDisk {
     if (!response.ok) throw new YandexDiskError(response.status, `Загрузка не принята: ${response.statusText}`)
   }
 
-  /**
-   * Загрузка с повторами: при сетевом сбое или ошибке сервера берётся новая ссылка загрузки.
-   * Пауза перед повтором нужна, чтобы сервер успел отпустить оборванную загрузку.
-   */
-  async uploadWithRetry(
-    path: string,
-    data: Blob,
-    options: { attempts?: number; delaysMs?: number[]; onFailure?: (attempt: number, elapsedMs: number, error: unknown) => void } = {},
-  ): Promise<number> {
-    const attempts = options.attempts ?? 3
-    const delays = options.delaysMs ?? [3000, 10000]
-    for (let attempt = 1; ; attempt++) {
-      const start = performance.now()
-      try {
-        await this.upload(path, data)
-        return attempt
-      } catch (error) {
-        options.onFailure?.(attempt, performance.now() - start, error)
-        const retriable = error instanceof YandexDiskError && (error.status === 0 || error.status === 429 || error.status >= 500)
-        if (!retriable || attempt >= attempts) throw error
-        await new Promise((resolve) => setTimeout(resolve, delays[Math.min(attempt - 1, delays.length - 1)]))
-      }
-    }
+  /** Загрузка с повторами; каждая попытка получает новую ссылку загрузки. */
+  async uploadWithRetry(path: string, data: Blob, options: RetryOptions = {}): Promise<number> {
+    const [, attempts] = await withRetry(() => this.upload(path, data), options)
+    return attempts
+  }
+
+  /** Скачивание с повторами; каждая попытка получает новую ссылку скачивания. */
+  async downloadWithRetry(path: string, options: RetryOptions = {}): Promise<[Blob, number]> {
+    return withRetry(() => this.download(path), options)
   }
 
   async download(path: string, signal?: AbortSignal): Promise<Blob> {
