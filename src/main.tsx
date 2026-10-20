@@ -14,9 +14,19 @@ if (oauth.kind === 'token') {
   saveResult('yandex-auth', 'fail', `Вход через Яндекс ID не выполнен: ${oauth.message}`)
 }
 
-if (!navigator.onLine) {
-  saveResult('offline', 'ok', `Приложение открылось без сети ${new Date().toLocaleString('ru-RU')}`)
+/** version.json не кэшируется офлайн-режимом, поэтому его недоступность означает запуск без сети. */
+async function detectOfflineLaunch(): Promise<void> {
+  const at = new Date().toLocaleString('ru-RU')
+  if (!navigator.onLine) return saveResult('offline', 'ok', `Приложение открылось без сети ${at} (сеть выключена)`)
+  try {
+    const response = await fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store', signal: AbortSignal.timeout(8000) })
+    if (!response.ok) throw new Error(String(response.status))
+  } catch {
+    saveResult('offline', 'ok', `Приложение открылось без связи с сервером ${at}`)
+  }
 }
+
+void detectOfflineLaunch()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
