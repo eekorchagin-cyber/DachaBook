@@ -1,6 +1,6 @@
 // Публикация dist в ветку gh-pages (GitHub Pages → Deploy from a branch → gh-pages).
 import { execFileSync } from 'node:child_process'
-import { rmSync, writeFileSync } from 'node:fs'
+import { existsSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = join(import.meta.dirname, '..')
@@ -15,6 +15,17 @@ run('npm', ['run', 'build'])
 writeFileSync(join(dist, '.nojekyll'), '')
 rmSync(join(dist, '.git'), { recursive: true, force: true })
 run('git', ['init', '-q', '-b', 'gh-pages'], dist)
+// Файлы прошлых сборок остаются на сайте: страница, открытая из офлайн-копии старой версии,
+// должна суметь догрузить свои скрипты.
+try {
+  run('git', ['fetch', '-q', '--depth=1', remote, 'gh-pages'], dist)
+  const previous = execFileSync('git', ['ls-tree', '-r', '--name-only', 'FETCH_HEAD', 'assets'], { cwd: dist, encoding: 'utf8' })
+    .split('\n')
+    .filter((file) => file && !existsSync(join(dist, file)))
+  if (previous.length > 0) run('git', ['checkout', 'FETCH_HEAD', '--', ...previous], dist)
+} catch {
+  console.warn('Прошлая публикация не найдена — публикуется только текущая сборка')
+}
 run('git', ['add', '-A'], dist)
 run('git', ['commit', '-q', '-m', `Публикация ${commit}`], dist)
 run('git', ['push', '-f', remote, 'gh-pages'], dist)

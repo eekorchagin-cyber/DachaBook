@@ -49,15 +49,34 @@ export async function updateApp(): Promise<'latest' | 'reloading'> {
   if (version === __APP_VERSION__) return 'latest'
   const registration = await navigator.serviceWorker?.getRegistration()
   if (registration) {
-    const switched = new Promise<void>((resolve) => {
-      navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })
-      setTimeout(resolve, 10_000)
-    })
     await registration.update()
-    await switched
+    const worker = registration.waiting ?? (await installedWorker(registration))
+    if (worker) {
+      const switched = new Promise<void>((resolve) => {
+        navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })
+        setTimeout(resolve, 10_000)
+      })
+      worker.postMessage('skip-waiting')
+      await switched
+    }
   }
   location.reload()
   return 'reloading'
+}
+
+/** Ждёт, пока скачанная новая версия закончит установку (до 30 секунд). */
+function installedWorker(registration: ServiceWorkerRegistration): Promise<ServiceWorker | null> {
+  const worker = registration.installing
+  if (!worker) return Promise.resolve(registration.waiting)
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(registration.waiting), 30_000)
+    worker.addEventListener('statechange', () => {
+      if (worker.state === 'installed' || worker.state === 'redundant') {
+        clearTimeout(timer)
+        resolve(registration.waiting)
+      }
+    })
+  })
 }
 
 export async function cachedFileCount(): Promise<number> {

@@ -3,13 +3,13 @@ const VERSION = '__VERSION__'
 const CACHE = `dachabook-${VERSION}`
 const FILES = "__FILES__"
 
+// GitHub Pages отвечает с «Vary: Accept-Encoding»: без ignoreVary Safari может не найти копию страницы в кэше.
+const MATCH = { ignoreSearch: true, ignoreVary: true }
+
+// Новая версия не перехватывает открытую страницу сама (skipWaiting только по команде):
+// иначе страница старой версии запросит свои скрипты у новой и получит пустой экран.
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.addAll(FILES))
-      .then(() => self.skipWaiting()),
-  )
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES)))
 })
 
 self.addEventListener('activate', (event) => {
@@ -25,11 +25,15 @@ self.addEventListener('activate', (event) => {
 })
 
 self.addEventListener('message', (event) => {
+  if (event.data === 'skip-waiting') self.skipWaiting()
   if (event.data === 'version') event.source?.postMessage({ type: 'version', version: VERSION })
 })
 
-// GitHub Pages отвечает с «Vary: Accept-Encoding»: без ignoreVary Safari может не найти копию страницы в кэше.
-const MATCH = { ignoreSearch: true, ignoreVary: true }
+/** Сначала своя версия, затем любая сохранённая (страница могла открыться из прошлой), затем сеть. */
+async function cached(request) {
+  const own = await (await caches.open(CACHE)).match(request, MATCH)
+  return own ?? (await caches.match(request, MATCH))
+}
 
 self.addEventListener('fetch', (event) => {
   const request = event.request
@@ -39,9 +43,9 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.endsWith('/version.json')) return
 
   if (request.mode === 'navigate') {
-    event.respondWith(caches.match('./', MATCH).then((cached) => cached ?? fetch(request)))
+    event.respondWith(cached('./').then((response) => response ?? fetch(request)))
     return
   }
 
-  event.respondWith(caches.match(request, MATCH).then((cached) => cached ?? fetch(request)))
+  event.respondWith(cached(request).then((response) => response ?? fetch(request)))
 })
