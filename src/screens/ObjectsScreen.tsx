@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { repo } from '../app/store'
 import { OBJECT_TYPES } from '../domain/labels'
 import type { CareObject, DocInput, ObjectType, PlantGroup } from '../domain/types'
@@ -142,7 +142,10 @@ function GroupForm({ group, objects, onClose }: { group?: PlantGroup; objects: C
 export function ObjectsScreen() {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), []) ?? []
+  const [view, setView] = useState<'objects' | 'groups'>('objects')
   const [editing, setEditing] = useState<{ kind: 'object' | 'group'; id?: string } | null>(null)
+
+  useEffect(() => window.scrollTo({ top: 0 }), [editing, view])
 
   const active = objects.filter((item) => item.active).sort(byName)
   const archived = objects.filter((item) => !item.active).sort(byName)
@@ -162,68 +165,77 @@ export function ObjectsScreen() {
 
   return (
     <Screen title="Объекты и растения" help="objects" tab="/objects">
-      <p className="hint">Нажмите на объект или группу, чтобы изменить или убрать в архив.</p>
-      <section className="card">
-        <div className="card-header">
-          <h2>Объекты ухода</h2>
-          <button type="button" className="button small" onClick={() => setEditing({ kind: 'object' })}>
-            Добавить
-          </button>
-        </div>
-        {active.length === 0 && <EmptyState>Добавьте газон, сад, грядки или место на участке.</EmptyState>}
-        <ul className="list">
-          {active.map((object) => (
-            <li key={object.id}>
-              <button type="button" className="list-item" onClick={() => setEditing({ kind: 'object', id: object.id })}>
-                <strong>{object.name}</strong>
-                <span className="muted">
-                  {OBJECT_TYPES[object.type]}
-                  {object.areaM2 !== undefined && `, ${object.areaM2} м²`}
-                  {object.plantCount !== undefined && `, ${object.plantCount} шт.`}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="segmented" role="tablist" aria-label="Что показать">
+        <button type="button" role="tab" aria-selected={view === 'objects'} className={view === 'objects' ? 'active' : ''} onClick={() => setView('objects')}>
+          Объекты ухода ({active.length})
+        </button>
+        <button type="button" role="tab" aria-selected={view === 'groups'} className={view === 'groups' ? 'active' : ''} onClick={() => setView('groups')}>
+          Группы растений ({groups.length})
+        </button>
+      </div>
 
-      <section className="card">
-        <div className="card-header">
-          <h2>Группы растений</h2>
-          <button type="button" className="button small" onClick={() => setEditing({ kind: 'group' })}>
-            Добавить
-          </button>
-        </div>
-        {groups.length === 0 && <EmptyState>Группы растений нужны, чтобы отмечать, к каким посадкам относится запись.</EmptyState>}
-        <ul className="list">
-          {[...groups].sort(byName).map((group) => (
-            <li key={group.id}>
-              <button type="button" className="list-item" onClick={() => setEditing({ kind: 'group', id: group.id })}>
-                <strong>
-                  {group.name}
-                  {!group.active && ' (архив)'}
-                </strong>
-                <span className="muted">{group.objectIds.map((id) => objects.find((item) => item.id === id)?.name).filter(Boolean).join(', ')}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {archived.length > 0 && (
-        <section className="card">
-          <h2>Архив объектов</h2>
+      {view === 'objects' ? (
+        <>
+          <div className="actions">
+            <button type="button" className="button" onClick={() => setEditing({ kind: 'object' })}>
+              + Добавить объект
+            </button>
+          </div>
+          <p className="hint">Газон, сад, грядки и места на участке. Нажмите на объект, чтобы изменить его или убрать в архив.</p>
+          {active.length === 0 && <EmptyState>Добавьте газон, сад, грядки или место на участке.</EmptyState>}
           <ul className="list">
-            {archived.map((object) => (
+            {active.map((object) => (
               <li key={object.id}>
                 <button type="button" className="list-item" onClick={() => setEditing({ kind: 'object', id: object.id })}>
                   <strong>{object.name}</strong>
-                  <span className="muted">история сохранена</span>
+                  <span className="muted">
+                    {OBJECT_TYPES[object.type]}
+                    {object.areaM2 !== undefined && `, ${object.areaM2} м²`}
+                    {object.plantCount !== undefined && `, ${object.plantCount} шт.`}
+                  </span>
                 </button>
               </li>
             ))}
           </ul>
-        </section>
+          {archived.length > 0 && (
+            <>
+              <h2 className="section-title">Архив</h2>
+              <ul className="list">
+                {archived.map((object) => (
+                  <li key={object.id}>
+                    <button type="button" className="list-item" onClick={() => setEditing({ kind: 'object', id: object.id })}>
+                      <strong>{object.name}</strong>
+                      <span className="muted">в архиве, история сохранена</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="actions">
+            <button type="button" className="button" onClick={() => setEditing({ kind: 'group' })}>
+              + Добавить группу
+            </button>
+          </div>
+          <p className="hint">Группы растений («Хвойные», «Ягодные кусты», «Гортензии») привязываются к объектам и отмечаются в записях дневника.</p>
+          {groups.length === 0 && <EmptyState>Групп растений пока нет.</EmptyState>}
+          <ul className="list">
+            {[...groups].sort(byName).map((group) => (
+              <li key={group.id}>
+                <button type="button" className="list-item" onClick={() => setEditing({ kind: 'group', id: group.id })}>
+                  <strong>
+                    {group.name}
+                    {!group.active && ' (архив)'}
+                  </strong>
+                  <span className="muted">{group.objectIds.map((id) => objects.find((item) => item.id === id)?.name).filter(Boolean).join(', ') || 'без привязки к объекту'}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </Screen>
   )

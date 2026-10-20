@@ -18,6 +18,9 @@ export default function App() {
     if (settings) applyAppearance(settings)
   }, [settings])
 
+  const pathKey = route.path.join('/')
+  useEffect(() => window.scrollTo({ top: 0 }), [pathKey])
+
   const [section, param] = route.path
   if (section === 'lab') return <LabScreen />
   if (!settings) return null
