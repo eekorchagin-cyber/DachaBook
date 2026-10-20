@@ -11,6 +11,42 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="DachaBook" />
     <title>DachaBook</title>
+    <script>
+      /* Страховка от пустого экрана: если приложение не отрисовалось, предложить сбросить офлайн-копию.
+         Данные дневника (IndexedDB) при этом не трогаются. */
+      ;(function () {
+        function resetApp() {
+          var jobs = []
+          if (navigator.serviceWorker) {
+            jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs.map(function (reg) { return reg.unregister() }))
+            }))
+          }
+          if (window.caches) {
+            jobs.push(caches.keys().then(function (keys) {
+              return Promise.all(keys.filter(function (key) { return key.indexOf('dachabook-') === 0 }).map(function (key) { return caches.delete(key) }))
+            }))
+          }
+          Promise.all(jobs).catch(function () {}).then(function () { location.reload() })
+        }
+        function show(reason) {
+          var root = document.getElementById('root')
+          if (!root || root.childElementCount > 0) return
+          root.innerHTML =
+            '<div class="recovery"><h1>DachaBook не загрузился</h1>' +
+            '<p>Обычно причина — устаревшая офлайн-копия приложения. Записи дневника при перезагрузке не пострадают.</p>' +
+            '<p><button type="button" class="button">Перезагрузить начисто</button></p><pre></pre></div>'
+          root.querySelector('pre').textContent = reason
+          root.querySelector('button').onclick = resetApp
+        }
+        window.__dachabookReset = resetApp
+        window.addEventListener('error', function (event) {
+          var target = event.target
+          if (target && target.tagName === 'SCRIPT') show('Не загрузился файл ' + target.src)
+        }, true)
+        setTimeout(function () { show('Приложение не отрисовалось за 8 секунд') }, 8000)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

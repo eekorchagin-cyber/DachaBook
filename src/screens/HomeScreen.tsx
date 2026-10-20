@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
+import { versionLabel } from '../app/version'
 import { compareEvents } from '../domain/diaryFilter'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
@@ -36,6 +37,7 @@ export function HomeScreen({ authorName }: { authorName: string }) {
           Весь дневник
         </a>
       )}
+      <p className="version app-version">{versionLabel()}</p>
     </Screen>
   )
 }

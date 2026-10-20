@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { setSetting, type AppSettings, type ThemeSetting } from '../app/store'
+import { versionLabel } from '../app/version'
 import { Screen } from '../ui/Screen'
 
 const THEMES: { value: ThemeSetting; label: string }[] = [
@@ -48,7 +49,7 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
       </section>
       <section className="card">
         <h2>Дополнительно</h2>
-        <p>Версия {__APP_VERSION__}</p>
+        <p>{versionLabel()}</p>
         <a className="button secondary" href="#/lab">
           Лаборатория проверок
         </a>

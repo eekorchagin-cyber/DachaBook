@@ -627,3 +627,23 @@ body {
 .sheet h2 {
   margin-top: 0;
 }
+
+.app-version {
+  text-align: center;
+  margin-top: 28px;
+}
+
+.recovery {
+  max-width: 560px;
+  margin: 40px auto;
+  padding: 0 16px;
+}
+
+.recovery pre {
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
