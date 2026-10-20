@@ -28,6 +28,9 @@ self.addEventListener('message', (event) => {
   if (event.data === 'version') event.source?.postMessage({ type: 'version', version: VERSION })
 })
 
+// GitHub Pages отвечает с «Vary: Accept-Encoding»: без ignoreVary Safari может не найти копию страницы в кэше.
+const MATCH = { ignoreSearch: true, ignoreVary: true }
+
 self.addEventListener('fetch', (event) => {
   const request = event.request
   if (request.method !== 'GET') return
@@ -36,13 +39,9 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.endsWith('/version.json')) return
 
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request).catch(async () => (await caches.match('./', { ignoreSearch: true })) ?? Response.error()),
-    )
+    event.respondWith(caches.match('./', MATCH).then((cached) => cached ?? fetch(request)))
     return
   }
 
-  event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then((cached) => cached ?? fetch(request)),
-  )
+  event.respondWith(caches.match(request, MATCH).then((cached) => cached ?? fetch(request)))
 })
