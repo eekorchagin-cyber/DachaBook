@@ -1,5 +1,5 @@
 import { formatDate } from '../../domain/dates'
-import { EVENT_TYPES, measurementText } from '../../domain/labels'
+import { EVENT_TYPES, measurementText, weatherText } from '../../domain/labels'
 import type { CareObject, DiaryEvent } from '../../domain/types'
 import { useFileUrl } from '../../files/files'
 
@@ -32,6 +32,7 @@ export function EventCard({ event, objects }: { event: DiaryEvent; objects: Map<
       </div>
       {event.workKind && <div className="tag">{event.workKind}</div>}
       {event.type === 'measurement' && <p>{measurementText(event)}</p>}
+      {event.weather && <p className="muted small">☁ {weatherText(event)}</p>}
       {event.comment && <p className="event-text">{event.comment}</p>}
       {event.photoIds.length > 0 && (
         <div className="thumbs">

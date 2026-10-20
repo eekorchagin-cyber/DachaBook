@@ -11,7 +11,7 @@ import { db } from '../../storage/db'
 import { AttachmentRow } from '../../ui/AttachmentRow'
 import { Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
-import { EVENT_TYPES } from '../../domain/labels'
+import { EVENT_TYPES, weatherText } from '../../domain/labels'
 import { PhotoThumb } from './EventCard'
 
 interface Draft {
@@ -72,6 +72,7 @@ function toInput(draft: Draft, event?: DiaryEvent): DocInput<DiaryEvent> {
             moisture: moisture !== undefined ? { value: moisture, scale: draft.moistureScale.trim() || 'не указана' } : undefined,
           }
         : undefined,
+    weather: event?.weather,
     source: event?.source,
   }
 }
@@ -225,6 +226,22 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
           Комментарий
           <textarea rows={4} value={draft.comment} onChange={(change) => update({ comment: change.target.value })} />
         </label>
+      </section>
+
+      <section className="card">
+        <h2>Погода на участке</h2>
+        {event?.weather ? (
+          <p>☁ {weatherText(event)}</p>
+        ) : (
+          <dl className="facts">
+            <dt>Температура воздуха</dt>
+            <dd>—</dd>
+          </dl>
+        )}
+        <p className="hint">
+          На этапе 4 температура воздуха, осадки, влажность и ветер на дату и время записи будут подставляться автоматически из Open-Meteo и
+          сохраняться в записи. Для записей задним числом — из архива погоды.
+        </p>
       </section>
 
       <section className="card">

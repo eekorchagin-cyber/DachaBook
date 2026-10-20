@@ -24,6 +24,16 @@ export function HomeScreen({ authorName }: { authorName: string }) {
         </a>
       </div>
       <section className="card">
+        <h2>Погода на участке</h2>
+        <dl className="facts">
+          <dt>Температура воздуха</dt>
+          <dd>—</dd>
+          <dt>Прогноз</dt>
+          <dd>—</dd>
+        </dl>
+        <p className="hint">Текущая погода и прогноз для участка (ст. Минино) появятся на этапе 4.</p>
+      </section>
+      <section className="card">
         <h2>Ближайшие работы</h2>
         <p className="hint">План работ и погода появятся на этапе 4. Черновик плана из Evernote — в разделе «Ещё».</p>
       </section>

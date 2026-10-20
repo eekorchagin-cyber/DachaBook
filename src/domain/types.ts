@@ -55,6 +55,26 @@ export interface ImportSource {
   fingerprint: string
 }
 
+/**
+ * Погода на участке в момент события (раздел 4 ТЗ). Заполняется на этапе 4 из Open-Meteo и потом не переписывается.
+ * Архив погодного сервиса — модельная оценка, а не измерение на участке.
+ */
+export interface WeatherSnapshot {
+  source: string
+  kind: 'forecast' | 'archive' | 'manual'
+  latitude: number
+  longitude: number
+  fetchedAt: string
+  /** За час события или суточная сводка, если время события не указано. */
+  period: 'hour' | 'day'
+  airTemperature?: number
+  airTemperatureMin?: number
+  airTemperatureMax?: number
+  precipitationMm?: number
+  humidityPercent?: number
+  windMs?: number
+}
+
 export interface DiaryEvent extends DocMeta {
   type: EventType
   /** Дата события ГГГГ-ММ-ДД в часовом поясе участка; отличается от даты создания записи. */
@@ -67,6 +87,7 @@ export interface DiaryEvent extends DocMeta {
   photoIds: string[]
   attachmentIds: string[]
   measurement?: Measurement
+  weather?: WeatherSnapshot
   source?: ImportSource
 }
 
