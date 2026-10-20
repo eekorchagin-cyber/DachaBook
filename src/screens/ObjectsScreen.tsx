@@ -145,7 +145,9 @@ export function ObjectsScreen() {
   const [view, setView] = useState<'objects' | 'groups'>('objects')
   const [editing, setEditing] = useState<{ kind: 'object' | 'group'; id?: string } | null>(null)
 
-  useEffect(() => window.scrollTo({ top: 0 }), [editing, view])
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [editing, view])
 
   const active = objects.filter((item) => item.active).sort(byName)
   const archived = objects.filter((item) => !item.active).sort(byName)
