@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { formatBytes } from '../../lib/format'
+import { updateApp } from '../../sw/register'
 import { readEnvironment, type Environment } from '../environment'
 import { saveResult, type LabResult } from '../results'
 import { ActionButton, Section } from '../../ui/Section'
 
 export function EnvSection({ result }: { result?: LabResult }) {
   const [env, setEnv] = useState<Environment | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const apply = (next: Environment) => {
     setEnv(next)
@@ -61,10 +63,16 @@ export function EnvSection({ result }: { result?: LabResult }) {
         >
           Включить постоянное хранение
         </ActionButton>
-        <ActionButton secondary onRun={refresh}>
-          Обновить
+        <ActionButton
+          secondary
+          onRun={async () => {
+            if ((await updateApp()) === 'latest') setNotice('Установлена последняя версия')
+          }}
+        >
+          Обновить приложение
         </ActionButton>
       </div>
+      {notice && <p className="notice">{notice}</p>}
     </Section>
   )
 }

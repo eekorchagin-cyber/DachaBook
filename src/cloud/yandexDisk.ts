@@ -133,6 +133,31 @@ export class YandexDisk {
     if (!response.ok) throw new YandexDiskError(response.status, `Загрузка не принята: ${response.statusText}`)
   }
 
+  /**
+   * Загрузка с повторами: при сетевом сбое или ошибке сервера берётся новая ссылка загрузки.
+   * Пауза перед повтором нужна, чтобы сервер успел отпустить оборванную загрузку.
+   */
+  async uploadWithRetry(
+    path: string,
+    data: Blob,
+    options: { attempts?: number; delaysMs?: number[]; onFailure?: (attempt: number, elapsedMs: number, error: unknown) => void } = {},
+  ): Promise<number> {
+    const attempts = options.attempts ?? 3
+    const delays = options.delaysMs ?? [3000, 10000]
+    for (let attempt = 1; ; attempt++) {
+      const start = performance.now()
+      try {
+        await this.upload(path, data)
+        return attempt
+      } catch (error) {
+        options.onFailure?.(attempt, performance.now() - start, error)
+        const retriable = error instanceof YandexDiskError && (error.status === 0 || error.status === 429 || error.status >= 500)
+        if (!retriable || attempt >= attempts) throw error
+        await new Promise((resolve) => setTimeout(resolve, delays[Math.min(attempt - 1, delays.length - 1)]))
+      }
+    }
+  }
+
   async download(path: string, signal?: AbortSignal): Promise<Blob> {
     const target = await this.request<{ href: string }>('GET', '/resources/download', { path })
     const url = `${YANDEX_DOWNLOAD_PROXY}?${new URLSearchParams({ url: target.href })}`

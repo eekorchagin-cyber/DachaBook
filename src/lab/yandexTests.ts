@@ -72,9 +72,14 @@ export async function runYandexSuite(disk: YandexDisk, log: StepLog, photo?: Blo
     clearTimeout(abortTimer)
   }
   log(interrupted ? 'Файл 20 МБ: загрузка намеренно оборвана' : 'Файл 20 МБ: загрузка успела завершиться до обрыва (быстрая сеть)')
-  const [, retryMs] = await timed(() => disk.upload(`${LAB_FOLDER}/file-20mb.bin`, big))
+  const [usedAttempts, retryMs] = await timed(() =>
+    disk.uploadWithRetry(`${LAB_FOLDER}/file-20mb.bin`, big, {
+      onFailure: (attempt, elapsedMs, error) =>
+        log(`Повторная загрузка 20 МБ, попытка ${attempt}: сбой через ${formatMs(elapsedMs)} — ${error instanceof Error ? error.message : String(error)}`),
+    }),
+  )
   const retryOk = await verifyRemote(disk, `${LAB_FOLDER}/file-20mb.bin`, bigSha)
-  log(`Повторная загрузка 20 МБ: ${formatMs(retryMs)}, SHA-256 ${retryOk ? 'совпал' : 'НЕ совпал'}`)
+  log(`Повторная загрузка 20 МБ: удалась с попытки ${usedAttempts}, всего ${formatMs(retryMs)}, SHA-256 ${retryOk ? 'совпал' : 'НЕ совпал'}`)
   if (!retryOk) throw new Error('После повтора файл на Диске повреждён')
   const [bigBack, bigDownMs] = await timed(() => disk.download(`${LAB_FOLDER}/file-20mb.bin`))
   const bigBackOk = (await sha256Hex(bigBack)) === bigSha
