@@ -148,13 +148,21 @@ export function ObjectsScreen() {
   const archived = objects.filter((item) => !item.active).sort(byName)
   const close = () => setEditing(null)
 
+  if (editing) {
+    return (
+      <Screen title="Объекты и растения" help="objects" tab="/objects">
+        {editing.kind === 'object' ? (
+          <ObjectForm key={editing.id ?? 'new'} object={objects.find((item) => item.id === editing.id)} onClose={close} />
+        ) : (
+          <GroupForm key={editing.id ?? 'new'} group={groups.find((item) => item.id === editing.id)} objects={active} onClose={close} />
+        )}
+      </Screen>
+    )
+  }
+
   return (
     <Screen title="Объекты и растения" help="objects" tab="/objects">
-      {editing?.kind === 'object' && <ObjectForm object={objects.find((item) => item.id === editing.id)} onClose={close} />}
-      {editing?.kind === 'group' && (
-        <GroupForm group={groups.find((item) => item.id === editing.id)} objects={active} onClose={close} />
-      )}
-
+      <p className="hint">Нажмите на объект или группу, чтобы изменить или убрать в архив.</p>
       <section className="card">
         <div className="card-header">
           <h2>Объекты ухода</h2>

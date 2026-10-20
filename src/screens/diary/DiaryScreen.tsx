@@ -100,9 +100,11 @@ export function DiaryScreen({ settings }: { settings: AppSettings }) {
               <option value="measurement">Измерения</option>
             </select>
           </label>
-          <button type="button" className="button secondary small" onClick={() => setFilter({ text: filter.text })}>
-            Сбросить фильтры
-          </button>
+          <div className="actions">
+            <button type="button" className="button secondary small" onClick={() => setFilter({ text: filter.text })}>
+              Сбросить фильтры
+            </button>
+          </div>
         </section>
       )}
       {events && found.length === 0 && (
