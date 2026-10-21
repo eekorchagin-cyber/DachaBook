@@ -4,10 +4,14 @@ import { Repository } from '../storage/repository'
 
 export type ThemeSetting = 'system' | 'light' | 'dark'
 
+export type PhotoPosition = 'right' | 'left' | 'below'
+
 export interface AppSettings {
   authorName: string
   theme: ThemeSetting
   textScale: number
+  /** Где показывать фото в карточках записей дневника. */
+  photoPosition: PhotoPosition
   workKinds: string[]
 }
 
@@ -15,6 +19,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   authorName: '',
   theme: 'system',
   textScale: 1,
+  photoPosition: 'right',
   workKinds: [
     'Стрижка газона',
     'Полив',

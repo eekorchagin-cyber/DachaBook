@@ -97,6 +97,7 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(material))
   const [initial] = useState(() => JSON.stringify(toDraft(material)))
   const [error, setError] = useState<string | null>(null)
+  const [processing, setProcessing] = useState(0)
   const dirty = useMemo(() => JSON.stringify(draft) !== initial, [draft, initial])
   /** Импортированная статья хранит оформление; её текст правится только вместе с потерей оформления. */
   const formatted = !!material?.source
@@ -134,9 +135,18 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
   }
 
   const addFiles = async (files: FileList | null) => {
-    const added: string[] = []
-    for (const file of Array.from(files ?? [])) added.push((await addAttachment(file, file.name)).id)
-    setDraft((current) => ({ ...current, fileIds: [...current.fileIds, ...added.filter((item) => !current.fileIds.includes(item))] }))
+    const list = Array.from(files ?? [])
+    setProcessing((count) => count + list.length)
+    for (const file of list) {
+      try {
+        const stored = await addAttachment(file, file.name)
+        setDraft((current) => (current.fileIds.includes(stored.id) ? current : { ...current, fileIds: [...current.fileIds, stored.id] }))
+      } catch (caught) {
+        setError(`Не удалось добавить «${file.name}»: ${errorText(caught)}`)
+      } finally {
+        setProcessing((count) => count - 1)
+      }
+    }
   }
 
   return (
@@ -203,9 +213,10 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
       </section>
       {error && <p className="error">{error}</p>}
       <div className="actions">
-        <ActionButton disabled={!draft.title.trim() || !dirty} onRun={save}>
+        <ActionButton disabled={!draft.title.trim() || !dirty || processing > 0} onRun={save}>
           Сохранить
         </ActionButton>
+        {processing > 0 && <span className="hint">Обрабатываются файлы ({processing})…</span>}
         <button
           type="button"
           className="button secondary"

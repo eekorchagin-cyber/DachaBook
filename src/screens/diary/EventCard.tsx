@@ -1,5 +1,6 @@
 import { formatDate } from '../../domain/dates'
 import { EVENT_TYPES, measurementText, weatherText } from '../../domain/labels'
+import type { PhotoPosition } from '../../app/store'
 import type { CareObject, DiaryEvent } from '../../domain/types'
 import { useFileUrl } from '../../files/files'
 import { WeatherBadge } from '../../ui/WeatherBadge'
@@ -16,9 +17,20 @@ export function PhotoThumb({ id, onClick }: { id: string; onClick?: () => void }
   )
 }
 
-export function EventCard({ event, objects }: { event: DiaryEvent; objects: Map<string, CareObject> }) {
+export function EventCard({ event, objects, photoPosition = 'right' }: { event: DiaryEvent; objects: Map<string, CareObject>; photoPosition?: PhotoPosition }) {
   const type = EVENT_TYPES[event.type]
   const where = event.objectIds.map((id) => objects.get(id)?.name).filter(Boolean).join(', ')
+  const side = photoPosition !== 'below' && event.photoIds.length > 0
+  const shown = event.photoIds.slice(0, side ? 2 : 4)
+  const more = event.photoIds.length - shown.length
+  const photos = event.photoIds.length > 0 && (
+    <div className={side ? 'event-photos side' : 'thumbs'}>
+      {shown.map((id) => (
+        <PhotoThumb key={id} id={id} />
+      ))}
+      {more > 0 && <span className="thumb more">+{more}</span>}
+    </div>
+  )
   return (
     <a className="event-card" href={`#/diary/${event.id}`}>
       <div className="event-head">
@@ -32,17 +44,17 @@ export function EventCard({ event, objects }: { event: DiaryEvent; objects: Map<
         <span className="muted">{where}</span>
         <WeatherBadge event={event} />
       </div>
-      {event.workKind && <div className="tag">{event.workKind}</div>}
-      {event.type === 'measurement' && <p>{measurementText(event)}</p>}
-      {event.weather && <p className="muted small">☁ {weatherText(event)}</p>}
-      {event.comment && <p className="event-text">{event.comment}</p>}
-      {event.photoIds.length > 0 && (
-        <div className="thumbs">
-          {event.photoIds.slice(0, 4).map((id) => (
-            <PhotoThumb key={id} id={id} />
-          ))}
+      <div className={side ? `event-body photos-${photoPosition}` : 'event-body'}>
+        {side && photoPosition === 'left' && photos}
+        <div className="event-main">
+          {event.workKind && <div className="tag">{event.workKind}</div>}
+          {event.type === 'measurement' && <p>{measurementText(event)}</p>}
+          {event.weather && <p className="muted small">☁ {weatherText(event)}</p>}
+          {event.comment && <p className="event-text">{event.comment}</p>}
         </div>
-      )}
+        {side && photoPosition === 'right' && photos}
+      </div>
+      {!side && photos}
     </a>
   )
 }

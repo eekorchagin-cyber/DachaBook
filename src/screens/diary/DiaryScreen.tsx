@@ -114,7 +114,7 @@ export function DiaryScreen({ settings }: { settings: AppSettings }) {
       )}
       <p className="muted small">{events && found.length > 0 && `Записей: ${found.length}`}</p>
       {found.slice(0, limit).map((event) => (
-        <EventCard key={event.id} event={event} objects={objectMap} />
+        <EventCard key={event.id} event={event} objects={objectMap} photoPosition={settings.photoPosition} />
       ))}
       {found.length > limit && (
         <button type="button" className="button secondary" onClick={() => setLimit((value) => value + PAGE)}>

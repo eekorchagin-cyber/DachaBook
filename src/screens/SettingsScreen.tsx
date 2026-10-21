@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { setSetting, type AppSettings, type ThemeSetting } from '../app/store'
+import { setSetting, type AppSettings, type PhotoPosition, type ThemeSetting } from '../app/store'
 import { versionLabel } from '../app/version'
 import { Screen } from '../ui/Screen'
 
@@ -7,6 +7,12 @@ const THEMES: { value: ThemeSetting; label: string }[] = [
   { value: 'system', label: 'Как в системе' },
   { value: 'light', label: 'Светлая' },
   { value: 'dark', label: 'Тёмная' },
+]
+
+const PHOTO_POSITIONS: { value: PhotoPosition; label: string }[] = [
+  { value: 'right', label: 'Справа от текста' },
+  { value: 'left', label: 'Слева от текста' },
+  { value: 'below', label: 'Под текстом' },
 ]
 
 const SCALES = [
@@ -43,6 +49,15 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
             <label key={scale.value}>
               <input type="radio" name="scale" checked={settings.textScale === scale.value} onChange={() => void setSetting('textScale', scale.value)} />
               {scale.label}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="choice">
+          <legend>Фото в записях дневника</legend>
+          {PHOTO_POSITIONS.map((position) => (
+            <label key={position.value}>
+              <input type="radio" name="photos" checked={settings.photoPosition === position.value} onChange={() => void setSetting('photoPosition', position.value)} />
+              {position.label}
             </label>
           ))}
         </fieldset>

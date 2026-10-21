@@ -1,12 +1,13 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
+import type { PhotoPosition } from '../app/store'
 import { versionLabel } from '../app/version'
 import { compareEvents } from '../domain/diaryFilter'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { EventCard } from './diary/EventCard'
 
-export function HomeScreen({ authorName }: { authorName: string }) {
+export function HomeScreen({ authorName, photoPosition }: { authorName: string; photoPosition: PhotoPosition }) {
   const events = useLiveQuery(() => db.events.filter((item) => !item.deletedAt).toArray(), [])
   const objects = useLiveQuery(() => db.objects.toArray(), [])
   const objectMap = useMemo(() => new Map((objects ?? []).map((item) => [item.id, item])), [objects])
@@ -40,7 +41,7 @@ export function HomeScreen({ authorName }: { authorName: string }) {
       <h2 className="section-title">Последние записи</h2>
       {events && latest.length === 0 && <EmptyState>Записей пока нет. Начните с кнопки «Новая запись».</EmptyState>}
       {latest.map((event) => (
-        <EventCard key={event.id} event={event} objects={objectMap} />
+        <EventCard key={event.id} event={event} objects={objectMap} photoPosition={photoPosition} />
       ))}
       {latest.length > 0 && (
         <a className="button secondary" href="#/diary">

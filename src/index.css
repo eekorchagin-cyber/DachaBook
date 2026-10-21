@@ -909,3 +909,56 @@ details.card[open] > summary::before {
   gap: 12px;
   margin-top: 12px;
 }
+
+.event-body {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.event-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.event-photos.side {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.event-photos.side .thumb {
+  width: 84px;
+  height: 84px;
+}
+
+.thumb.more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.event-photos.side .thumb.more {
+  height: 28px;
+}
+
+@media (min-width: 600px) {
+  .event-photos.side .thumb {
+    width: 120px;
+    height: 96px;
+  }
+
+  .event-photos.side .thumb.more {
+    width: 120px;
+    height: 28px;
+  }
+}

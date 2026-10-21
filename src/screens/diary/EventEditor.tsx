@@ -129,6 +129,7 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
   const [error, setError] = useState<string | null>(null)
   const [splitParts, setSplitParts] = useState<PartDraft[] | null>(null)
   const [viewer, setViewer] = useState<number | null>(null)
+  const [processing, setProcessing] = useState(0)
 
   const dirty = useMemo(() => JSON.stringify(draft) !== initial, [draft, initial])
 
@@ -162,17 +163,23 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
     }
   }
 
-  const addPhotos = async (files: FileList | null) => {
-    const added: string[] = []
-    for (const file of Array.from(files ?? [])) added.push((await addPhoto(file, file.name || 'photo.jpg')).id)
-    setDraft((current) => ({ ...current, photoIds: [...current.photoIds, ...added.filter((item) => !current.photoIds.includes(item))] }))
+  // Каждый файл добавляется в запись сразу после обработки; пока идёт обработка, сохранять нельзя.
+  const addFilesTo = async (files: FileList | null, key: 'photoIds' | 'attachmentIds') => {
+    const list = Array.from(files ?? [])
+    setProcessing((count) => count + list.length)
+    for (const file of list) {
+      try {
+        const stored = key === 'photoIds' ? await addPhoto(file, file.name || 'photo.jpg') : await addAttachment(file, file.name)
+        setDraft((current) => (current[key].includes(stored.id) ? current : { ...current, [key]: [...current[key], stored.id] }))
+      } catch (caught) {
+        setError(`Не удалось добавить «${file.name}»: ${errorText(caught)}`)
+      } finally {
+        setProcessing((count) => count - 1)
+      }
+    }
   }
-
-  const addFiles = async (files: FileList | null) => {
-    const added: string[] = []
-    for (const file of Array.from(files ?? [])) added.push((await addAttachment(file, file.name)).id)
-    setDraft((current) => ({ ...current, attachmentIds: [...current.attachmentIds, ...added.filter((item) => !current.attachmentIds.includes(item))] }))
-  }
+  const addPhotos = (files: FileList | null) => addFilesTo(files, 'photoIds')
+  const addFiles = (files: FileList | null) => addFilesTo(files, 'attachmentIds')
 
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'ru')
   const canSplitEvent = !!event && !dirty && draft.type !== 'measurement' && splitSentences(draft.comment).length > 1
@@ -366,9 +373,10 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
       {missing.length > 0 && <p className="hint">Чтобы сохранить: {missing.join(', ')}.</p>}
       {error && <p className="error">{error}</p>}
       <div className="actions">
-        <ActionButton disabled={missing.length > 0 || !dirty} onRun={save}>
+        <ActionButton disabled={missing.length > 0 || !dirty || processing > 0} onRun={save}>
           Сохранить
         </ActionButton>
+        {processing > 0 && <span className="hint">Обрабатываются файлы ({processing})…</span>}
         <button type="button" className="button secondary" onClick={() => leave('/diary')}>
           {dirty ? 'Отмена' : 'Закрыть'}
         </button>
