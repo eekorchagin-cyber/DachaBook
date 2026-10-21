@@ -18,6 +18,8 @@ export interface OutsideText {
   month: number
   text: string
   mediaHashes: string[]
+  /** Номер последней строки предыдущей таблицы — «запись выше», к которой фрагмент можно прикрепить. */
+  afterRowIndex?: number
 }
 
 export interface DiaryTable {
@@ -104,13 +106,10 @@ export function parseDiaryTable(content: string): DiaryTable {
   const body = doc.body.cloneNode(true) as Element
   const bodyTables = Array.from(body.querySelectorAll('table')).filter(isDiaryTable)
   bodyTables.forEach((table, index) => table.replaceWith(doc.createTextNode(marker(index))))
+  body.querySelectorAll('en-media').forEach((media) => media.replaceWith(doc.createTextNode(`⟦M${media.getAttribute('hash')?.toLowerCase() ?? ''}⟧`)))
   body.querySelectorAll('br').forEach((br) => br.replaceWith('\n'))
   body.querySelectorAll('div, p, li').forEach((block) => block.append('\n'))
   const segmentsText = (body.textContent ?? '').split(/⟦T\d+⟧/)
-
-  // Медиа вне таблиц: считаем по исходному DOM, исключая медиа внутри таблиц.
-  const insideTables = new Set(tables.flatMap((table) => mediaHashes(table)))
-  const outsideMedia = mediaHashes(doc.body).filter((hash) => !insideTables.has(hash))
 
   const months: number[] = tables.map((_, index) => {
     const lines = (segmentsText[index] ?? '').split('\n').map((line) => line.trim()).filter(Boolean)
@@ -118,21 +117,10 @@ export function parseDiaryTable(content: string): DiaryTable {
     return (named && monthFromWord(named)) || index + 1
   })
 
-  segmentsText.forEach((segment, index) => {
-    const text = segment
-      .split('\n')
-      .map((line) => line.replace(/[ \t\u00a0]+/g, ' ').trim())
-      .filter((line) => line && !MONTH_WORD.test(line))
-      .join('\n')
-    if (text) outside.push({ month: index === 0 ? 0 : months[index - 1], text, mediaHashes: [] })
-  })
-  if (outsideMedia.length > 0) {
-    if (outside.length === 0) outside.push({ month: 0, text: '', mediaHashes: [] })
-    outside[outside.length - 1].mediaHashes.push(...outsideMedia)
-  }
-
+  const lastRowOfTable: (number | undefined)[] = []
   let index = 0
   tables.forEach((table, tableIndex) => {
+    lastRowOfTable[tableIndex] = undefined
     let week: string | undefined
     for (const row of Array.from(table.querySelectorAll('tr'))) {
       const cells = directCells(row)
@@ -149,9 +137,27 @@ export function parseDiaryTable(content: string): DiaryTable {
         text,
         rawDate: cellText(cells[3]).replace(/\n/g, ' '),
         mediaHashes: [...mediaHashes(cells[2]), ...mediaHashes(cells[3])],
-        index: index++,
+        index,
       })
+      lastRowOfTable[tableIndex] = index++
     }
+  })
+
+  segmentsText.forEach((segment, segmentIndex) => {
+    const hashes = [...segment.matchAll(/⟦M([0-9a-f]*)⟧/g)].map((match) => match[1]).filter(Boolean)
+    const text = segment
+      .replace(/⟦M[0-9a-f]*⟧/g, '')
+      .split('\n')
+      .map((line) => line.replace(/[ \t\u00a0]+/g, ' ').trim())
+      .filter((line) => line && !MONTH_WORD.test(line))
+      .join('\n')
+    if (!text && hashes.length === 0) return
+    outside.push({
+      month: segmentIndex === 0 ? 0 : months[segmentIndex - 1],
+      text,
+      mediaHashes: hashes,
+      afterRowIndex: segmentIndex === 0 ? undefined : lastRowOfTable[segmentIndex - 1],
+    })
   })
   return { rows, outside }
 }

@@ -1,4 +1,4 @@
-import type { DiaryEvent, EventType, ObjectType, PlanPeriod } from './types'
+import type { DiaryEvent, EventType, ObjectType, PlanPeriod, WeatherCondition } from './types'
 
 export const OBJECT_TYPES: Record<ObjectType, string> = {
   lawn: 'Газон',
@@ -39,4 +39,17 @@ const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн'
 
 export function periodText(periods: PlanPeriod[]): string {
   return periods.map((period) => `${MONTHS_SHORT[period.month - 1]}${period.week ? `, нед. ${period.week}` : ''}`).join('; ')
+}
+
+export const WEATHER_CONDITIONS: Record<WeatherCondition, { icon: string; label: string }> = {
+  clear: { icon: '☀️', label: 'солнце' },
+  cloudy: { icon: '☁️', label: 'облачно' },
+  rain: { icon: '🌧️', label: 'дождь' },
+  snow: { icon: '❄️', label: 'снег' },
+  thunderstorm: { icon: '⛈️', label: 'гроза' },
+}
+
+export function temperatureText(value: number | undefined): string {
+  if (value === undefined) return '—°C'
+  return `${value > 0 ? '+' : ''}${Math.round(value)}°C`
 }

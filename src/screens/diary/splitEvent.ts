@@ -19,6 +19,7 @@ export async function splitEvent(event: DiaryEvent, parts: PartDraft[]): Promise
     comment: part.text.trim(),
     photoIds: part.withMedia ? event.photoIds : [],
     attachmentIds: part.withMedia ? event.attachmentIds : [],
+    fileNotes: part.withMedia ? event.fileNotes : undefined,
     measurement: undefined,
     source: sourceFor(index),
   })

@@ -57,6 +57,18 @@ export interface OutsideCandidate {
   items: OutsideText[]
 }
 
+/** Фрагмент вне таблиц (ссылка, текст, картинка, файл) с записью, над которой он стоял в Evernote. */
+export interface OutsidePiece {
+  key: string
+  fileName: string
+  noteTitle: string
+  season: number
+  month: number
+  text: string
+  mediaHashes: string[]
+  above?: SourceRow
+}
+
 export interface ImportFile {
   fileName: string
   notes: EnexNote[]
@@ -67,6 +79,8 @@ export interface ImportProposal {
   plan: PlanCandidate[]
   notes: NoteCandidate[]
   outside: OutsideCandidate[]
+  /** Фрагменты вне таблиц без повторов между файлами (берётся самый поздний файл). */
+  outsidePieces: OutsidePiece[]
   rows: SourceRow[]
   resources: Map<string, EnexResource>
   latestSeason?: number
@@ -186,6 +200,16 @@ export function buildProposal(files: ImportFile[]): ImportProposal {
     }
   }
 
+  const pieces = new Map<string, OutsidePiece>()
+  for (const group of [...outside].sort((a, b) => b.season - a.season)) {
+    for (const item of group.items) {
+      const key = `${textKey(item.text)}|${item.mediaHashes.join(',')}`
+      if (pieces.has(key)) continue
+      const above = rows.find((source) => source.fileName === group.fileName && source.noteTitle === group.noteTitle && source.row.index === item.afterRowIndex)
+      pieces.set(key, { key, fileName: group.fileName, noteTitle: group.noteTitle, season: group.season, month: item.month, text: item.text, mediaHashes: item.mediaHashes, above })
+    }
+  }
+
   for (const candidate of plan.values()) candidate.seasonsDone.sort()
   const sortEvents = (a: EventCandidate, b: EventCandidate) => (a.date ?? a.suggestion ?? '').localeCompare(b.date ?? b.suggestion ?? '')
   const firstPeriod = (item: PlanCandidate) => item.periods[0].month * 10 + (item.periods[0].week ?? 0)
@@ -195,6 +219,7 @@ export function buildProposal(files: ImportFile[]): ImportProposal {
     plan: [...plan.values()].sort((a, b) => firstPeriod(a) - firstPeriod(b)),
     notes,
     outside,
+    outsidePieces: [...pieces.values()],
     rows,
     resources,
     latestSeason,

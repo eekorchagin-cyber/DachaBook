@@ -72,6 +72,7 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
         Описание
         <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
       </label>
+      {object && <ObjectGroups objectId={object.id} />}
       <div className="actions">
         <ActionButton disabled={!name.trim()} onRun={() => save()}>
           Сохранить
@@ -86,6 +87,15 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
         </button>
       </div>
     </section>
+  )
+}
+
+function ObjectGroups({ objectId }: { objectId: string }) {
+  const groups = useLiveQuery(() => db.plantGroups.filter((group) => !group.deletedAt && group.objectIds.includes(objectId)).toArray(), [objectId]) ?? []
+  return (
+    <p className="hint">
+      Растения: {groups.length > 0 ? groups.map((group) => group.name).sort((a, b) => a.localeCompare(b, 'ru')).join(', ') : 'группы не привязаны'}. Привязка меняется на вкладке «Группы растений».
+    </p>
   )
 }
 
@@ -150,6 +160,7 @@ export function ObjectsScreen() {
   }, [editing, view])
 
   const active = objects.filter((item) => item.active).sort(byName)
+  const groupsOf = (objectId: string) => groups.filter((group) => group.objectIds.includes(objectId)).sort(byName).map((group) => (group.active ? group.name : `${group.name} (архив)`))
   const archived = objects.filter((item) => !item.active).sort(byName)
   const close = () => setEditing(null)
 
@@ -195,6 +206,7 @@ export function ObjectsScreen() {
                     {object.areaM2 !== undefined && `, ${object.areaM2} м²`}
                     {object.plantCount !== undefined && `, ${object.plantCount} шт.`}
                   </span>
+                  {groupsOf(object.id).length > 0 && <span className="small">Растения: {groupsOf(object.id).join(', ')}</span>}
                 </button>
               </li>
             ))}

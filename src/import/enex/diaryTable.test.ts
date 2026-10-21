@@ -44,7 +44,7 @@ describe('parseDiaryTable', () => {
 
   it('сохраняет текст вне таблиц с месяцем, рядом с которым он стоял', () => {
     const { outside } = parseDiaryTable(CONTENT)
-    expect(outside).toEqual([{ month: 3, text: 'https://ogorod.ru/статья', mediaHashes: [] }])
+    expect(outside).toEqual([{ month: 3, text: 'https://ogorod.ru/статья', mediaHashes: [], afterRowIndex: 4 }])
   })
 })
 

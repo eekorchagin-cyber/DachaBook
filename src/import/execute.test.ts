@@ -109,3 +109,25 @@ describe('разделение строки при импорте', () => {
     expect(again.events).toBe(0)
   })
 })
+
+describe('фрагменты вне таблиц', () => {
+  const row = (week: string, text: string, date: string) => `<tr><td>${week}</td><td></td><td>${text}</td><td>${date}</td></tr>`
+  const header = row('Недели', 'Работы, наблюдения', 'Дата выполнения')
+  const content = `<en-note><div>Апрель</div><table>${header}${row('1', 'Газон в снегу', '14.04.2021')}</table><div>https://ogorod.ru/статья</div><table>${header}</table><table>${header}</table></en-note>`
+  const note: EnexNote = { title: 'Дневник дачных работ 2021 г', tags: [], attributes: {}, content, resources: [] }
+
+  it('ссылку после строки можно прикрепить к записи выше', async () => {
+    const context = await setup()
+    const proposal = buildProposal([{ fileName: 'd.enex', notes: [note] }])
+    expect(proposal.outsidePieces).toHaveLength(1)
+    expect(proposal.outsidePieces[0].above?.row.text).toBe('Газон в снегу')
+
+    const decisions = defaultDecisions(proposal, context.objects, await existingIndex(context.database))
+    decisions.outsideTargets[proposal.outsidePieces[0].key] = 'above'
+    const result = await executeImport(proposal, decisions, context)
+    expect(result.errors).toEqual([])
+    const [event] = await context.database.events.toArray()
+    expect(event.comment).toBe('Газон в снегу\n\nhttps://ogorod.ru/статья')
+    expect(await context.database.references.count()).toBe(0)
+  })
+})

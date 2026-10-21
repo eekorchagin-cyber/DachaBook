@@ -490,13 +490,47 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
             </section>
           )}
 
-          {loaded.proposal.outside.length > 0 && (
-            <section className="card">
+          {loaded.proposal.outsidePieces.length > 0 && (
+            <details className="card">
+              <summary>
+                <h2>Вне таблиц: ссылки, заметки, вложения ({loaded.proposal.outsidePieces.length})</h2>
+              </summary>
+              <p className="hint">
+                Фрагменты, стоявшие между таблицами месяцев. Каждый можно прикрепить к записи, над которой он стоял в Evernote (текст допишется к записи,
+                картинки и файлы прикрепятся), или оставить в общем справочном материале.
+              </p>
+              <ul className="import-list">
+                {loaded.proposal.outsidePieces.map((piece) => {
+                  const target = decisions.outsideTargets[piece.key]
+                  const setTarget = (value: 'reference' | 'above') =>
+                    setDecisions((current) => current && { ...current, outsideTargets: { ...current.outsideTargets, [piece.key]: value } })
+                  return (
+                    <li key={piece.key} className="import-row">
+                      <p className="import-text">{piece.text || 'без текста'}</p>
+                      {piece.mediaHashes.length > 0 && (
+                        <p className="muted small">
+                          Вложения:{' '}
+                          {piece.mediaHashes
+                            .map((hash) => loaded.proposal.resources.get(hash)?.fileName ?? loaded.proposal.resources.get(hash)?.mime ?? 'файл')
+                            .join(', ')}
+                        </p>
+                      )}
+                      <label className="checkbox">
+                        <input type="radio" checked={target === 'above'} disabled={!piece.above} onChange={() => setTarget('above')} />
+                        {piece.above ? `К записи выше: «${piece.above.row.text.slice(0, 80)}»` : 'Записи выше нет (фрагмент в начале заметки)'}
+                      </label>
+                      <label className="checkbox">
+                        <input type="radio" checked={target !== 'above'} onChange={() => setTarget('reference')} />В справочный материал
+                      </label>
+                    </li>
+                  )
+                })}
+              </ul>
               <label className="checkbox">
                 <input type="checkbox" checked={decisions.outside} onChange={(event) => setDecisions((current) => current && { ...current, outside: event.target.checked })} />
-                Ссылки и заметки вне таблиц дневников — одним справочным материалом
+                Создать справочный материал «Дневники Evernote: ссылки и заметки вне таблиц» из фрагментов, оставленных в справочнике
               </label>
-            </section>
+            </details>
           )}
 
           <div className="actions">

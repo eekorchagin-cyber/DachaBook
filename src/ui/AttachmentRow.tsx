@@ -4,7 +4,7 @@ import { openFile } from '../files/files'
 import { errorText, formatBytes } from '../lib/format'
 import { db } from '../storage/db'
 
-export function AttachmentRow({ id, onRemove }: { id: string; onRemove?: () => void }) {
+export function AttachmentRow({ id, onRemove, note, onNote }: { id: string; onRemove?: () => void; note?: string; onNote?: (value: string) => void }) {
   const file = useLiveQuery(() => db.files.get(id), [id])
   const [error, setError] = useState<string | null>(null)
   return (
@@ -17,6 +17,11 @@ export function AttachmentRow({ id, onRemove }: { id: string; onRemove?: () => v
         <button type="button" className="icon-button" aria-label="Убрать файл" onClick={onRemove}>
           ×
         </button>
+      )}
+      {onNote ? (
+        <input className="file-note" placeholder="Пояснение к файлу" value={note ?? ''} onChange={(event) => onNote(event.target.value)} />
+      ) : (
+        note && <span className="muted small file-note">{note}</span>
       )}
     </li>
   )

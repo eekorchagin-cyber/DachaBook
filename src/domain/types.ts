@@ -55,6 +55,8 @@ export interface ImportSource {
   fingerprint: string
 }
 
+export type WeatherCondition = 'clear' | 'cloudy' | 'rain' | 'snow' | 'thunderstorm'
+
 /**
  * Погода на участке в момент события (раздел 4 ТЗ). Заполняется на этапе 4 из Open-Meteo и потом не переписывается.
  * Архив погодного сервиса — модельная оценка, а не измерение на участке.
@@ -67,6 +69,8 @@ export interface WeatherSnapshot {
   fetchedAt: string
   /** За час события или суточная сводка, если время события не указано. */
   period: 'hour' | 'day'
+  /** Осадки и облачность значком на карточке записи. */
+  condition?: WeatherCondition
   airTemperature?: number
   airTemperatureMin?: number
   airTemperatureMax?: number
@@ -87,6 +91,8 @@ export interface DiaryEvent extends DocMeta {
   photoIds: string[]
   attachmentIds: string[]
   measurement?: Measurement
+  /** Пояснения к фото и вложениям этой записи: идентификатор файла → текст. */
+  fileNotes?: Record<string, string>
   weather?: WeatherSnapshot
   source?: ImportSource
 }

@@ -4,7 +4,10 @@ import { navigate } from '../../app/router'
 import { repo, type AppSettings } from '../../app/store'
 import { todayAtSite } from '../../domain/dates'
 import type { DiaryEvent, DocInput, EventType } from '../../domain/types'
-import { addAttachment, addPhoto, openFile } from '../../files/files'
+import { addAttachment, addPhoto } from '../../files/files'
+import { moonPhase } from '../../domain/moon'
+import { PhotoViewer } from '../../ui/PhotoViewer'
+import { WeatherBadge } from '../../ui/WeatherBadge'
 import { errorText } from '../../lib/format'
 import { ConflictError } from '../../storage/repository'
 import { db } from '../../storage/db'
@@ -31,6 +34,7 @@ interface Draft {
   temperature: string
   moisture: string
   moistureScale: string
+  fileNotes: Record<string, string>
 }
 
 function toDraft(event: DiaryEvent | undefined, type: EventType): Draft {
@@ -48,6 +52,7 @@ function toDraft(event: DiaryEvent | undefined, type: EventType): Draft {
     temperature: event?.measurement?.temperature?.value.toString() ?? '',
     moisture: event?.measurement?.moisture?.value.toString() ?? '',
     moistureScale: event?.measurement?.moisture?.scale ?? '',
+    fileNotes: event?.fileNotes ?? {},
   }
 }
 
@@ -76,9 +81,20 @@ function toInput(draft: Draft, event?: DiaryEvent): DocInput<DiaryEvent> {
             moisture: moisture !== undefined ? { value: moisture, scale: draft.moistureScale.trim() || 'не указана' } : undefined,
           }
         : undefined,
+    fileNotes: cleanNotes(draft),
     weather: event?.weather,
     source: event?.source,
   }
+}
+
+/** Пояснения только к файлам, которые остались в записи, и без пустых. */
+function cleanNotes(draft: Draft): Record<string, string> | undefined {
+  const notes = Object.fromEntries(
+    Object.entries(draft.fileNotes)
+      .map(([id, text]) => [id, text.trim()] as const)
+      .filter(([id, text]) => text && (draft.photoIds.includes(id) || draft.attachmentIds.includes(id))),
+  )
+  return Object.keys(notes).length > 0 ? notes : undefined
 }
 
 function problems(draft: Draft): string[] {
@@ -111,6 +127,7 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
   const [initial, setInitial] = useState(() => JSON.stringify(toDraft(event, initialType)))
   const [error, setError] = useState<string | null>(null)
   const [splitParts, setSplitParts] = useState<PartDraft[] | null>(null)
+  const [viewer, setViewer] = useState<number | null>(null)
 
   const dirty = useMemo(() => JSON.stringify(draft) !== initial, [draft, initial])
 
@@ -264,13 +281,20 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
       </section>
 
       <section className="card">
-        <h2>Погода на участке</h2>
+        <div className="card-header">
+          <h2>Погода на участке</h2>
+          <WeatherBadge event={{ date: draft.date || todayAtSite().date, weather: event?.weather }} />
+        </div>
         {event?.weather ? (
           <p>☁ {weatherText(event)}</p>
         ) : (
           <dl className="facts">
+            <dt>Осадки</dt>
+            <dd>—</dd>
             <dt>Температура воздуха</dt>
             <dd>—</dd>
+            <dt>Луна</dt>
+            <dd>{draft.date ? moonPhase(draft.date).name : '—'}</dd>
           </dl>
         )}
         <p className="hint">
@@ -282,21 +306,38 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
       <section className="card">
         <h2>Фотографии и файлы</h2>
         {draft.photoIds.length > 0 && (
-          <div className="thumbs">
-            {draft.photoIds.map((photoId) => (
-              <span key={photoId} className="thumb-wrap">
-                <PhotoThumb id={photoId} onClick={() => void openFile(photoId)} />
-                <button type="button" className="thumb-remove" aria-label="Убрать фото" onClick={() => update({ photoIds: draft.photoIds.filter((item) => item !== photoId) })}>
-                  ×
-                </button>
-              </span>
+          <div className="photo-grid">
+            {draft.photoIds.map((photoId, index) => (
+              <div key={photoId} className="photo-cell">
+                <span className="thumb-wrap">
+                  <PhotoThumb id={photoId} onClick={() => setViewer(index)} />
+                  <button type="button" className="thumb-remove" aria-label="Убрать фото" onClick={() => update({ photoIds: draft.photoIds.filter((item) => item !== photoId) })}>
+                    ×
+                  </button>
+                </span>
+                <input
+                  className="file-note"
+                  placeholder="Пояснение"
+                  value={draft.fileNotes[photoId] ?? ''}
+                  onChange={(change) => update({ fileNotes: { ...draft.fileNotes, [photoId]: change.target.value } })}
+                />
+              </div>
             ))}
           </div>
+        )}
+        {viewer !== null && draft.photoIds.length > 0 && (
+          <PhotoViewer ids={draft.photoIds} index={Math.min(viewer, draft.photoIds.length - 1)} notes={draft.fileNotes} onIndex={setViewer} onClose={() => setViewer(null)} />
         )}
         {draft.attachmentIds.length > 0 && (
           <ul className="list">
             {draft.attachmentIds.map((fileId) => (
-              <AttachmentRow key={fileId} id={fileId} onRemove={() => update({ attachmentIds: draft.attachmentIds.filter((item) => item !== fileId) })} />
+              <AttachmentRow
+                key={fileId}
+                id={fileId}
+                note={draft.fileNotes[fileId]}
+                onNote={(value) => update({ fileNotes: { ...draft.fileNotes, [fileId]: value } })}
+                onRemove={() => update({ attachmentIds: draft.attachmentIds.filter((item) => item !== fileId) })}
+              />
             ))}
           </ul>
         )}

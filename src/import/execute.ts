@@ -30,7 +30,10 @@ export interface ImportDecisions {
   plan: Record<string, boolean>
   planParts: Record<string, PlanPart[]>
   notes: Record<string, 'reference' | 'skip'>
+  /** Создать справочный материал из фрагментов вне таблиц, оставленных «в справочнике». */
   outside: boolean
+  /** Куда деть фрагмент вне таблиц: в справочный материал или к записи, над которой он стоял. */
+  outsideTargets: Record<string, 'reference' | 'above'>
 }
 
 export interface ExistingIndex {
@@ -87,7 +90,9 @@ export function defaultDecisions(proposal: ImportProposal, objects: CareObject[]
   for (const candidate of proposal.plan) plan[candidate.key] = !candidate.fromPastOnly && !existing.planKeys.has(candidate.key)
   const notes: Record<string, 'reference' | 'skip'> = {}
   for (const candidate of proposal.notes) notes[noteKey(candidate)] = existing.noteKeys.has(noteKey(candidate)) ? 'skip' : 'reference'
-  return { events, plan, planParts: {}, notes, outside: proposal.outside.length > 0 && !existing.hasOutside }
+  const outsideTargets: Record<string, 'reference' | 'above'> = {}
+  for (const piece of proposal.outsidePieces) outsideTargets[piece.key] = 'reference'
+  return { events, plan, planParts: {}, notes, outside: proposal.outsidePieces.length > 0 && !existing.hasOutside, outsideTargets }
 }
 
 export interface FileAdapter {
@@ -210,7 +215,7 @@ export async function executeImport(proposal: ImportProposal, decisions: ImportD
   const chosenEvents = proposal.events.filter((candidate) => decisions.events[candidate.key]?.include)
   const chosenPlan = proposal.plan.filter((candidate) => decisions.plan[candidate.key])
   const chosenNotes = proposal.notes.filter((candidate) => decisions.notes[noteKey(candidate)] === 'reference')
-  const total = chosenEvents.length + chosenPlan.length + chosenNotes.length + archiveDrafts.length + (decisions.outside ? 1 : 0)
+  const total = chosenEvents.length + chosenPlan.length + chosenNotes.length + archiveDrafts.length + 1
   let done = 0
   const tick = () => context.onProgress?.(++done, total)
 
@@ -314,23 +319,71 @@ export async function executeImport(proposal: ImportProposal, decisions: ImportD
     tick()
   }
 
-  if (decisions.outside) {
-    const seen = new Set<string>()
+  // Фрагменты вне таблиц: к записи выше (если она есть) или в общий справочный материал.
+  const draftsById = new Map(archiveDrafts.map((draft) => [draft.id, draft]))
+  const attachAbove = async (piece: (typeof proposal.outsidePieces)[number]): Promise<boolean> => {
+    const archiveId = piece.above && archiveByRow.get(piece.above)
+    if (!archiveId) return false
+    const recordIds = [...(createdFor.get(archiveId) ?? []), ...(draftsById.get(archiveId)?.createdRecordIds ?? [])]
+    for (const recordId of recordIds) {
+      const event = await database.events.get(recordId)
+      if (event && !event.deletedAt) {
+        const photoIds = [...event.photoIds]
+        const attachmentIds = [...event.attachmentIds]
+        for (const hash of piece.mediaHashes) {
+          const file = await fileFor(hash, true)
+          if (!file) continue
+          const list = file.image ? photoIds : attachmentIds
+          if (!list.includes(file.id)) list.push(file.id)
+        }
+        const comment = piece.text && !event.comment.includes(piece.text) ? `${event.comment}\n\n${piece.text}` : event.comment
+        await repo.update('events', event.id, { comment, photoIds, attachmentIds }, event.revision)
+        return true
+      }
+      const item = await database.planDrafts.get(recordId)
+      if (item && !item.deletedAt) {
+        const fileIdsForItem = [...item.fileIds]
+        for (const hash of piece.mediaHashes) {
+          const file = await fileFor(hash, false)
+          if (file && !fileIdsForItem.includes(file.id)) fileIdsForItem.push(file.id)
+        }
+        const text = piece.text && !item.text.includes(piece.text) ? `${item.text}\n\n${piece.text}` : item.text
+        await repo.update('planDrafts', item.id, { text, fileIds: fileIdsForItem }, item.revision)
+        return true
+      }
+    }
+    return false
+  }
+
+  const forReference: typeof proposal.outsidePieces = []
+  for (const piece of proposal.outsidePieces) {
+    if (decisions.outsideTargets[piece.key] !== 'above') {
+      if (decisions.outside) forReference.push(piece)
+      continue
+    }
+    try {
+      if (!(await attachAbove(piece))) {
+        forReference.push(piece)
+        errors.push(`Фрагмент «${(piece.text || 'вложение').slice(0, 50)}»: запись выше не импортирована — сохранён в справочном материале`)
+      }
+    } catch (error) {
+      errors.push(`Фрагмент «${(piece.text || 'вложение').slice(0, 50)}»: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  if (forReference.length > 0) {
     const sections: string[] = []
     const attachments: string[] = []
     const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;')
     const linkify = (value: string) => escape(value).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>').replace(/\n/g, '<br>')
     const MONTHS = ['', 'январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
-    for (const group of [...proposal.outside].sort((a, b) => b.season - a.season)) {
-      for (const item of group.items) {
-        for (const hash of item.mediaHashes) {
-          const file = await fileFor(hash, false)
-          if (file && !attachments.includes(file.id)) attachments.push(file.id)
-        }
-        const key = textKey(item.text)
-        if (!item.text || seen.has(key)) continue
-        seen.add(key)
-        sections.push(`<p><b>${item.month ? `После таблицы «${MONTHS[item.month]}»` : 'В начале заметки'} (${escape(group.noteTitle)})</b><br>${linkify(item.text)}</p>`)
+    for (const piece of forReference) {
+      for (const hash of piece.mediaHashes) {
+        const file = await fileFor(hash, false)
+        if (file && !attachments.includes(file.id)) attachments.push(file.id)
+      }
+      if (piece.text) {
+        sections.push(`<p><b>${piece.month ? `После таблицы «${MONTHS[piece.month]}»` : 'В начале заметки'} (${escape(piece.noteTitle)})</b><br>${linkify(piece.text)}</p>`)
       }
     }
     try {
@@ -341,14 +394,14 @@ export async function executeImport(proposal: ImportProposal, decisions: ImportD
         objectIds: [],
         plantGroupIds: [],
         fileIds: attachments,
-        source: { app: 'evernote', archiveItemIds: [], files: [...new Set(proposal.outside.map((group) => group.fileName))], fingerprint: OUTSIDE_KEY },
+        source: { app: 'evernote', archiveItemIds: [], files: [...new Set(forReference.map((piece) => piece.fileName))], fingerprint: OUTSIDE_KEY },
       })
       references++
     } catch (error) {
       errors.push(`Заметки вне таблиц: ${error instanceof Error ? error.message : String(error)}`)
     }
-    tick()
   }
+  tick()
 
   let archiveItems = 0
   for (const draft of archiveDrafts) {

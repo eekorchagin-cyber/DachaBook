@@ -2,6 +2,7 @@ import { formatDate } from '../../domain/dates'
 import { EVENT_TYPES, measurementText, weatherText } from '../../domain/labels'
 import type { CareObject, DiaryEvent } from '../../domain/types'
 import { useFileUrl } from '../../files/files'
+import { WeatherBadge } from '../../ui/WeatherBadge'
 
 export function PhotoThumb({ id, onClick }: { id: string; onClick?: () => void }) {
   const url = useFileUrl(id, 'thumb')
@@ -29,6 +30,7 @@ export function EventCard({ event, objects }: { event: DiaryEvent; objects: Map<
           {event.time && `, ${event.time}`}
         </strong>
         <span className="muted">{where}</span>
+        <WeatherBadge event={event} />
       </div>
       {event.workKind && <div className="tag">{event.workKind}</div>}
       {event.type === 'measurement' && <p>{measurementText(event)}</p>}
