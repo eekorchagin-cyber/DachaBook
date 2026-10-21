@@ -20,6 +20,15 @@ export interface SettingRow {
   value: unknown
 }
 
+/** Снимок документов перед массовыми изменениями (импорт); файлы не дублируются — импорт их не меняет. */
+export interface Snapshot {
+  id: string
+  createdAt: string
+  reason: string
+  counts: Record<string, number>
+  data: Record<string, unknown[]>
+}
+
 export class DiaryDatabase extends Dexie {
   objects!: EntityTable<CareObject, 'id'>
   plantGroups!: EntityTable<PlantGroup, 'id'>
@@ -30,6 +39,7 @@ export class DiaryDatabase extends Dexie {
   planDrafts!: EntityTable<PlanDraftItem, 'id'>
   importArchive!: EntityTable<ImportArchiveItem, 'id'>
   settings!: EntityTable<SettingRow, 'key'>
+  snapshots!: EntityTable<Snapshot, 'id'>
 
   constructor(name = 'dachabook') {
     super(name)
@@ -44,6 +54,7 @@ export class DiaryDatabase extends Dexie {
       importArchive: 'id, sourceFileId, fingerprint, deletedAt',
       settings: 'key',
     })
+    this.version(2).stores({ snapshots: 'id, createdAt' })
   }
 }
 
