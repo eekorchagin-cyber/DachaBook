@@ -64,11 +64,3 @@ export function TrashScreen() {
     </Screen>
   )
 }
-
-export function ComingSoon({ title, text }: { title: string; text: string }) {
-  return (
-    <Screen title={title} back="/more" tab="/more">
-      <EmptyState>{text}</EmptyState>
-    </Screen>
-  )
-}

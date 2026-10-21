@@ -11,7 +11,8 @@ import { ImportScreen } from './screens/import/ImportScreen'
 import { PlanScreen } from './screens/import/PlanScreen'
 import { LibraryScreen } from './screens/library/LibraryScreen'
 import { ReferenceEditor, ReferenceView } from './screens/library/ReferenceScreen'
-import { ComingSoon, MoreScreen, TrashScreen } from './screens/MoreScreen'
+import { BackupScreen } from './screens/BackupScreen'
+import { MoreScreen, TrashScreen } from './screens/MoreScreen'
 import { ObjectsScreen } from './screens/ObjectsScreen'
 import { SettingsScreen, WelcomeScreen } from './screens/SettingsScreen'
 
@@ -60,7 +61,7 @@ export default function App() {
     case 'archive':
       return <ArchiveScreen />
     case 'backup':
-      return <ComingSoon title="Резервная копия" text="Экспорт и импорт появятся в следующем обновлении этапа 2." />
+      return <BackupScreen />
     case 'trash':
       return <TrashScreen />
     case 'more':
