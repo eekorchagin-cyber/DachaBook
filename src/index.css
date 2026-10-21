@@ -781,3 +781,23 @@ details.card[open] > summary::before {
   border-color: var(--warn);
   color: var(--warn);
 }
+
+.split-parts {
+  padding-left: 22px;
+  margin: 8px 0;
+}
+
+.split-part {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.split-part textarea {
+  width: 100%;
+  font: inherit;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}

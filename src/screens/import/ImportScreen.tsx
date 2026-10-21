@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { repo, type AppSettings } from '../../app/store'
 import { formatDate } from '../../domain/dates'
 import { periodText } from '../../domain/labels'
-import type { CareObject } from '../../domain/types'
+import type { CareObject, PlantGroup } from '../../domain/types'
 import { addAttachment, addPhoto } from '../../files/files'
 import { parseEnexStream, type EnexNote } from '../../import/enex/parser'
 import {
@@ -16,8 +16,12 @@ import {
   type ExistingIndex,
   type ImportDecisions,
   type ImportResult,
+  type PlanPart,
 } from '../../import/execute'
+import { makeParts } from '../../import/parts'
 import { buildProposal, type EventCandidate, type ImportProposal, type PlanCandidate } from '../../import/proposal'
+import { splitSentences, suggestParts } from '../../import/split'
+import { SplitEditor } from '../../ui/SplitEditor'
 import { errorText, formatBytes } from '../../lib/format'
 import { db } from '../../storage/db'
 import { Screen } from '../../ui/Screen'
@@ -35,11 +39,39 @@ function EventRow(props: {
   candidate: EventCandidate
   decision: EventDecision
   objects: CareObject[]
+  groups: PlantGroup[]
   workKinds: string[]
   exists: boolean
   onChange: (patch: Partial<EventDecision>) => void
 }) {
   const { candidate, decision } = props
+  if (decision.parts && decision.parts.length > 1) {
+    return (
+      <li className={decision.include ? 'import-row' : 'import-row off'}>
+        <label className="import-check">
+          <input type="checkbox" checked={decision.include} onChange={(event) => props.onChange({ include: event.target.checked })} />
+          <strong>{candidate.needsConfirmation ? `«${candidate.sources[0].row.rawDate}»` : formatDate(candidate.date!)}</strong>
+          <span className="tag">разделено на {decision.parts.length}</span>
+        </label>
+        {candidate.needsConfirmation && (
+          <label className="field">
+            Дата
+            <input type="date" value={decision.date ?? ''} onChange={(event) => props.onChange({ date: event.target.value, include: !!event.target.value })} />
+          </label>
+        )}
+        <SplitEditor
+          parts={decision.parts}
+          onChange={(parts) => props.onChange({ parts })}
+          onCancel={() => props.onChange({ parts: undefined })}
+          objects={props.objects}
+          groups={props.groups}
+          workKinds={props.workKinds}
+          hasMedia={candidate.mediaHashes.length > 0}
+        />
+      </li>
+    )
+  }
+  const canSplitText = splitSentences(decision.text).length > 1
   return (
     <li className={decision.include ? 'import-row' : 'import-row off'}>
       <label className="import-check">
@@ -47,6 +79,7 @@ function EventRow(props: {
         <strong>{candidate.needsConfirmation ? `«${candidate.sources[0].row.rawDate}»` : formatDate(candidate.date!)}</strong>
         {props.exists && <span className="tag">уже есть</span>}
         {candidate.typeSuggested && <span className="tag warn">работа по тексту</span>}
+        {candidate.splittable && <span className="tag warn">можно разделить</span>}
         {candidate.sources.length > 1 && <span className="muted small">файлов: {new Set(candidate.sources.map((source) => source.fileName)).size}</span>}
       </label>
       {candidate.variants.length > 1 ? (
@@ -98,11 +131,29 @@ function EventRow(props: {
         )}
       </div>
       {candidate.mediaHashes.length > 0 && <p className="muted small">Вложений: {candidate.mediaHashes.length}</p>}
+      {canSplitText && (
+        <button
+          type="button"
+          className="button secondary small"
+          onClick={() => props.onChange({ parts: makeParts(decision.text, props.objects, props.groups, decision.type === 'work') })}
+        >
+          Разделить на {splitSentences(decision.text).length} записи
+        </button>
+      )}
     </li>
   )
 }
 
-function PlanRow({ candidate, include, exists, onChange }: { candidate: PlanCandidate; include: boolean; exists: boolean; onChange: (value: boolean) => void }) {
+function PlanRow(props: {
+  candidate: PlanCandidate
+  include: boolean
+  exists: boolean
+  parts?: PlanPart[]
+  onChange: (value: boolean) => void
+  onParts: (parts: PlanPart[] | undefined) => void
+}) {
+  const { candidate, include, exists, onChange, parts } = props
+  const sentences = splitSentences(candidate.text)
   return (
     <li className={include ? 'import-row' : 'import-row off'}>
       <label className="import-check">
@@ -110,21 +161,51 @@ function PlanRow({ candidate, include, exists, onChange }: { candidate: PlanCand
         <span>{candidate.itemType === 'work' ? '⚒' : '👁'}</span>
         <span className="muted small">{periodText(candidate.periods)}</span>
         {exists && <span className="tag">уже есть</span>}
+        {candidate.splittable && !parts && <span className="tag warn">можно разделить</span>}
       </label>
-      <p className="import-text">{candidate.text}</p>
+      {parts && parts.length > 1 ? (
+        <>
+          <ol className="split-parts">
+            {parts.map((part, index) => (
+              <li key={index} className="split-part">
+                <textarea rows={2} value={part.text} onChange={(event) => props.onParts(parts.map((item, i) => (i === index ? { ...item, text: event.target.value } : item)))} />
+                <select value={part.itemType} onChange={(event) => props.onParts(parts.map((item, i) => (i === index ? { ...item, itemType: event.target.value as PlanPart['itemType'] } : item)))}>
+                  <option value="work">Предложение работы</option>
+                  <option value="observation">Типичное наблюдение</option>
+                </select>
+              </li>
+            ))}
+          </ol>
+          <button type="button" className="button secondary small" onClick={() => props.onParts(undefined)}>
+            Не разделять
+          </button>
+        </>
+      ) : (
+        <p className="import-text">{candidate.text}</p>
+      )}
       {candidate.seasonsDone.length > 0 && <p className="muted small">Выполнялось в сезонах: {candidate.seasonsDone.join(', ')}</p>}
+      {!parts && sentences.length > 1 && (
+        <button
+          type="button"
+          className="button secondary small"
+          onClick={() => props.onParts(suggestParts(candidate.text, candidate.itemType === 'work').map((part) => ({ text: part.text, itemType: part.type })))}
+        >
+          Разделить на {sentences.length} позиции
+        </button>
+      )}
     </li>
   )
 }
 
 export function ImportScreen({ settings }: { settings: AppSettings }) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt && item.active).toArray(), []) ?? []
+  const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt && item.active).toArray(), []) ?? []
   const [progress, setProgress] = useState<string | null>(null)
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [decisions, setDecisions] = useState<ImportDecisions | null>(null)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [eventFilter, setEventFilter] = useState<'all' | 'suggested' | 'existing'>('all')
+  const [eventFilter, setEventFilter] = useState<'all' | 'suggested' | 'split' | 'existing'>('all')
   const [limit, setLimit] = useState(PAGE)
 
   const readFiles = async (list: FileList | null) => {
@@ -212,6 +293,14 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
   const setEvent = (key: string, patch: Partial<EventDecision>) =>
     setDecisions((current) => current && { ...current, events: { ...current.events, [key]: { ...current.events[key], ...patch } } })
   const setPlan = (key: string, value: boolean) => setDecisions((current) => current && { ...current, plan: { ...current.plan, [key]: value } })
+  const setPlanParts = (key: string, parts: PlanPart[] | undefined) =>
+    setDecisions((current) => {
+      if (!current) return current
+      const next = { ...current.planParts }
+      if (parts) next[key] = parts
+      else delete next[key]
+      return { ...current, planParts: next }
+    })
 
   return (
     <Screen title="Импорт из Evernote" help="import" back="/more" tab="/more">
@@ -272,6 +361,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
                     candidate={candidate}
                     decision={decisions.events[candidate.key]}
                     objects={objects}
+                    groups={groups}
                     workKinds={settings.workKinds}
                     exists={false}
                     onChange={(patch) => setEvent(candidate.key, patch)}
@@ -290,6 +380,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
                 [
                   ['all', 'Все'],
                   ['suggested', 'Работа по тексту'],
+                  ['split', 'Можно разделить'],
                   ['existing', 'Уже есть'],
                 ] as const
               ).map(([value, label]) => (
@@ -300,7 +391,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
             </div>
             {(() => {
               const list = stats.exact.filter((candidate) =>
-                eventFilter === 'suggested' ? candidate.typeSuggested : eventFilter === 'existing' ? eventExists(candidate, loaded.existing) : true,
+                eventFilter === 'suggested' ? candidate.typeSuggested : eventFilter === 'split' ? candidate.splittable : eventFilter === 'existing' ? eventExists(candidate, loaded.existing) : true,
               )
               return (
                 <>
@@ -311,6 +402,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
                         candidate={candidate}
                         decision={decisions.events[candidate.key]}
                         objects={objects}
+                        groups={groups}
                         workKinds={settings.workKinds}
                         exists={eventExists(candidate, loaded.existing)}
                         onChange={(patch) => setEvent(candidate.key, patch)}
@@ -338,7 +430,9 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
                   candidate={candidate}
                   include={decisions.plan[candidate.key]}
                   exists={loaded.existing.planKeys.has(candidate.key)}
+                  parts={decisions.planParts[candidate.key]}
                   onChange={(value) => setPlan(candidate.key, value)}
+                  onParts={(parts) => setPlanParts(candidate.key, parts)}
                 />
               ))}
             </ul>
@@ -357,7 +451,9 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
                     candidate={candidate}
                     include={decisions.plan[candidate.key]}
                     exists={loaded.existing.planKeys.has(candidate.key)}
+                    parts={decisions.planParts[candidate.key]}
                     onChange={(value) => setPlan(candidate.key, value)}
+                    onParts={(parts) => setPlanParts(candidate.key, parts)}
                   />
                 ))}
               </ul>

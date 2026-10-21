@@ -1,6 +1,7 @@
 import type { PlanPeriod } from '../domain/types'
 import { isDiaryNote, parseDiaryTable, parseRawDate, type DiaryRow, type OutsideText } from './enex/diaryTable'
 import type { EnexNote, EnexResource } from './enex/parser'
+import { canSplit } from './split'
 import { looksLikeWork, similarity, suggestObject, suggestWorkKind, textKey } from './suggest'
 
 /** Строка дневника вместе с файлом и сезоном, откуда она взята. */
@@ -27,6 +28,8 @@ export interface EventCandidate {
   workKind?: string
   sources: SourceRow[]
   mediaHashes: string[]
+  /** Несколько предложений разного типа: стоит разделить на отдельные записи. */
+  splittable: boolean
 }
 
 export interface PlanCandidate {
@@ -39,6 +42,7 @@ export interface PlanCandidate {
   fromPastOnly: boolean
   sources: SourceRow[]
   mediaHashes: string[]
+  splittable: boolean
 }
 
 export interface NoteCandidate {
@@ -141,6 +145,7 @@ export function buildProposal(files: ImportFile[]): ImportProposal {
           workKind: work ? suggestWorkKind(row.text) : undefined,
           sources: [source],
           mediaHashes: [...row.mediaHashes],
+          splittable: canSplit(row.text),
         })
       }
     }
@@ -150,7 +155,7 @@ export function buildProposal(files: ImportFile[]): ImportProposal {
       const planKey = `${itemType}|${key}`
       const candidate =
         plan.get(planKey) ??
-        ({ key: planKey, itemType, text: row.text, periods: [], seasonsDone: [], fromPastOnly: true, sources: [], mediaHashes: [] } as PlanCandidate)
+        ({ key: planKey, itemType, text: row.text, periods: [], seasonsDone: [], fromPastOnly: true, sources: [], mediaHashes: [], splittable: canSplit(row.text) } as PlanCandidate)
       addPeriod(candidate.periods, { month: row.month, week: weekNumber(row.week) })
       if (row.checkbox === 'checked' && !candidate.seasonsDone.includes(season)) candidate.seasonsDone.push(season)
       if (season === latestSeason) candidate.fromPastOnly = false

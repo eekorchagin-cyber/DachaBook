@@ -5,6 +5,7 @@ import type { Repository } from '../storage/repository'
 import { createSnapshot } from '../storage/snapshots'
 import { enmlToHtml } from './enex/enml'
 import type { EnexResource } from './enex/parser'
+import type { PartDraft } from './parts'
 import type { EventCandidate, ImportProposal, NoteCandidate, SourceRow } from './proposal'
 import { suggestObject, textKey } from './suggest'
 
@@ -15,11 +16,19 @@ export interface EventDecision {
   workKind?: string
   date?: string
   text: string
+  /** Строка разделена на несколько записей (две и больше частей). */
+  parts?: PartDraft[]
+}
+
+export interface PlanPart {
+  text: string
+  itemType: 'work' | 'observation'
 }
 
 export interface ImportDecisions {
   events: Record<string, EventDecision>
   plan: Record<string, boolean>
+  planParts: Record<string, PlanPart[]>
   notes: Record<string, 'reference' | 'skip'>
   outside: boolean
 }
@@ -41,14 +50,16 @@ export function noteKey(candidate: NoteCandidate): string {
 export async function existingIndex(database: DiaryDatabase): Promise<ExistingIndex> {
   const [events, plan, references] = await Promise.all([database.events.toArray(), database.planDrafts.toArray(), database.references.toArray()])
   const eventKeys = new Set<string>()
+  // Разделённая строка хранит ключ «ключ#номер части»; повторный импорт узнаёт её по исходному ключу.
+  const base = (fingerprint: string) => fingerprint.split('#')[0]
   for (const event of events) {
     if (event.deletedAt) continue
-    if (event.source?.fingerprint) eventKeys.add(event.source.fingerprint)
+    if (event.source?.fingerprint) eventKeys.add(base(event.source.fingerprint))
     eventKeys.add(`${event.date}|${textKey(event.comment)}`)
   }
   return {
     eventKeys,
-    planKeys: new Set(plan.filter((item) => !item.deletedAt && item.source).map((item) => item.source!.fingerprint)),
+    planKeys: new Set(plan.filter((item) => !item.deletedAt && item.source).map((item) => base(item.source!.fingerprint))),
     noteKeys: new Set(references.filter((item) => !item.deletedAt && item.source).map((item) => item.source!.fingerprint)),
     hasOutside: references.some((item) => !item.deletedAt && item.source?.fingerprint === OUTSIDE_KEY),
   }
@@ -76,7 +87,7 @@ export function defaultDecisions(proposal: ImportProposal, objects: CareObject[]
   for (const candidate of proposal.plan) plan[candidate.key] = !candidate.fromPastOnly && !existing.planKeys.has(candidate.key)
   const notes: Record<string, 'reference' | 'skip'> = {}
   for (const candidate of proposal.notes) notes[noteKey(candidate)] = existing.noteKeys.has(noteKey(candidate)) ? 'skip' : 'reference'
-  return { events, plan, notes, outside: proposal.outside.length > 0 && !existing.hasOutside }
+  return { events, plan, planParts: {}, notes, outside: proposal.outside.length > 0 && !existing.hasOutside }
 }
 
 export interface FileAdapter {
@@ -208,26 +219,32 @@ export async function executeImport(proposal: ImportProposal, decisions: ImportD
     const decision = decisions.events[candidate.key]
     try {
       if (!decision.date) throw new Error('не указана дата')
+      const split = decision.parts && decision.parts.length > 1
+      const pieces: PartDraft[] = split
+        ? decision.parts!
+        : [{ text: decision.text, type: decision.type, objectId: decision.objectId, workKind: decision.workKind, plantGroupIds: [], withMedia: true }]
       const photoIds: string[] = []
       const attachmentIds: string[] = []
       for (const hash of candidate.mediaHashes) {
         const file = await fileFor(hash, true)
         if (file) (file.image ? photoIds : attachmentIds).push(file.id)
       }
-      const source = sourceOf(candidate.sources, candidate.key)
-      const event = await repo.create('events', {
-        type: decision.type,
-        date: decision.date,
-        objectIds: decision.objectId ? [decision.objectId] : [],
-        plantGroupIds: [],
-        workKind: decision.type === 'work' ? decision.workKind : undefined,
-        comment: decision.text,
-        photoIds,
-        attachmentIds,
-        source,
-      })
-      link(source.archiveItemIds, event.id)
-      events++
+      for (const [index, piece] of pieces.entries()) {
+        const source = sourceOf(candidate.sources, split ? `${candidate.key}#${index + 1}` : candidate.key)
+        const event = await repo.create('events', {
+          type: piece.type,
+          date: decision.date,
+          objectIds: piece.objectId ? [piece.objectId] : [],
+          plantGroupIds: piece.plantGroupIds,
+          workKind: piece.type === 'work' ? piece.workKind : undefined,
+          comment: piece.text.trim(),
+          photoIds: piece.withMedia ? photoIds : [],
+          attachmentIds: piece.withMedia ? attachmentIds : [],
+          source,
+        })
+        link(source.archiveItemIds, event.id)
+        events++
+      }
     } catch (error) {
       errors.push(`Запись «${candidate.text.slice(0, 60)}»: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -242,20 +259,25 @@ export async function executeImport(proposal: ImportProposal, decisions: ImportD
         const file = await fileFor(hash, false)
         if (file) fileIdsForItem.push(file.id)
       }
-      const source = sourceOf(candidate.sources, candidate.key)
-      const item = await repo.create('planDrafts', {
-        itemType: candidate.itemType,
-        periods: candidate.periods,
-        text: candidate.text,
-        objectIds: [objectId(suggestObject(candidate.text))],
-        plantGroupIds: [],
-        fileIds: fileIdsForItem,
-        seasonsDone: candidate.seasonsDone,
-        transferred: false,
-        source,
-      } satisfies Omit<PlanDraftItem, keyof DocMeta>)
-      link(source.archiveItemIds, item.id)
-      planItems++
+      const parts = decisions.planParts[candidate.key]
+      const split = !!parts && parts.length > 1
+      const pieces: PlanPart[] = split ? parts : [{ text: candidate.text, itemType: candidate.itemType }]
+      for (const [index, piece] of pieces.entries()) {
+        const source = sourceOf(candidate.sources, split ? `${candidate.key}#${index + 1}` : candidate.key)
+        const item = await repo.create('planDrafts', {
+          itemType: piece.itemType,
+          periods: candidate.periods,
+          text: piece.text.trim(),
+          objectIds: [objectId(suggestObject(piece.text))],
+          plantGroupIds: [],
+          fileIds: index === 0 ? fileIdsForItem : [],
+          seasonsDone: piece.itemType === 'work' ? candidate.seasonsDone : [],
+          transferred: false,
+          source,
+        } satisfies Omit<PlanDraftItem, keyof DocMeta>)
+        link(source.archiveItemIds, item.id)
+        planItems++
+      }
     } catch (error) {
       errors.push(`План «${candidate.text.slice(0, 60)}»: ${error instanceof Error ? error.message : String(error)}`)
     }

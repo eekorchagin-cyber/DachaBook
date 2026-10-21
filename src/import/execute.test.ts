@@ -9,6 +9,7 @@ import { DiaryDatabase } from '../storage/db'
 import { Repository } from '../storage/repository'
 import { parseEnexStream, type EnexNote } from './enex/parser'
 import { defaultDecisions, executeImport, existingIndex, type FileAdapter } from './execute'
+import { makeParts } from './parts'
 import { buildProposal, type ImportFile } from './proposal'
 
 const samplesDir = join(import.meta.dirname, '../../DOCS/samples')
@@ -69,4 +70,42 @@ describe.skipIf(sampleFiles.length === 0)('импорт всех образцо�
     expect(again).toMatchObject({ events: 0, planItems: 0, references: 0, archiveItems: 0 })
     expect(await context.database.events.count()).toBe(334)
   }, 180_000)
+})
+
+describe('разделение строки при импорте', () => {
+  const row = (week: string, todo: string, text: string, date: string) =>
+    `<tr><td>${week}</td><td>${todo}</td><td>${text}</td><td>${date}</td></tr>`
+  const header = row('Недели', '', 'Работы, наблюдения', 'Дата выполнения')
+  const table = (rows: string) => `<table>${header}${rows}</table>`
+  const content = `<en-note><div>Сентябрь</div>${table(row('1', '', 'Листья опали. Убрали листву. Обвязал деревья защитной лентой.', '20.09.2025'))}${table('')}${table('')}</en-note>`
+  const note: EnexNote = { title: 'Дневник дачных работ 2025 г', tags: [], attributes: {}, content, resources: [] }
+
+  it('одна строка становится тремя записями, повторный импорт их узнаёт', async () => {
+    const context = await setup()
+    const groups = [await context.repo.create('plantGroups', { name: 'Деревья', objectIds: [], active: true })]
+    const proposal = buildProposal([{ fileName: 'd.enex', notes: [note] }])
+    expect(proposal.events).toHaveLength(1)
+    expect(proposal.events[0].splittable).toBe(true)
+
+    const decisions = defaultDecisions(proposal, context.objects, await existingIndex(context.database))
+    const key = proposal.events[0].key
+    decisions.events[key].parts = makeParts(proposal.events[0].text, context.objects, groups)
+    const first = await executeImport(proposal, decisions, context)
+    expect(first.events).toBe(3)
+
+    const events = await context.database.events.toArray()
+    expect(events.map((event) => [event.type, event.comment])).toEqual(
+      expect.arrayContaining([
+        ['observation', 'Листья опали.'],
+        ['work', 'Убрали листву.'],
+        ['work', 'Обвязал деревья защитной лентой.'],
+      ]),
+    )
+    expect(events.find((event) => event.comment.startsWith('Обвязал'))?.plantGroupIds).toEqual([groups[0].id])
+    const [archive] = await context.database.importArchive.toArray()
+    expect(archive.createdRecordIds).toHaveLength(3)
+
+    const again = await executeImport(proposal, defaultDecisions(proposal, context.objects, await existingIndex(context.database)), context)
+    expect(again.events).toBe(0)
+  })
 })

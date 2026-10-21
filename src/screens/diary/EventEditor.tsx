@@ -12,7 +12,11 @@ import { AttachmentRow } from '../../ui/AttachmentRow'
 import { Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
 import { EVENT_TYPES, weatherText } from '../../domain/labels'
+import { makeParts, type PartDraft } from '../../import/parts'
+import { splitSentences } from '../../import/split'
+import { SplitEditor } from '../../ui/SplitEditor'
 import { PhotoThumb } from './EventCard'
+import { splitEvent } from './splitEvent'
 
 interface Draft {
   type: EventType
@@ -106,6 +110,7 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
   const [draft, setDraft] = useState<Draft>(() => toDraft(event, initialType))
   const [initial, setInitial] = useState(() => JSON.stringify(toDraft(event, initialType)))
   const [error, setError] = useState<string | null>(null)
+  const [splitParts, setSplitParts] = useState<PartDraft[] | null>(null)
 
   const dirty = useMemo(() => JSON.stringify(draft) !== initial, [draft, initial])
 
@@ -152,6 +157,36 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
   }
 
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'ru')
+  const canSplitEvent = !!event && !dirty && draft.type !== 'measurement' && splitSentences(draft.comment).length > 1
+  if (event && splitParts) {
+    return (
+      <Screen title="Разделить запись" help="event" tab="/diary" back="/diary">
+        <section className="card">
+          <p className="import-text">{event.comment}</p>
+          <SplitEditor
+            parts={splitParts}
+            onChange={setSplitParts}
+            onCancel={() => setSplitParts(null)}
+            objects={objects.filter((item) => item.active).sort(byName)}
+            groups={groups.filter((item) => item.active).sort(byName)}
+            workKinds={settings.workKinds}
+            hasMedia={event.photoIds.length + event.attachmentIds.length > 0}
+          />
+        </section>
+        <div className="actions">
+          <ActionButton
+            disabled={splitParts.length < 2 || splitParts.some((part) => !part.text.trim())}
+            onRun={async () => {
+              await splitEvent(event, splitParts)
+              navigate('/diary')
+            }}
+          >
+            Разделить на {splitParts.length} записи
+          </ActionButton>
+        </div>
+      </Screen>
+    )
+  }
   const activeObjects = objects.filter((item) => item.active || draft.objectIds.includes(item.id)).sort(byName)
   const activeGroups = groups.filter((item) => item.active || draft.plantGroupIds.includes(item.id)).sort(byName)
 
@@ -296,6 +331,15 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
         <button type="button" className="button secondary" onClick={() => leave('/diary')}>
           {dirty ? 'Отмена' : 'Закрыть'}
         </button>
+        {canSplitEvent && (
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => setSplitParts(makeParts(draft.comment, objects.filter((item) => item.active), groups.filter((item) => item.active), draft.type === 'work'))}
+          >
+            Разделить запись
+          </button>
+        )}
         {event && (
           <ActionButton
             secondary
