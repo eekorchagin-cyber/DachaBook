@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { openFile } from '../files/files'
 import { errorText, formatBytes } from '../lib/format'
 import { db } from '../storage/db'
+import { NoteField } from './NoteField'
 
 export function AttachmentRow({ id, onRemove, note, onNote }: { id: string; onRemove?: () => void; note?: string; onNote?: (value: string) => void }) {
   const file = useLiveQuery(() => db.files.get(id), [id])
@@ -19,9 +20,9 @@ export function AttachmentRow({ id, onRemove, note, onNote }: { id: string; onRe
         </button>
       )}
       {onNote ? (
-        <input className="file-note" placeholder="Пояснение к файлу" value={note ?? ''} onChange={(event) => onNote(event.target.value)} />
+        <NoteField placeholder="Пояснение к файлу" value={note ?? ''} onChange={onNote} />
       ) : (
-        note && <span className="muted small file-note">{note}</span>
+        note && <span className="muted small file-note-text">{note}</span>
       )}
     </li>
   )

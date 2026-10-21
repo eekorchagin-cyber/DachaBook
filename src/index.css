@@ -846,12 +846,21 @@ details.card[open] > summary::before {
 
 .file-note {
   font: inherit;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
   padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
+  width: 100%;
+  min-height: 3.2em;
+  resize: vertical;
+  overflow: hidden;
+}
+
+.file-note-text {
+  white-space: pre-line;
   width: 100%;
 }
 

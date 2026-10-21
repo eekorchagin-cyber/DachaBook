@@ -6,6 +6,7 @@ import { todayAtSite } from '../../domain/dates'
 import type { DiaryEvent, DocInput, EventType } from '../../domain/types'
 import { addAttachment, addPhoto } from '../../files/files'
 import { moonPhase } from '../../domain/moon'
+import { NoteField } from '../../ui/NoteField'
 import { PhotoViewer } from '../../ui/PhotoViewer'
 import { WeatherBadge } from '../../ui/WeatherBadge'
 import { errorText } from '../../lib/format'
@@ -315,11 +316,10 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
                     ×
                   </button>
                 </span>
-                <input
-                  className="file-note"
+                <NoteField
                   placeholder="Пояснение"
                   value={draft.fileNotes[photoId] ?? ''}
-                  onChange={(change) => update({ fileNotes: { ...draft.fileNotes, [photoId]: change.target.value } })}
+                  onChange={(value) => update({ fileNotes: { ...draft.fileNotes, [photoId]: value } })}
                 />
               </div>
             ))}
