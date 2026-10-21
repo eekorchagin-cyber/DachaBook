@@ -30,12 +30,14 @@ references/ — справочные материалы (HTML в поле html).
 planDrafts/ — черновик сезонного плана.
 importArchive/ — архив импорта: исходные строки и заметки Evernote.
 files/ — описания фото и вложений; files/originals/ — оригиналы без изменений; files/thumbs/ — уменьшенные копии.
-settings/shared.json — общие настройки дневника (виды работ).
+settings/shared.json — общие настройки дневника (виды работ, адрес и координаты участка).
 
 У каждой записи: id (UUID), schemaVersion, revision (UUID редакции), baseRevision, createdAt/updatedAt, createdBy/updatedBy,
 deletedAt (если в корзине) и checksum — SHA-256 содержимого без служебных полей.
 Пароли, токены и личные настройки устройства в копию не входят.
 `
+
+const SHARED_SETTINGS = ['workKinds', 'plotAddress', 'plotLocation']
 
 function extension(fileName: string): string {
   const match = fileName.match(/\.[A-Za-z0-9]{1,8}$/)
@@ -71,8 +73,12 @@ export async function buildBackup(database: DiaryDatabase, appVersion: string): 
     if (content?.thumb) entries[`files/thumbs/${file.id}.jpg`] = [new Uint8Array(await content.thumb.arrayBuffer()), { level: 0 }]
   }
 
-  const workKinds = (await database.settings.get('workKinds'))?.value
-  if (workKinds) entries['settings/shared.json'] = strToU8(JSON.stringify({ workKinds }, null, 2))
+  const shared: Record<string, unknown> = {}
+  for (const key of SHARED_SETTINGS) {
+    const value = (await database.settings.get(key))?.value
+    if (value) shared[key] = value
+  }
+  if (Object.keys(shared).length > 0) entries['settings/shared.json'] = strToU8(JSON.stringify(shared, null, 2))
 
   const now = new Date()
   const manifest: BackupManifest = {
@@ -185,7 +191,9 @@ export async function restoreBackup(database: DiaryDatabase, data: ArrayBuffer):
 
   const shared = entries['settings/shared.json']
   if (shared) {
-    const { workKinds } = JSON.parse(strFromU8(shared)) as { workKinds?: string[] }
+    const { workKinds, plotAddress, plotLocation } = JSON.parse(strFromU8(shared)) as { workKinds?: string[]; plotAddress?: string; plotLocation?: unknown }
+    if (plotAddress && !(await database.settings.get('plotAddress'))?.value) await database.settings.put({ key: 'plotAddress', value: plotAddress })
+    if (plotLocation && !(await database.settings.get('plotLocation'))?.value) await database.settings.put({ key: 'plotLocation', value: plotLocation })
     const current = ((await database.settings.get('workKinds'))?.value as string[] | undefined) ?? []
     if (workKinds?.some((kind) => !current.includes(kind)) && current.length > 0) {
       await database.settings.put({ key: 'workKinds', value: [...current, ...workKinds.filter((kind) => !current.includes(kind))] })

@@ -7,7 +7,7 @@ import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { EventCard } from './diary/EventCard'
 
-export function HomeScreen({ authorName, photoPosition }: { authorName: string; photoPosition: PhotoPosition }) {
+export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorName: string; plotAddress: string; photoPosition: PhotoPosition }) {
   const events = useLiveQuery(() => db.events.filter((item) => !item.deletedAt).toArray(), [])
   const objects = useLiveQuery(() => db.objects.toArray(), [])
   const objectMap = useMemo(() => new Map((objects ?? []).map((item) => [item.id, item])), [objects])
@@ -16,6 +16,15 @@ export function HomeScreen({ authorName, photoPosition }: { authorName: string; 
   return (
     <Screen title="DachaBook" help="home" tab="/">
       <p className="muted">Здравствуйте, {authorName}!</p>
+      {plotAddress ? (
+        <p className="plot-address">📍 {plotAddress}</p>
+      ) : (
+        <p className="hint">
+          <a className="plot-address-link" href="#/settings">
+            Укажите адрес дачи в настройках
+          </a>
+        </p>
+      )}
       <div className="quick-actions">
         <a className="button big" href="#/diary/new">
           ✎ Новая запись

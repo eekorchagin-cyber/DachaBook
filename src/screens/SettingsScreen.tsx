@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { setSetting, type AppSettings, type PhotoPosition, type ThemeSetting } from '../app/store'
 import { versionLabel } from '../app/version'
+import { locationText, parseLocation, roundLocation, type PlotLocation } from '../domain/location'
 import { Screen } from '../ui/Screen'
 
 const THEMES: { value: ThemeSetting; label: string }[] = [
@@ -32,6 +33,7 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
           <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => void setSetting('authorName', name.trim())} />
         </label>
       </section>
+      <PlotSection settings={settings} />
       <section className="card">
         <h2>Внешний вид</h2>
         <fieldset className="choice">
@@ -70,6 +72,72 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
         </a>
       </section>
     </Screen>
+  )
+}
+
+function PlotSection({ settings }: { settings: AppSettings }) {
+  const [address, setAddress] = useState(settings.plotAddress)
+  const [coordinates, setCoordinates] = useState(settings.plotLocation ? locationText(settings.plotLocation) : '')
+  const [message, setMessage] = useState('')
+
+  const saveLocation = (location: PlotLocation) => {
+    setCoordinates(locationText(location))
+    setMessage('')
+    void setSetting('plotLocation', location)
+  }
+
+  const saveCoordinates = () => {
+    if (!coordinates.trim()) {
+      setMessage('')
+      void setSetting('plotLocation', null)
+      return
+    }
+    const location = parseLocation(coordinates)
+    if (location) saveLocation(location)
+    else setMessage('Не удалось разобрать координаты. Пример: 55.75, 37.62')
+  }
+
+  const locate = () => {
+    if (!navigator.geolocation) {
+      setMessage('Это устройство не умеет определять место.')
+      return
+    }
+    setMessage('Определяю место…')
+    navigator.geolocation.getCurrentPosition(
+      (position) => saveLocation(roundLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude })),
+      () => setMessage('Не удалось определить место. Разрешите доступ к геопозиции или введите координаты вручную.'),
+      { enableHighAccuracy: false, timeout: 15000 },
+    )
+  }
+
+  return (
+    <section className="card">
+      <h2>Участок</h2>
+      <label className="field">
+        Адрес дачи
+        <textarea
+          rows={2}
+          value={address}
+          onChange={(event) => {
+            setAddress(event.target.value)
+            void setSetting('plotAddress', event.target.value.trim())
+          }}
+        />
+      </label>
+      <label className="field">
+        Координаты для погоды
+        <input value={coordinates} inputMode="decimal" placeholder="55.75, 37.62" onChange={(event) => setCoordinates(event.target.value)} onBlur={saveCoordinates} />
+      </label>
+      <div className="actions">
+        <button type="button" className="button secondary" onClick={locate}>
+          Определить по месту
+        </button>
+      </div>
+      {message && <p className="hint">{message}</p>}
+      <p className="hint">
+        Адрес и координаты хранятся только на ваших устройствах и в ваших резервных копиях — в коде приложения и на GitHub их нет. «Определить по месту» нажимайте, находясь на участке.
+      </p>
+    </section>
   )
 }
 
