@@ -711,3 +711,73 @@ body {
   background: var(--accent-text);
   color: var(--accent);
 }
+
+details.card > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+details.card > summary h2 {
+  display: inline;
+}
+
+details.card > summary::before {
+  content: '▸ ';
+  color: var(--muted);
+}
+
+details.card[open] > summary::before {
+  content: '▾ ';
+}
+
+.import-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+
+.import-row,
+.plan-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.import-row.off {
+  opacity: 0.55;
+}
+
+.import-check {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.import-text {
+  margin: 4px 0;
+  white-space: pre-line;
+}
+
+.variants {
+  border: none;
+  padding: 0;
+  margin: 6px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row.compact .field {
+  margin-top: 6px;
+  font-size: 0.85rem;
+}
+
+.row.compact .field select,
+.row.compact .field input {
+  padding: 6px;
+}
+
+.tag.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}

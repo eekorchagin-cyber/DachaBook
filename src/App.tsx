@@ -6,6 +6,9 @@ import { LabScreen } from './lab/LabScreen'
 import { DiaryScreen } from './screens/diary/DiaryScreen'
 import { EventEditor } from './screens/diary/EventEditor'
 import { HomeScreen } from './screens/HomeScreen'
+import { ArchiveScreen } from './screens/import/ArchiveScreen'
+import { ImportScreen } from './screens/import/ImportScreen'
+import { PlanScreen } from './screens/import/PlanScreen'
 import { LibraryScreen } from './screens/library/LibraryScreen'
 import { ReferenceEditor, ReferenceView } from './screens/library/ReferenceScreen'
 import { ComingSoon, MoreScreen, TrashScreen } from './screens/MoreScreen'
@@ -51,9 +54,11 @@ export default function App() {
       if (param) return <ReferenceView id={param} />
       return <LibraryScreen />
     case 'plan':
-      return <ComingSoon title="Черновик плана" text="Черновик сезонного плана появится вместе с импортом из Evernote." />
+      return <PlanScreen />
     case 'import':
-      return <ComingSoon title="Импорт из Evernote" text="Импорт появится в следующем обновлении этапа 2." />
+      return <ImportScreen settings={settings} />
+    case 'archive':
+      return <ArchiveScreen />
     case 'backup':
       return <ComingSoon title="Резервная копия" text="Экспорт и импорт появятся в следующем обновлении этапа 2." />
     case 'trash':

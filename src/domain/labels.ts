@@ -1,4 +1,4 @@
-import type { DiaryEvent, EventType, ObjectType } from './types'
+import type { DiaryEvent, EventType, ObjectType, PlanPeriod } from './types'
 
 export const OBJECT_TYPES: Record<ObjectType, string> = {
   lawn: 'Газон',
@@ -33,4 +33,10 @@ export function measurementText(event: DiaryEvent): string {
   if (event.measurement?.temperature) parts.push(`почва ${event.measurement.temperature.value} °C`)
   if (event.measurement?.moisture) parts.push(`влажность ${event.measurement.moisture.value} (${event.measurement.moisture.scale})`)
   return parts.join(', ')
+}
+
+const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+
+export function periodText(periods: PlanPeriod[]): string {
+  return periods.map((period) => `${MONTHS_SHORT[period.month - 1]}${period.week ? `, нед. ${period.week}` : ''}`).join('; ')
 }
