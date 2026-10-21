@@ -47,6 +47,8 @@ export interface ExistingIndex {
   eventKeys: Set<string>
   /** Записи по дате — чтобы узнать строку, изменённую в Evernote после прошлого импорта. */
   eventsByDate: Map<string, ExistingEvent[]>
+  /** Тексты позиций черновика плана — для изменённых в Evernote строк без даты. */
+  planTexts: string[]
   planKeys: Set<string>
   noteKeys: Set<string>
   hasOutside: boolean
@@ -74,6 +76,7 @@ export async function existingIndex(database: DiaryDatabase): Promise<ExistingIn
   return {
     eventKeys,
     eventsByDate,
+    planTexts: plan.filter((item) => !item.deletedAt).map((item) => item.text),
     planKeys: new Set(plan.filter((item) => !item.deletedAt && item.source).map((item) => base(item.source!.fingerprint))),
     noteKeys: new Set(references.filter((item) => !item.deletedAt && item.source).map((item) => item.source!.fingerprint)),
     hasOutside: references.some((item) => !item.deletedAt && item.source?.fingerprint === OUTSIDE_KEY),
@@ -109,7 +112,10 @@ export function defaultDecisions(proposal: ImportProposal, objects: CareObject[]
     }
   }
   const plan: Record<string, boolean> = {}
-  for (const candidate of proposal.plan) plan[candidate.key] = !candidate.fromPastOnly && !existing.planKeys.has(candidate.key)
+  for (const candidate of proposal.plan) {
+    const edited = existing.planTexts.some((text) => isEditOf(text, candidate.text))
+    plan[candidate.key] = !candidate.fromPastOnly && !existing.planKeys.has(candidate.key) && !edited
+  }
   const notes: Record<string, 'reference' | 'skip'> = {}
   for (const candidate of proposal.notes) notes[noteKey(candidate)] = existing.noteKeys.has(noteKey(candidate)) ? 'skip' : 'reference'
   const outsideTargets: Record<string, 'reference' | 'above'> = {}

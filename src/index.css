@@ -962,3 +962,30 @@ details.card[open] > summary::before {
     height: 28px;
   }
 }
+
+/* Узкий экран и крупный текст (П-16): вкладки и переключатели не вылезают за край. */
+.tab {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: clamp(10px, 0.72rem, 13px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab span {
+  font-size: clamp(18px, 1.25rem, 24px);
+}
+
+.segmented {
+  flex-wrap: wrap;
+}
+
+.segmented button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.topbar h1 {
+  min-width: 0;
+}

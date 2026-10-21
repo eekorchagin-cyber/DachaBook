@@ -16,7 +16,7 @@ const LINKS = [
 
 export function MoreScreen() {
   return (
-    <Screen title="Ещё" tab="/more">
+    <Screen title="Ещё" help="more" tab="/more">
       <ul className="list">
         {LINKS.map((link) => (
           <li key={link.href}>
@@ -36,7 +36,7 @@ export function TrashScreen() {
   const references = useLiveQuery(() => db.references.filter((item) => !!item.deletedAt).toArray(), []) ?? []
   const empty = events.length === 0 && references.length === 0
   return (
-    <Screen title="Корзина" back="/more" tab="/more">
+    <Screen title="Корзина" help="trash" back="/more" tab="/more">
       <p className="hint">Удалённые записи хранятся здесь со всеми фото и связями. Окончательное удаление появится вместе с синхронизацией (этап 3).</p>
       {empty && <EmptyState>Корзина пуста.</EmptyState>}
       <ul className="list">
