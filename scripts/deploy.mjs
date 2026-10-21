@@ -17,7 +17,9 @@ rmSync(join(dist, '.git'), { recursive: true, force: true })
 run('git', ['init', '-q', '-b', 'gh-pages'], dist)
 // Файлы прошлых сборок остаются на сайте: страница, открытая из офлайн-копии старой версии,
 // должна суметь догрузить свои скрипты.
-try {
+// DEPLOY_FRESH=1 — публикация без файлов прошлых сборок (например, чтобы убрать с сайта устаревшее содержимое).
+if (process.env.DEPLOY_FRESH) console.log('Публикация начисто: файлы прошлых сборок не переносятся')
+else try {
   run('git', ['fetch', '-q', '--depth=1', remote, 'gh-pages'], dist)
   const previous = execFileSync('git', ['ls-tree', '-r', '--name-only', 'FETCH_HEAD', 'assets'], { cwd: dist, encoding: 'utf8' })
     .split('\n')

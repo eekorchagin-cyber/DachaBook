@@ -989,3 +989,63 @@ details.card[open] > summary::before {
 .topbar h1 {
   min-width: 0;
 }
+
+.guide {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.guide h1 {
+  font-size: 1.35rem;
+  margin-top: 0;
+}
+
+.guide h2 {
+  font-size: 1.15rem;
+  margin-top: 1.6em;
+  scroll-margin-top: 72px;
+}
+
+.guide h3 {
+  font-size: 1rem;
+  margin-top: 1.2em;
+  scroll-margin-top: 72px;
+}
+
+.guide a {
+  color: var(--accent);
+}
+
+.guide blockquote {
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-left: 4px solid var(--accent);
+  background: var(--bg);
+  border-radius: 0 8px 8px 0;
+}
+
+.guide blockquote p {
+  margin: 0;
+}
+
+.guide table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.guide th,
+.guide td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  vertical-align: top;
+  text-align: left;
+}
+
+.guide hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}

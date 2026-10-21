@@ -5,6 +5,7 @@ import type { EventType } from './domain/types'
 import { LabScreen } from './lab/LabScreen'
 import { DiaryScreen } from './screens/diary/DiaryScreen'
 import { EventEditor } from './screens/diary/EventEditor'
+import { GuideScreen } from './screens/GuideScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { ArchiveScreen } from './screens/import/ArchiveScreen'
 import { ImportScreen } from './screens/import/ImportScreen'
@@ -64,6 +65,8 @@ export default function App() {
       return <BackupScreen />
     case 'trash':
       return <TrashScreen />
+    case 'guide':
+      return <GuideScreen section={route.query.get('section') ?? undefined} />
     case 'more':
       return <MoreScreen />
     case 'settings':

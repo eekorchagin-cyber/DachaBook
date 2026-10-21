@@ -32,7 +32,7 @@ export function HomeScreen({ authorName, photoPosition }: { authorName: string; 
           <dt>Прогноз</dt>
           <dd>—</dd>
         </dl>
-        <p className="hint">Текущая погода и прогноз для участка (ст. Минино) появятся на этапе 4.</p>
+        <p className="hint">Текущая погода и прогноз для участка появятся на этапе 4.</p>
       </section>
       <section className="card">
         <h2>Ближайшие работы</h2>

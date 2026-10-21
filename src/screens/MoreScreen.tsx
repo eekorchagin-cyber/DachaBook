@@ -6,6 +6,7 @@ import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
 
 const LINKS = [
+  { href: '#/guide', title: 'Как пользоваться DachaBook', text: 'Руководство: чтобы дача была в порядке и доставляла минимум хлопот' },
   { href: '#/plan', title: 'Черновик сезонного плана', text: 'Предложения работ и типичные наблюдения по месяцам' },
   { href: '#/import', title: 'Импорт из Evernote', text: 'Перенос дневников и заметок из файлов ENEX' },
   { href: '#/archive', title: 'Архив импорта', text: 'Исходные строки и заметки Evernote, в том числе неиспользованные' },
