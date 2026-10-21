@@ -71,6 +71,33 @@ function EventRow(props: {
       </li>
     )
   }
+  if (decision.change) {
+    const change = decision.change
+    const setAction = (action: 'skip' | 'update' | 'separate') => props.onChange({ change: { ...change, action } })
+    return (
+      <li className={change.action === 'skip' ? 'import-row off' : 'import-row'}>
+        <div className="import-check">
+          <strong>{formatDate(candidate.date!)}</strong>
+          <span className="tag warn">изменена в Evernote</span>
+        </div>
+        <p className="muted small">В дневнике сейчас: {change.oldText}</p>
+        <p className="import-text">В файле: {decision.text}</p>
+        <div className="segmented">
+          {(
+            [
+              ['skip', 'Пропустить'],
+              ['update', 'Обновить запись'],
+              ['separate', 'Отдельная запись'],
+            ] as const
+          ).map(([value, label]) => (
+            <button key={value} type="button" className={change.action === value ? 'active' : ''} onClick={() => setAction(value)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </li>
+    )
+  }
   const canSplitText = splitSentences(decision.text).length > 1
   return (
     <li className={decision.include ? 'import-row' : 'import-row off'}>
@@ -205,7 +232,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
   const [decisions, setDecisions] = useState<ImportDecisions | null>(null)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [eventFilter, setEventFilter] = useState<'all' | 'suggested' | 'split' | 'existing'>('all')
+  const [eventFilter, setEventFilter] = useState<'all' | 'suggested' | 'split' | 'changed' | 'existing'>('all')
   const [limit, setLimit] = useState(PAGE)
 
   const readFiles = async (list: FileList | null) => {
@@ -213,22 +240,32 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
     if (chosen.length === 0) return
     setError(null)
     setResult(null)
-    try {
-      const files: { fileName: string; notes: EnexNote[] }[] = []
-      for (const file of chosen) {
+    const files: { fileName: string; notes: EnexNote[] }[] = []
+    const broken: string[] = []
+    for (const file of chosen) {
+      try {
         const notes: EnexNote[] = []
         for await (const note of parseEnexStream(file.stream(), (p) => setProgress(`Чтение «${file.name}»: ${formatBytes(p.bytesRead)} из ${formatBytes(file.size)}`))) {
           notes.push(note)
         }
         files.push({ fileName: file.name, notes })
+      } catch (caught) {
+        broken.push(`«${file.name}»: ${errorText(caught)}`)
       }
+    }
+    try {
       setProgress('Разбор заметок…')
       const proposal = buildProposal(files)
       const existing = await existingIndex(db)
-      setLoaded({ proposal, existing, files: chosen.map((file, i) => ({ name: file.name, size: file.size, notes: files[i].notes.length })) })
+      setLoaded({
+        proposal,
+        existing,
+        files: files.map((item) => ({ name: item.fileName, size: chosen.find((file) => file.name === item.fileName)?.size ?? 0, notes: item.notes.length })),
+      })
       setDecisions(defaultDecisions(proposal, objects, existing))
+      if (broken.length > 0) setError(`Не разобраны (остальные файлы обработаны): ${broken.join('; ')}`)
     } catch (caught) {
-      setError(`Не удалось разобрать файл: ${errorText(caught)}`)
+      setError(`Не удалось разобрать файлы: ${errorText(caught)}`)
     } finally {
       setProgress(null)
     }
@@ -243,6 +280,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
       confirm,
       exact,
       existingEvents: exact.filter((item) => eventExists(item, existing)).length,
+      changedEvents: exact.filter((item) => decisions.events[item.key]?.change).length,
       chosenEvents: proposal.events.filter((item) => decisions.events[item.key]?.include).length,
       planLatest: proposal.plan.filter((item) => !item.fromPastOnly),
       planPast: proposal.plan.filter((item) => item.fromPastOnly),
@@ -258,6 +296,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
           <h2>Импорт завершён</h2>
           <ul>
             <li>Записей дневника: {result.events}</li>
+            {result.updatedEvents > 0 && <li>Обновлено записей: {result.updatedEvents}</li>}
             <li>Позиций черновика плана: {result.planItems}</li>
             <li>Справочных материалов: {result.references}</li>
             <li>Файлов (фото и вложения): {result.files}</li>
@@ -338,6 +377,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
                 Записи дневника: {stats.chosenEvents} из {loaded.proposal.events.length}
                 {stats.existingEvents > 0 && ` (уже есть в дневнике: ${stats.existingEvents})`}
               </li>
+              {stats.changedEvents > 0 && <li>Изменены в Evernote после прошлого импорта: {stats.changedEvents} (по умолчанию пропускаются — выберите в списке)</li>}
               <li>Даты на подтверждение: {stats.confirm.length}</li>
               <li>
                 Черновик плана: {stats.chosenPlan} (из шаблона {loaded.proposal.latestSeason ?? '—'}: {stats.planLatest.length}, только в прошлых годах:{' '}
@@ -381,6 +421,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
                   ['all', 'Все'],
                   ['suggested', 'Работа по тексту'],
                   ['split', 'Можно разделить'],
+                  ['changed', 'Изменены'],
                   ['existing', 'Уже есть'],
                 ] as const
               ).map(([value, label]) => (
@@ -391,7 +432,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
             </div>
             {(() => {
               const list = stats.exact.filter((candidate) =>
-                eventFilter === 'suggested' ? candidate.typeSuggested : eventFilter === 'split' ? candidate.splittable : eventFilter === 'existing' ? eventExists(candidate, loaded.existing) : true,
+                eventFilter === 'suggested' ? candidate.typeSuggested : eventFilter === 'split' ? candidate.splittable : eventFilter === 'changed' ? !!decisions.events[candidate.key]?.change : eventFilter === 'existing' ? eventExists(candidate, loaded.existing) : true,
               )
               return (
                 <>

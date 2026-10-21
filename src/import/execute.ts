@@ -7,7 +7,7 @@ import { enmlToHtml } from './enex/enml'
 import type { EnexResource } from './enex/parser'
 import type { PartDraft } from './parts'
 import type { EventCandidate, ImportProposal, NoteCandidate, SourceRow } from './proposal'
-import { suggestObject, textKey } from './suggest'
+import { isEditOf, suggestObject, textKey } from './suggest'
 
 export interface EventDecision {
   include: boolean
@@ -18,6 +18,8 @@ export interface EventDecision {
   text: string
   /** Строка разделена на несколько записей (две и больше частей). */
   parts?: PartDraft[]
+  /** Строка изменена в Evernote после прошлого импорта: обновить запись, пропустить или создать отдельную. */
+  change?: { eventId: string; oldText: string; action: 'skip' | 'update' | 'separate' }
 }
 
 export interface PlanPart {
@@ -36,8 +38,15 @@ export interface ImportDecisions {
   outsideTargets: Record<string, 'reference' | 'above'>
 }
 
+export interface ExistingEvent {
+  id: string
+  comment: string
+}
+
 export interface ExistingIndex {
   eventKeys: Set<string>
+  /** Записи по дате — чтобы узнать строку, изменённую в Evernote после прошлого импорта. */
+  eventsByDate: Map<string, ExistingEvent[]>
   planKeys: Set<string>
   noteKeys: Set<string>
   hasOutside: boolean
@@ -53,15 +62,18 @@ export function noteKey(candidate: NoteCandidate): string {
 export async function existingIndex(database: DiaryDatabase): Promise<ExistingIndex> {
   const [events, plan, references] = await Promise.all([database.events.toArray(), database.planDrafts.toArray(), database.references.toArray()])
   const eventKeys = new Set<string>()
+  const eventsByDate = new Map<string, ExistingEvent[]>()
   // Разделённая строка хранит ключ «ключ#номер части»; повторный импорт узнаёт её по исходному ключу.
   const base = (fingerprint: string) => fingerprint.split('#')[0]
   for (const event of events) {
     if (event.deletedAt) continue
     if (event.source?.fingerprint) eventKeys.add(base(event.source.fingerprint))
     eventKeys.add(`${event.date}|${textKey(event.comment)}`)
+    eventsByDate.set(event.date, [...(eventsByDate.get(event.date) ?? []), { id: event.id, comment: event.comment }])
   }
   return {
     eventKeys,
+    eventsByDate,
     planKeys: new Set(plan.filter((item) => !item.deletedAt && item.source).map((item) => base(item.source!.fingerprint))),
     noteKeys: new Set(references.filter((item) => !item.deletedAt && item.source).map((item) => item.source!.fingerprint)),
     hasOutside: references.some((item) => !item.deletedAt && item.source?.fingerprint === OUTSIDE_KEY),
@@ -72,13 +84,23 @@ export function eventExists(candidate: EventCandidate, existing: ExistingIndex):
   return existing.eventKeys.has(candidate.key) || candidate.variants.some((text) => existing.eventKeys.has(`${candidate.date}|${textKey(text)}`))
 }
 
+/** Существующая запись той же даты с похожим, но другим текстом — строка изменена в Evernote. */
+export function changedFrom(candidate: EventCandidate, existing: ExistingIndex): ExistingEvent | undefined {
+  if (!candidate.date || eventExists(candidate, existing)) return undefined
+  return existing.eventsByDate
+    .get(candidate.date)
+    ?.find((event) => candidate.variants.some((text) => isEditOf(text, event.comment)))
+}
+
 /** Решения по умолчанию: неподтверждённые даты, «прошлые годы» и уже импортированное не включаются. */
 export function defaultDecisions(proposal: ImportProposal, objects: CareObject[], existing: ExistingIndex): ImportDecisions {
   const objectId = (name: string) => objects.find((item) => item.name === name)?.id ?? objects[0]?.id ?? ''
   const events: Record<string, EventDecision> = {}
   for (const candidate of proposal.events) {
+    const previous = changedFrom(candidate, existing)
     events[candidate.key] = {
-      include: !candidate.needsConfirmation && !eventExists(candidate, existing),
+      change: previous && { eventId: previous.id, oldText: previous.comment, action: 'skip' },
+      include: !candidate.needsConfirmation && !eventExists(candidate, existing) && !previous,
       type: candidate.type,
       objectId: objectId(candidate.objectName),
       workKind: candidate.workKind,
@@ -103,6 +125,7 @@ export interface FileAdapter {
 export interface ImportResult {
   snapshotId: string
   events: number
+  updatedEvents: number
   planItems: number
   references: number
   files: number
@@ -212,10 +235,14 @@ export async function executeImport(proposal: ImportProposal, decisions: ImportD
     fingerprint,
   })
 
-  const chosenEvents = proposal.events.filter((candidate) => decisions.events[candidate.key]?.include)
+  const chosenEvents = proposal.events.filter((candidate) => {
+    const decision = decisions.events[candidate.key]
+    return decision?.change ? decision.change.action === 'separate' : decision?.include
+  })
+  const toUpdate = proposal.events.filter((candidate) => decisions.events[candidate.key]?.change?.action === 'update')
   const chosenPlan = proposal.plan.filter((candidate) => decisions.plan[candidate.key])
   const chosenNotes = proposal.notes.filter((candidate) => decisions.notes[noteKey(candidate)] === 'reference')
-  const total = chosenEvents.length + chosenPlan.length + chosenNotes.length + archiveDrafts.length + 1
+  const total = chosenEvents.length + toUpdate.length + chosenPlan.length + chosenNotes.length + archiveDrafts.length + 1
   let done = 0
   const tick = () => context.onProgress?.(++done, total)
 
@@ -252,6 +279,22 @@ export async function executeImport(proposal: ImportProposal, decisions: ImportD
       }
     } catch (error) {
       errors.push(`Запись «${candidate.text.slice(0, 60)}»: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    tick()
+  }
+
+  let updated = 0
+  for (const candidate of toUpdate) {
+    const decision = decisions.events[candidate.key]
+    try {
+      const current = await database.events.get(decision.change!.eventId)
+      if (!current) throw new Error('запись для обновления не найдена')
+      const source = sourceOf(candidate.sources, candidate.key)
+      await repo.update('events', current.id, { comment: decision.text, source: { ...source, archiveItemIds: [...new Set([...(current.source?.archiveItemIds ?? []), ...source.archiveItemIds])] } }, current.revision)
+      link(source.archiveItemIds, current.id)
+      updated++
+    } catch (error) {
+      errors.push(`Обновление «${candidate.text.slice(0, 60)}»: ${error instanceof Error ? error.message : String(error)}`)
     }
     tick()
   }
@@ -420,5 +463,5 @@ export async function executeImport(proposal: ImportProposal, decisions: ImportD
     tick()
   }
 
-  return { snapshotId, events, planItems, references, files: createdFiles, archiveItems, errors }
+  return { snapshotId, events, updatedEvents: updated, planItems, references, files: createdFiles, archiveItems, errors }
 }

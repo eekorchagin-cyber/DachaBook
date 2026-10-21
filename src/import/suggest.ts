@@ -58,12 +58,9 @@ export function textKey(text: string): string {
     .trim()
 }
 
-/** Сходство двух текстов по биграммам (коэффициент Дайса), от 0 до 1. */
-export function similarity(a: string, b: string): number {
+function bigramOverlap(a: string, b: string): { overlap: number; x: number; y: number } {
   const x = textKey(a)
   const y = textKey(b)
-  if (x === y) return 1
-  if (x.length < 2 || y.length < 2) return 0
   const bigrams = new Map<string, number>()
   for (let i = 0; i < x.length - 1; i++) {
     const pair = x.slice(i, i + 2)
@@ -78,5 +75,23 @@ export function similarity(a: string, b: string): number {
       overlap++
     }
   }
-  return (2 * overlap) / (x.length + y.length - 2)
+  return { overlap, x: Math.max(0, x.length - 1), y: Math.max(0, y.length - 1) }
+}
+
+/** Сходство двух текстов по биграммам (коэффициент Дайса), от 0 до 1. */
+export function similarity(a: string, b: string): number {
+  if (textKey(a) === textKey(b)) return 1
+  const { overlap, x, y } = bigramOverlap(a, b)
+  return x + y === 0 ? 0 : (2 * overlap) / (x + y)
+}
+
+/**
+ * Похож ли текст на правку другого: короткий почти целиком входит в длинный (дописали фразу, исправили опечатку),
+ * а длины сопоставимы — короткая строка не «находится» случайно внутри длинной статьи.
+ */
+export function isEditOf(a: string, b: string): boolean {
+  const { overlap, x, y } = bigramOverlap(a, b)
+  const shorter = Math.min(x, y)
+  const longer = Math.max(x, y)
+  return shorter >= 8 && overlap / shorter >= 0.85 && shorter / longer >= 0.4
 }

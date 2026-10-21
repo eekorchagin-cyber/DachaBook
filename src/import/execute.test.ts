@@ -131,3 +131,34 @@ describe('фрагменты вне таблиц', () => {
     expect(await context.database.references.count()).toBe(0)
   })
 })
+
+describe('строка, изменённая в Evernote после импорта', () => {
+  const row = (text: string, date: string) => `<tr><td>1</td><td><en-todo/></td><td>${text}</td><td>${date}</td></tr>`
+  const header = `<tr><td>Недели</td><td></td><td>Работы, наблюдения</td><td>Дата выполнения</td></tr>`
+  const note = (text: string): EnexNote => ({
+    title: 'Дневник дачных работ 2019 г',
+    tags: [],
+    attributes: {},
+    content: `<en-note><div>Июль</div><table>${header}${row(text, '06.07.2019')}</table><table>${header}</table><table>${header}</table></en-note>`,
+    resources: [],
+  })
+
+  it('показывается как изменённая; «обновить» меняет запись без дубля', async () => {
+    const context = await setup()
+    const first = buildProposal([{ fileName: 'd.enex', notes: [note('Подвязали помидоры, отпасынковали их')] }])
+    await executeImport(first, defaultDecisions(first, context.objects, await existingIndex(context.database)), context)
+
+    const second = buildProposal([{ fileName: 'd.enex', notes: [note('Подвязали помидоры, отпасынковали их. Сняли первые огурцы')] }])
+    const decisions = defaultDecisions(second, context.objects, await existingIndex(context.database))
+    const decision = decisions.events[second.events[0].key]
+    expect(decision.change?.oldText).toBe('Подвязали помидоры, отпасынковали их')
+    expect(decision.include).toBe(false)
+
+    decision.change!.action = 'update'
+    const result = await executeImport(second, decisions, context)
+    expect(result).toMatchObject({ events: 0, updatedEvents: 1, errors: [] })
+    const events = await context.database.events.toArray()
+    expect(events).toHaveLength(1)
+    expect(events[0].comment).toBe('Подвязали помидоры, отпасынковали их. Сняли первые огурцы')
+  })
+})
