@@ -45,16 +45,33 @@ function markUpdateReady(): void {
 
 /** Новая версия скачивается в фоне и ждёт; приложение показывает полосу «Обновить». */
 function watchForUpdates(registration: ServiceWorkerRegistration): void {
-  if (registration.waiting) markUpdateReady()
-  registration.addEventListener('updatefound', () => {
-    const worker = registration.installing
-    worker?.addEventListener('statechange', () => {
+  const track = (worker: ServiceWorker | null) => {
+    if (!worker) return
+    if (worker.state === 'installed') markUpdateReady()
+    worker.addEventListener('statechange', () => {
       if (worker.state === 'installed') markUpdateReady()
     })
-  })
+  }
+  if (registration.waiting) markUpdateReady()
+  // Скачивание могло начаться ещё до подписки на updatefound.
+  track(registration.installing)
+  registration.addEventListener('updatefound', () => track(registration.installing))
+
+  let lastCheck = Date.now()
+  const check = () => {
+    if (Date.now() - lastCheck < 60_000) return
+    lastCheck = Date.now()
+    void registration.update().catch(() => undefined)
+  }
+  // На Mac окно программы остаётся видимым при переключении окон, поэтому нужен и focus.
+  window.addEventListener('focus', check)
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') void registration.update().catch(() => undefined)
+    if (document.visibilityState === 'visible') check()
   })
+  setInterval(() => {
+    lastCheck = 0
+    check()
+  }, 30 * 60_000)
 }
 
 export function useUpdateReady(): boolean {
