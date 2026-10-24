@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#3d6b35" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="DachaBook" />
+    <title>DachaBook</title>
+    <script>
+      /* Страховка от пустого экрана: если приложение не отрисовалось, предложить сбросить офлайн-копию.
+         Данные дневника (IndexedDB) при этом не трогаются. */
+      ;(function () {
+        function resetApp() {
+          var jobs = []
+          if (navigator.serviceWorker) {
+            jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs.map(function (reg) { return reg.unregister() }))
+            }))
+          }
+          if (window.caches) {
+            jobs.push(caches.keys().then(function (keys) {
+              return Promise.all(keys.filter(function (key) { return key.indexOf('dachabook-') === 0 }).map(function (key) { return caches.delete(key) }))
+            }))
+          }
+          Promise.all(jobs).catch(function () {}).then(function () { location.reload() })
+        }
+        function show(reason) {
+          var root = document.getElementById('root')
+          if (!root || root.childElementCount > 0) return
+          root.innerHTML =
+            '<div class="recovery"><h1>DachaBook не загрузился</h1>' +
+            '<p>Обычно причина — устаревшая офлайн-копия приложения. Записи дневника при перезагрузке не пострадают.</p>' +
+            '<p><button type="button" class="button">Перезагрузить начисто</button></p><pre></pre></div>'
+          root.querySelector('pre').textContent = reason
+          root.querySelector('button').onclick = resetApp
+        }
+        window.__dachabookReset = resetApp
+        window.addEventListener('error', function (event) {
+          var target = event.target
+          if (target && target.tagName === 'SCRIPT') show('Не загрузился файл ' + target.src)
+        }, true)
+        setTimeout(function () { show('Приложение не отрисовалось за 8 секунд') }, 8000)
+      })()
+    </script>
+    <script type="module" crossorigin src="./assets/index-D2zFRTaz.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-C5UyMkMt.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
