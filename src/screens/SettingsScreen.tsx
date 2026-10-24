@@ -1,7 +1,11 @@
+import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
+import { restoreBackup, type RestoreResult } from '../backup/backup'
 import { setSetting, type AppSettings, type PhotoPosition, type ThemeSetting } from '../app/store'
 import { versionLabel } from '../app/version'
 import { locationText, parseLocation, roundLocation, type PlotLocation } from '../domain/location'
+import { errorText } from '../lib/format'
+import { db } from '../storage/db'
 import { Screen } from '../ui/Screen'
 
 const THEMES: { value: ThemeSetting; label: string }[] = [
@@ -168,6 +172,55 @@ export function WelcomeScreen() {
           </button>
         </div>
       </form>
+      <RestoreOnWelcome />
     </main>
+  )
+}
+
+/** Новый браузер или ярлык открывает DachaBook с пустым хранилищем — отсюда данные можно вернуть из резервной копии. */
+function RestoreOnWelcome() {
+  const events = useLiveQuery(() => db.events.count(), [])
+  const [restored, setRestored] = useState<RestoreResult | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const restore = async (file: File | undefined) => {
+    if (!file) return
+    setError(null)
+    setBusy(true)
+    try {
+      setRestored(await restoreBackup(db, await file.arrayBuffer()))
+    } catch (caught) {
+      setError(errorText(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="card">
+      <h2>Уже пользовались DachaBook?</h2>
+      <p className="hint">
+        Данные хранятся в том браузере, где вы вели дневник. Safari, Chrome и приложение, добавленное в Dock или на экран «Домой», хранят данные отдельно
+        друг от друга, поэтому в новом месте DachaBook открывается пустым. Откройте его там, где вели записи, или восстановите данные из резервной копии —
+        файла dachabook-backup-….zip.
+      </p>
+      {!!events && <p className="small">В этом браузере уже есть записей дневника: {events}. Введите имя, чтобы продолжить.</p>}
+      <div className="actions">
+        <label className={`button secondary${busy ? ' disabled' : ''}`}>
+          {busy ? 'Восстановление…' : 'Восстановить из резервной копии'}
+          <input type="file" accept=".zip,application/zip" hidden disabled={busy} onChange={(event) => void restore(event.target.files?.[0])} />
+        </label>
+      </div>
+      {restored && (
+        <div className="notice">
+          <p>
+            Восстановлено: добавлено {restored.added}, без изменений {restored.same}, файлов {restored.files}. Введите имя выше и нажмите «Начать».
+          </p>
+          {restored.corrupted.length > 0 && <p className="error">Повреждены и не загружены: {restored.corrupted.join('; ')}</p>}
+        </div>
+      )}
+      {error && <p className="error">{error}</p>}
+    </section>
   )
 }

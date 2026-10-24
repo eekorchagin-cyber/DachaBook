@@ -24,7 +24,7 @@ export async function buildReport(results: Record<string, LabResult>): Promise<s
     `DachaBook, отчёт этапа 1 — ${new Date().toLocaleString('ru-RU')}`,
     `Версия: ${env.version}`,
     `Браузер: ${env.userAgent}`,
-    `Открыто: ${env.standalone ? 'с экрана «Домой»' : 'во вкладке'}; экран ${env.screen}`,
+    `Открыто: ${env.standalone ? 'как установленное приложение (ярлык)' : 'во вкладке'}; экран ${env.screen}`,
     `Хранилище: ${formatBytes(env.storageUsage ?? 0)} из ${formatBytes(env.storageQuota ?? 0)}; постоянное: ${env.persisted ? 'да' : 'нет'}`,
     '',
   ]

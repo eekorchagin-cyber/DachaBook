@@ -13,12 +13,12 @@ export function EnvSection({ result }: { result?: LabResult }) {
     setEnv(next)
     const problems: string[] = []
     if (!next.secureContext) problems.push('нет защищённого соединения')
-    if (!next.standalone) problems.push('открыто не с экрана «Домой»')
+    if (!next.standalone) problems.push('открыто не как установленное приложение')
     if (next.persisted === false) problems.push('постоянное хранение не включено')
     saveResult(
       'env',
       problems.length ? 'warn' : 'ok',
-      `${next.standalone ? 'Ярлык «Домой»' : 'Вкладка браузера'}; хранилище ${formatBytes(next.storageUsage ?? 0)} из ${formatBytes(next.storageQuota ?? 0)}; постоянное хранение: ${next.persisted ? 'да' : 'нет'}${problems.length ? `. Замечания: ${problems.join(', ')}` : ''}`,
+      `${next.standalone ? 'Установленное приложение' : 'Вкладка браузера'}; хранилище ${formatBytes(next.storageUsage ?? 0)} из ${formatBytes(next.storageQuota ?? 0)}; постоянное хранение: ${next.persisted ? 'да' : 'нет'}${problems.length ? `. Замечания: ${problems.join(', ')}` : ''}`,
     )
   }
 
@@ -32,14 +32,14 @@ export function EnvSection({ result }: { result?: LabResult }) {
     <Section
       title="Устройство и браузер"
       result={result}
-      hint="На iPhone проверки нужно проводить в приложении, открытом с ярлыка на экране «Домой», а не во вкладке Safari."
+      hint="Проверки проводите в установленном приложении, а не во вкладке браузера: на iPhone — с ярлыка на экране «Домой», на компьютере — в приложении, установленном из Chrome."
     >
       {env && (
         <dl className="facts">
           <dt>Версия</dt>
           <dd>{env.version}</dd>
           <dt>Открыто</dt>
-          <dd>{env.standalone ? 'с экрана «Домой»' : 'во вкладке браузера'}</dd>
+          <dd>{env.standalone ? 'как установленное приложение (ярлык)' : 'во вкладке браузера'}</dd>
           <dt>Хранилище</dt>
           <dd>
             занято {formatBytes(env.storageUsage ?? 0)}, доступно до {formatBytes(env.storageQuota ?? 0)}
