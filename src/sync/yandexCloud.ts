@@ -1,8 +1,10 @@
-import { YandexDisk, YandexDiskError, withRetry, type ResourceMeta } from '../cloud/yandexDisk'
+import { YandexDisk, YandexDiskError, withRetry, type ResourceMeta, type RetryOptions } from '../cloud/yandexDisk'
 import { CloudError, type CloudAdapter, type RemoteEntry } from './cloud'
 
 export const YANDEX_DIARY_ROOT = 'disk:/DachaBook/diary'
 const PAGE = 200
+/** Сервер загрузки Диска обрывает соединения при частых запросах (и без заголовков CORS — браузер видит это как «нет ответа»). */
+const WRITE_RETRY: RetryOptions = { attempts: 5, delaysMs: [3000, 10000, 30000, 60000] }
 /** Запас по времени при получении изменений: файлы, записанные почти одновременно с прошлой проверкой, не пропускаются. */
 const OVERLAP_MS = 2 * 60 * 1000
 
@@ -16,6 +18,7 @@ export class YandexAuthError extends CloudError {
 /** Адаптер Яндекс Диска: папка дневника, получение изменений по дате на сервере, повторы при сбоях связи. */
 export class YandexCloud implements CloudAdapter {
   readonly provider = 'yandex' as const
+  readonly parallel = 2
   private disk: YandexDisk
   private root: string
   private folders = new Set<string>()
@@ -33,9 +36,9 @@ export class YandexCloud implements CloudAdapter {
     return { path: folder ? `${folder}/${item.name}` : item.name, name: item.name, modified: item.modified ?? '', md5: item.md5, size: item.size }
   }
 
-  private async call<T>(action: () => Promise<T>): Promise<T> {
+  private async call<T>(action: () => Promise<T>, retry?: RetryOptions): Promise<T> {
     try {
-      const [value] = await withRetry(action)
+      const [value] = await withRetry(action, retry)
       return value
     } catch (error) {
       if (error instanceof YandexDiskError && error.status === 401) throw new YandexAuthError()
@@ -104,12 +107,12 @@ export class YandexCloud implements CloudAdapter {
 
   async write(path: string, data: Blob): Promise<void> {
     try {
-      await this.call(() => this.disk.upload(this.full(path), data))
+      await this.call(() => this.disk.upload(this.full(path), data), WRITE_RETRY)
     } catch (error) {
       // Папки ещё нет (409 при получении ссылки загрузки) — создаём и повторяем.
       if (!(error instanceof YandexDiskError && error.status === 409)) throw error
       await this.ensureFolder(path.split('/').slice(0, -1).join('/'), true)
-      await this.call(() => this.disk.upload(this.full(path), data))
+      await this.call(() => this.disk.upload(this.full(path), data), WRITE_RETRY)
     }
   }
 

@@ -34,6 +34,9 @@ let cloud: { token: string; adapter: CloudAdapter } | null = null
 let changeTimer: ReturnType<typeof setTimeout> | undefined
 let rerun = false
 let lastRunAt = 0
+let failures = 0
+/** Повтор после сбоя: через 1, 2, 5, затем каждые 10 минут. */
+const RETRY_MS = [60_000, 120_000, 300_000, 600_000]
 
 function set(patch: Partial<SyncStatus>): void {
   status = { ...status, ...patch }
@@ -95,7 +98,13 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
       ...extra,
       onProgress: (progress) => set({ progress }),
     })
-    set({ lastResult: result, error: result.errors.length > 0 ? result.errors.join('; ') : undefined })
+    const error =
+      result.failed > 0
+        ? `не передано ${result.failed} (будет повтор): ${result.errors[0] ?? 'ошибка связи'}`
+        : result.errors.length > 0
+          ? result.errors.join('; ')
+          : undefined
+    set({ lastResult: result, error })
   } catch (caught) {
     if (caught instanceof YandexAuthError) set({ needsLogin: true, error: caught.message })
     else set({ error: errorText(caught), offline: !navigator.onLine })
@@ -106,7 +115,16 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
   if (rerun) {
     rerun = false
     void syncNow()
-  } else if (status.pending > 0 && !status.error) scheduleSoon()
+  } else if (status.error && !status.needsLogin) {
+    // Сбой связи или сервера: повторить самим, чем дальше — тем реже; при частичном успехе — через минуту.
+    const progressed = !!result && result.pushed + result.pulled + result.uploadedFiles > 0
+    failures = progressed ? 0 : failures + 1
+    clearTimeout(changeTimer)
+    changeTimer = setTimeout(() => void syncNow(), RETRY_MS[Math.min(Math.max(failures - 1, 0), RETRY_MS.length - 1)])
+  } else {
+    failures = 0
+    if (status.pending > 0) scheduleSoon()
+  }
   return result
 }
 

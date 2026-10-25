@@ -39,6 +39,8 @@ export interface SyncResult {
   thumbs: number
   uploadedFiles: number
   bootstrapped: boolean
+  /** Сколько записей и файлов не удалось передать в этот раз (уйдут при следующей синхронизации). */
+  failed: number
   errors: string[]
 }
 
@@ -88,13 +90,27 @@ async function readJson<T>(cloud: CloudAdapter, path: string): Promise<T | null>
   return blob ? (JSON.parse(await blob.text()) as T) : null
 }
 
-async function pool<T>(items: T[], size: number, work: (item: T) => Promise<void>): Promise<void> {
+/**
+ * Параллельная обработка, в которой сбой одного элемента не останавливает остальные: ошибки собираются,
+ * а необработанное уйдёт при следующей синхронизации. Возвращает число сбоев.
+ */
+async function pool<T>(items: T[], size: number, work: (item: T) => Promise<void>, errors: string[]): Promise<number> {
   let next = 0
+  let failed = 0
   await Promise.all(
     Array.from({ length: Math.min(size, items.length) }, async () => {
-      while (next < items.length) await work(items[next++])
+      while (next < items.length) {
+        try {
+          await work(items[next++])
+        } catch (error) {
+          failed++
+          const message = error instanceof Error ? error.message : String(error)
+          if (!errors.includes(message)) errors.push(message)
+        }
+      }
     }),
   )
+  return failed
 }
 
 const isTombstone = (doc: unknown): doc is Tombstone => !!doc && typeof doc === 'object' && 'purgedAt' in doc
@@ -206,7 +222,7 @@ async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta
     const states = await database.syncState.bulkGet(keys)
     const changed = entries.filter((entry, index) => !entry.md5 || states[index]?.remoteMd5 !== entry.md5)
     let done = 0
-    await pool(changed, 4, async (entry: RemoteEntry) => {
+    const failed = await pool(changed, cloud.parallel ?? 4, async (entry: RemoteEntry) => {
       const blob = await cloud.read(entry.path)
       if (!blob) return
       const text = await blob.text()
@@ -215,8 +231,10 @@ async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta
       if (outcome === 'conflict') result.conflicts++
       if (outcome === 'corrupted') result.errors.push(`Повреждена запись в облаке: ${entry.path}`)
       if (++done % 20 === 0) report(`Получение: ${collection}, ${done} из ${changed.length}`)
-    })
-    if (cursor) meta.cursors[collection] = cursor
+    }, result.errors)
+    // Курсор не сдвигается, если что-то не получено: при следующей синхронизации эти файлы будут прочитаны снова.
+    if (cursor && failed === 0) meta.cursors[collection] = cursor
+    result.failed += failed
   }
   return listed
 }
@@ -262,7 +280,7 @@ async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<st
     const states = await database.syncState.bulkGet(docs.map((doc) => `${collection}/${doc.id}`))
     const dirty = docs.filter((doc, index) => doc.revision !== states[index]?.revision && !conflicted.has(`${collection}/${doc.id}`))
     let done = 0
-    await pool(dirty, 4, async (doc) => {
+    result.failed += await pool(dirty, cloud.parallel ?? 4, async (doc) => {
       const key = `${collection}/${doc.id}`
       const path = docPath(collection, doc.id)
       const state = await database.syncState.get(key)
@@ -285,7 +303,7 @@ async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<st
       await database.syncState.put({ ...(await database.syncState.get(key)), key, revision: current.revision, remoteMd5: textMd5(text), purged: false })
       result.pushed++
       if (++done % 20 === 0) report(`Отправка: ${collection}, ${done} из ${dirty.length}`)
-    })
+    }, result.errors)
   }
 }
 
@@ -293,7 +311,7 @@ async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<st
 async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: (text: string) => void): Promise<void> {
   const files = ((await database.files.toArray()) as StoredFile[]).filter((file) => !file.deletedAt)
   let done = 0
-  await pool(files, 3, async (file) => {
+  result.failed += await pool(files, Math.min(cloud.parallel ?? 3, 3), async (file) => {
     const key = `blob/${file.id}`
     const state = (await database.syncState.get(key)) ?? { key }
     const content = await database.fileContents.get(file.id)
@@ -320,7 +338,7 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
     }
     await database.syncState.put(state)
     if (++done % 20 === 0) report(`Фото и файлы: ${done} из ${files.length}`)
-  })
+  }, result.errors)
 }
 
 /** Оригинал, которого нет на устройстве, скачивается из облака при открытии и остаётся на устройстве. */
@@ -364,7 +382,7 @@ export async function pendingCount(database: DiaryDatabase): Promise<number> {
 export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, options: SyncOptions): Promise<SyncResult> {
   const report = options.onProgress ?? (() => undefined)
   const now = () => options.now?.() ?? new Date()
-  const result: SyncResult = { pulled: 0, pushed: 0, conflicts: 0, thumbs: 0, uploadedFiles: 0, bootstrapped: false, errors: [] }
+  const result: SyncResult = { pulled: 0, pushed: 0, conflicts: 0, thumbs: 0, uploadedFiles: 0, bootstrapped: false, failed: 0, errors: [] }
 
   report('Проверка облака…')
   await ensureLayout(cloud)
@@ -408,11 +426,11 @@ export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, 
   await syncFiles(database, cloud, result, report)
 
   const interval = options.snapshotIntervalMs ?? 24 * 60 * 60 * 1000
-  if (result.pushed > 0 && (!manifest.snapshot || now().getTime() - Date.parse(manifest.snapshot.at) >= interval)) {
+  if (result.pushed > 0 && result.failed === 0 && (!manifest.snapshot || now().getTime() - Date.parse(manifest.snapshot.at) >= interval)) {
     report('Снимок дневника в облаке…')
     await uploadSnapshot(database, cloud, manifest, options)
   }
-  meta.lastSuccessAt = now().toISOString()
+  if (result.failed === 0) meta.lastSuccessAt = now().toISOString()
   await writeSyncMeta(database, meta)
   report('Готово')
   return result

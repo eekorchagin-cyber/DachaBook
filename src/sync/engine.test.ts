@@ -158,6 +158,41 @@ describe('синхронизация двух устройств через об
     expect((await phone.database.syncState.get(`blob/${heic.id}`))?.thumbMissingAt).toBeTruthy()
   })
 
+  it('облако отклоняет часть запросов: остальное передаётся, недоставленное уходит при следующих синхронизациях без дублей', async () => {
+    class FlakyCloud extends MemoryCloud {
+      calls = 0
+      flaky = true
+      override async write(path: string, data: Blob): Promise<void> {
+        if (this.flaky && path.startsWith('docs/') && ++this.calls % 3 === 0) throw new Error('Загрузка файла на сервер Диска: нет ответа')
+        return super.write(path, data)
+      }
+      override async read(path: string): Promise<Blob | null> {
+        if (this.flaky && path.startsWith('docs/') && ++this.calls % 4 === 0) throw new Error('Скачивание: нет ответа')
+        return super.read(path)
+      }
+    }
+    const cloud = new FlakyCloud()
+    const mac = device('Mac')
+    const phone = device('iPhone')
+    for (let index = 0; index < 30; index++) await mac.repo.create('events', event(`Запись ${index}`))
+
+    const first = await synchronize(mac.database, cloud, options('Mac'))
+    expect(first.failed).toBeGreaterThan(0)
+    expect(first.pushed + first.failed).toBe(30)
+    expect(await pendingCount(mac.database)).toBe(first.failed)
+    for (let attempt = 0; attempt < 10 && (await pendingCount(mac.database)) > 0; attempt++) await synchronize(mac.database, cloud, options('Mac'))
+    expect(await pendingCount(mac.database)).toBe(0)
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const result = await synchronize(phone.database, cloud, options('iPhone'))
+      if (result.failed === 0) break
+    }
+    cloud.flaky = false
+    await synchronize(phone.database, cloud, options('iPhone'))
+    expect(await phone.database.events.count()).toBe(30)
+    expect(new Set((await phone.database.events.toArray()).map((item) => item.comment)).size).toBe(30)
+  })
+
   it('новое устройство получает дневник одним снимком, а не тысячей файлов; одинаковые приметы не дублируются', async () => {
     const cloud = new MemoryCloud()
     const mac = device('Mac')

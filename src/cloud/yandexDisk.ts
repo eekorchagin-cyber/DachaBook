@@ -27,7 +27,7 @@ async function send(url: string, init: RequestInit, purpose: string): Promise<Re
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
     const host = new URL(url).host
-    throw new YandexDiskError(0, `${purpose}: нет ответа от ${host} — браузер заблокировал запрос (CORS) или пропала сеть`, 'network')
+    throw new YandexDiskError(0, `${purpose}: нет ответа от ${host} — пропала сеть, сервер отклонил слишком частые запросы или браузер заблокировал запрос (CORS)`, 'network')
   }
 }
 

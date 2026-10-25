@@ -14,6 +14,8 @@ export interface RemoteEntry {
  */
 export interface CloudAdapter {
   readonly provider: 'yandex' | 'dropbox' | 'memory'
+  /** Сколько файлов передавать одновременно: серверы облака отклоняют слишком частые запросы. */
+  readonly parallel?: number
   ensureFolder(path: string): Promise<void>
   /** Файлы папки, изменённые не раньше курсора (с небольшим запасом); без курсора — все. Возвращает новый курсор. */
   listChanges(folder: string, cursor?: string): Promise<{ entries: RemoteEntry[]; cursor?: string; complete: boolean }>
