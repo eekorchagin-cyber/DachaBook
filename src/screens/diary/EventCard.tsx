@@ -45,14 +45,20 @@ export function EventCard({
   const side = photoPosition !== 'below' && event.photoIds.length > 0
   const shown = event.photoIds.slice(0, side ? 2 : 4)
   const more = event.photoIds.length - shown.length
-  const photos = event.photoIds.length > 0 && (
-    <div className={side ? 'event-photos side' : 'thumbs'}>
-      {shown.map((id) => (
-        <PhotoThumb key={id} id={id} />
-      ))}
-      {more > 0 && <span className="thumb more">+{more}</span>}
-    </div>
-  )
+  const thumbs = shown.map((id) => <PhotoThumb key={id} id={id} />)
+  const photos =
+    event.photoIds.length > 0 &&
+    (side ? (
+      <div className="event-photos side">
+        <div className="event-photo-row">{thumbs}</div>
+        {more > 0 && <span className="thumb more">+{more}</span>}
+      </div>
+    ) : (
+      <div className="thumbs">
+        {thumbs}
+        {more > 0 && <span className="thumb more">+{more}</span>}
+      </div>
+    ))
   return (
     <a className="event-card" href={`#/diary/${event.id}`}>
       <div className="event-head">
