@@ -2,11 +2,13 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { seedDefaultObjects } from '../app/seed'
 import { restoreBackup, type RestoreResult } from '../backup/backup'
-import { setSetting, type AppSettings, type PhotoPosition, type ThemeSetting } from '../app/store'
+import { removeUnit, removeWorkKind, renameUnit, renameWorkKind } from '../app/dictionaries'
+import { DEFAULT_SETTINGS, setSetting, type AppSettings, type PhotoPosition, type ThemeSetting } from '../app/store'
 import { versionLabel } from '../app/version'
 import { locationText, parseLocation, roundLocation, type PlotLocation } from '../domain/location'
 import { errorText } from '../lib/format'
 import { db } from '../storage/db'
+import { ListEditor } from '../ui/ListEditor'
 import { Screen } from '../ui/Screen'
 
 const THEMES: { value: ThemeSetting; label: string }[] = [
@@ -68,6 +70,52 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
             </label>
           ))}
         </fieldset>
+      </section>
+      <section className="card">
+        <h2>Справочники</h2>
+        <p className="hint">
+          Списки, из которых выбираются значения в записях. Нажмите на пункт, чтобы переименовать его (Enter — сохранить, Esc — отменить). Переименование
+          вида работ меняет его и в записях дневника, единицы — у расходных материалов.
+        </p>
+        <ListEditor
+          label="Виды работ"
+          items={settings.workKinds}
+          defaults={DEFAULT_SETTINGS.workKinds.filter((kind) => !settings.workKindRenames[kind])}
+          placeholder="Новый вид работы, например «Мульчирование»"
+          onSave={(items) => setSetting('workKinds', items)}
+          onRename={renameWorkKind}
+          onRemove={removeWorkKind}
+        />
+        <ListEditor
+          label="Единицы расходных материалов"
+          items={settings.consumableUnits}
+          defaults={DEFAULT_SETTINGS.consumableUnits}
+          placeholder="Новая единица, например «мешок»"
+          onSave={(items) => setSetting('consumableUnits', items)}
+          onRename={renameUnit}
+          onRemove={removeUnit}
+        />
+        <h3>Другие справочники</h3>
+        <ul className="list">
+          <li>
+            <a className="list-item" href="#/objects">
+              <strong>Объекты и группы растений</strong>
+              <span className="muted">Вкладка «Объекты»: газон, сад, грядки, места на участке и растения</span>
+            </a>
+          </li>
+          <li>
+            <a className="list-item" href="#/consumables">
+              <strong>Расходные материалы</strong>
+              <span className="muted">Удобрения, средства, семена: нормы, описания, ссылки</span>
+            </a>
+          </li>
+          <li>
+            <a className="list-item" href="#/signs">
+              <strong>Народные приметы</strong>
+              <span className="muted">Приметы и советы по дням года</span>
+            </a>
+          </li>
+        </ul>
       </section>
       <section className="card">
         <h2>Дополнительно</h2>

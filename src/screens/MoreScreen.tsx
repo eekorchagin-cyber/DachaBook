@@ -15,7 +15,7 @@ const LINKS = [
   { href: '#/archive', title: 'Архив импорта', text: 'Исходные строки и заметки Evernote, в том числе неиспользованные' },
   { href: '#/trash', title: 'Корзина', text: 'Удалённые записи и материалы, восстановление' },
   { href: '#/backup', title: 'Резервная копия', text: 'Копия в файл, автокопия в папку, восстановление' },
-  { href: '#/settings', title: 'Настройки', text: 'Имя, тема, размер текста' },
+  { href: '#/settings', title: 'Настройки', text: 'Имя, участок, внешний вид, справочники' },
 ]
 
 export function MoreScreen() {
@@ -58,7 +58,7 @@ export function TrashScreen() {
         {references.map((reference) => (
           <li key={reference.id} className="list-row">
             <span>
-              <strong>{reference.title}</strong> <span className="muted">справочный материал</span>
+              <strong>{reference.title}</strong> <span className="muted">статья</span>
             </span>
             <ActionButton secondary onRun={async () => void (await repo.restore('references', reference.id, reference.revision))}>
               Восстановить

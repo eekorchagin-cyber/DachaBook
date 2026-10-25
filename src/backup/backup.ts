@@ -1,4 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate'
+import { DEFAULT_SETTINGS, type AppSettings } from '../app/store'
+import { mergeItems } from '../domain/dictionaries'
 import { SCHEMA_VERSION, type DocMeta, type StoredFile } from '../domain/types'
 import type { DiaryDatabase } from '../storage/db'
 import { verifyChecksum } from '../storage/repository'
@@ -26,20 +28,20 @@ const README = `Резервная копия DachaBook — дневника д�
 manifest.json — описание копии: версия формата, версия схемы данных, дата, число записей, полнота.
 objects/, plantGroups/ — объекты ухода и группы растений, по одному JSON-файлу (UTF-8) на запись.
 events/ГГГГ/ — записи дневника по годам даты события.
-references/ — справочные материалы (HTML в поле html).
+references/ — статьи (HTML в поле html).
 planDrafts/ — черновик сезонного плана.
 importArchive/ — архив импорта: исходные строки и заметки Evernote.
 consumables/ — расходные материалы; расход по работам — в записях дневника (поле consumables).
 folkSigns/ — народные приметы по дням года.
 files/ — описания фото и вложений; files/originals/ — оригиналы без изменений; files/thumbs/ — уменьшенные копии.
-settings/shared.json — общие настройки дневника (виды работ, адрес и координаты участка).
+settings/shared.json — общие настройки дневника (справочники видов работ и единиц, адрес и координаты участка).
 
 У каждой записи: id (UUID), schemaVersion, revision (UUID редакции), baseRevision, createdAt/updatedAt, createdBy/updatedBy,
 deletedAt (если в корзине) и checksum — SHA-256 содержимого без служебных полей.
 Пароли, токены и личные настройки устройства в копию не входят.
 `
 
-const SHARED_SETTINGS = ['workKinds', 'plotAddress', 'plotLocation']
+const SHARED_SETTINGS = ['workKinds', 'workKindRenames', 'consumableUnits', 'plotAddress', 'plotLocation']
 
 function extension(fileName: string): string {
   const match = fileName.match(/\.[A-Za-z0-9]{1,8}$/)
@@ -196,13 +198,16 @@ export async function restoreBackup(database: DiaryDatabase, data: ArrayBuffer):
 
   const shared = entries['settings/shared.json']
   if (shared) {
-    const { workKinds, plotAddress, plotLocation } = JSON.parse(strFromU8(shared)) as { workKinds?: string[]; plotAddress?: string; plotLocation?: unknown }
-    if (plotAddress && !(await database.settings.get('plotAddress'))?.value) await database.settings.put({ key: 'plotAddress', value: plotAddress })
-    if (plotLocation && !(await database.settings.get('plotLocation'))?.value) await database.settings.put({ key: 'plotLocation', value: plotLocation })
-    const current = ((await database.settings.get('workKinds'))?.value as string[] | undefined) ?? []
-    if (workKinds?.some((kind) => !current.includes(kind)) && current.length > 0) {
-      await database.settings.put({ key: 'workKinds', value: [...current, ...workKinds.filter((kind) => !current.includes(kind))] })
+    const incoming = JSON.parse(strFromU8(shared)) as Partial<Pick<AppSettings, 'workKinds' | 'workKindRenames' | 'consumableUnits' | 'plotAddress' | 'plotLocation'>>
+    const local = async <K extends keyof AppSettings>(key: K) => ((await database.settings.get(key))?.value as AppSettings[K] | undefined) ?? DEFAULT_SETTINGS[key]
+    if (incoming.plotAddress && !(await database.settings.get('plotAddress'))?.value) await database.settings.put({ key: 'plotAddress', value: incoming.plotAddress })
+    if (incoming.plotLocation && !(await database.settings.get('plotLocation'))?.value) await database.settings.put({ key: 'plotLocation', value: incoming.plotLocation })
+    for (const key of ['workKinds', 'consumableUnits'] as const) {
+      const current = await local(key)
+      const merged = mergeItems(current, incoming[key] ?? [])
+      if (merged.length !== current.length) await database.settings.put({ key, value: merged })
     }
+    if (incoming.workKindRenames) await database.settings.put({ key: 'workKindRenames', value: { ...incoming.workKindRenames, ...(await local('workKindRenames')) } })
   }
   return result
 }

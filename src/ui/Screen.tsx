@@ -6,7 +6,7 @@ const TABS = [
   { path: '/', label: 'Главная', icon: '⌂' },
   { path: '/diary', label: 'Дневник', icon: '✎' },
   { path: '/objects', label: 'Объекты', icon: '❦' },
-  { path: '/library', label: 'Справочник', icon: '❑' },
+  { path: '/library', label: 'Статьи', icon: '❑' },
   { path: '/more', label: 'Ещё', icon: '⋯' },
 ]
 

@@ -3,7 +3,7 @@ import { useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { navigate } from '../../app/router'
 import { repo, type AppSettings } from '../../app/store'
 import { todayAtSite } from '../../domain/dates'
-import { findConsumable, resolveUses, rowProblems, UNITS, type ConsumableRow } from '../../domain/consumables'
+import { findConsumable, resolveUses, rowProblems, type ConsumableRow } from '../../domain/consumables'
 import type { Consumable, ConsumableUse, DiaryEvent, DocInput, EventType } from '../../domain/types'
 import { addAttachment, addPhoto, isImageFile } from '../../files/files'
 import { moonPhase } from '../../domain/moon'
@@ -323,7 +323,7 @@ function EventForm({ event, initialType, settings, consumables }: { event?: Diar
             </select>
           </label>
         )}
-        {draft.type === 'work' && <ConsumableRows rows={draft.consumables} consumables={consumables} onChange={(rows) => update({ consumables: rows })} />}
+        {draft.type === 'work' && <ConsumableRows rows={draft.consumables} consumables={consumables} units={settings.consumableUnits} onChange={(rows) => update({ consumables: rows })} />}
         {draft.type === 'measurement' && (
           <div className="row">
             <label className="field">
@@ -467,7 +467,7 @@ function EventForm({ event, initialType, settings, consumables }: { event?: Diar
   )
 }
 
-function ConsumableRows({ rows, consumables, onChange }: { rows: ConsumableRow[]; consumables: Consumable[]; onChange: (rows: ConsumableRow[]) => void }) {
+function ConsumableRows({ rows, consumables, units, onChange }: { rows: ConsumableRow[]; consumables: Consumable[]; units: string[]; onChange: (rows: ConsumableRow[]) => void }) {
   const set = (index: number, patch: Partial<ConsumableRow>) => onChange(rows.map((row, current) => (current === index ? { ...row, ...patch } : row)))
   const names = consumables.filter((item) => item.active).map((item) => item.name).sort((a, b) => a.localeCompare(b, 'ru'))
   return (
@@ -496,7 +496,7 @@ function ConsumableRows({ rows, consumables, onChange }: { rows: ConsumableRow[]
         ))}
       </datalist>
       <datalist id="consumable-units">
-        {UNITS.map((unit) => (
+        {units.map((unit) => (
           <option key={unit} value={unit} />
         ))}
       </datalist>

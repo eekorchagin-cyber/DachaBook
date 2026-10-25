@@ -1,4 +1,5 @@
 import { normalizeText } from '../domain/diaryFilter'
+import { resolveRename } from '../domain/dictionaries'
 
 /** Подсказки по ключевым словам; окончательно тип, место и вид работы подтверждает пользователь (раздел 3 ТЗ). */
 
@@ -42,9 +43,19 @@ export function suggestObject(text: string): string {
   return OBJECT_RULES.find((rule) => rule.words.test(value))?.name ?? 'Участок целиком'
 }
 
+let workKinds: { list?: string[]; renames: Record<string, string> } = { renames: {} }
+
+/** Виды работ из настроек: подсказка учитывает переименования и не предлагает удалённые виды. */
+export function setWorkKinds(list: string[], renames: Record<string, string>): void {
+  workKinds = { list, renames }
+}
+
 export function suggestWorkKind(text: string): string | undefined {
   const value = normalizeText(text)
-  return WORK_KIND_RULES.find((rule) => rule.words.test(value))?.kind
+  const kind = WORK_KIND_RULES.find((rule) => rule.words.test(value))?.kind
+  if (!kind) return undefined
+  const current = resolveRename(workKinds.renames, kind)
+  return !workKinds.list || workKinds.list.includes(current) ? current : undefined
 }
 
 export function looksLikeWork(text: string): boolean {

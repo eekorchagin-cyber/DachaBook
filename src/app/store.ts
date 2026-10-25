@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { UNITS } from '../domain/consumables'
 import type { PlotLocation } from '../domain/location'
 import { db } from '../storage/db'
 import { Repository } from '../storage/repository'
@@ -14,6 +15,9 @@ export interface AppSettings {
   /** Где показывать фото в карточках записей дневника. */
   photoPosition: PhotoPosition
   workKinds: string[]
+  /** Прежние названия видов работ → новые: подсказки импорта знают о переименованиях. */
+  workKindRenames: Record<string, string>
+  consumableUnits: string[]
   /** Адрес и координаты участка: хранятся только на устройствах и в резервных копиях, не в коде. */
   plotAddress: string
   plotLocation: PlotLocation | null
@@ -38,6 +42,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     'Хозяйственные работы',
     'Прочее',
   ],
+  workKindRenames: {},
+  consumableUnits: UNITS,
   plotAddress: '',
   plotLocation: null,
 }

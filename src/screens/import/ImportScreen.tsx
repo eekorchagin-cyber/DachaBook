@@ -301,7 +301,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
             <li>Записей дневника: {result.events}</li>
             {result.updatedEvents > 0 && <li>Обновлено записей: {result.updatedEvents}</li>}
             <li>Позиций черновика плана: {result.planItems}</li>
-            <li>Справочных материалов: {result.references}</li>
+            <li>Статей: {result.references}</li>
             <li>Файлов (фото и вложения): {result.files}</li>
             <li>Позиций архива импорта: {result.archiveItems}</li>
           </ul>
@@ -402,7 +402,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
                 Черновик плана: {stats.chosenPlan} (из шаблона {loaded.proposal.latestSeason ?? '—'}: {stats.planLatest.length}, только в прошлых годах:{' '}
                 {stats.planPast.length})
               </li>
-              <li>Справочные материалы: {stats.chosenNotes}</li>
+              <li>Статьи: {stats.chosenNotes}</li>
             </ul>
             <p className="hint">Строки с флажком — работы, без флажка — наблюдения. Подсказки места и вида работы проверьте ниже.</p>
           </section>
@@ -540,7 +540,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
                           setDecisions((current) => current && { ...current, notes: { ...current.notes, [key]: event.target.value as 'reference' | 'skip' } })
                         }
                       >
-                        <option value="reference">В справочник</option>
+                        <option value="reference">В статьи</option>
                         <option value="skip">Пропустить (останется в архиве)</option>
                       </select>
                     </li>
@@ -557,7 +557,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
               </summary>
               <p className="hint">
                 Фрагменты, стоявшие между таблицами месяцев. Каждый можно прикрепить к записи, над которой он стоял в Evernote (текст допишется к записи,
-                картинки и файлы прикрепятся), или оставить в общем справочном материале.
+                картинки и файлы прикрепятся), или оставить в общей статье.
               </p>
               <ul className="import-list">
                 {loaded.proposal.outsidePieces.map((piece) => {
@@ -580,7 +580,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
                         {piece.above ? `К записи выше: «${piece.above.row.text.slice(0, 80)}»` : 'Записи выше нет (фрагмент в начале заметки)'}
                       </label>
                       <label className="checkbox">
-                        <input type="radio" checked={target !== 'above'} onChange={() => setTarget('reference')} />В справочный материал
+                        <input type="radio" checked={target !== 'above'} onChange={() => setTarget('reference')} />В общую статью
                       </label>
                     </li>
                   )
@@ -588,7 +588,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
               </ul>
               <label className="checkbox">
                 <input type="checkbox" checked={decisions.outside} onChange={(event) => setDecisions((current) => current && { ...current, outside: event.target.checked })} />
-                Создать справочный материал «Дневники Evernote: ссылки и заметки вне таблиц» из фрагментов, оставленных в справочнике
+                Создать статью «Дневники Evernote: ссылки и заметки вне таблиц» из фрагментов, оставленных в общей статье
               </label>
             </details>
           )}

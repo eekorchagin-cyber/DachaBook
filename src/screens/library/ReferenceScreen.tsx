@@ -23,8 +23,8 @@ export function ReferenceView({ id }: { id: string }) {
   if (material === undefined) return null
   if (!material) {
     return (
-      <Screen title="Справочник" back="/library" tab="/library">
-        <p className="empty">Материал не найден.</p>
+      <Screen title="Статьи" back="/library" tab="/library">
+        <p className="empty">Статья не найдена.</p>
       </Screen>
     )
   }
@@ -150,7 +150,7 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
   }
 
   return (
-    <Screen title={material ? 'Изменить материал' : 'Новый материал'} help="library" back={back} tab="/library">
+    <Screen title={material ? 'Изменить статью' : 'Новая статья'} help="library" back={back} tab="/library">
       <section className="card">
         <label className="field">
           Заголовок
@@ -230,7 +230,7 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
           <ActionButton
             secondary
             onRun={async () => {
-              if (!confirm('Переместить материал в корзину? Его можно будет восстановить.')) return
+              if (!confirm('Переместить статью в корзину? Её можно будет восстановить.')) return
               await repo.remove('references', material.id, material.revision)
               navigate('/library')
             }}

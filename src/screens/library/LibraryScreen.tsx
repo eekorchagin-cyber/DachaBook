@@ -33,12 +33,12 @@ export function LibraryScreen() {
 
   return (
     <Screen
-      title="Справочник"
+      title="Статьи"
       help="library"
       tab="/library"
       actions={
         <a className="button small" href="#/library/new">
-          + Материал
+          + Статья
         </a>
       }
     >
@@ -56,7 +56,7 @@ export function LibraryScreen() {
       )}
       {materials && found.length === 0 && (
         <EmptyState>
-          {materials.length === 0 ? 'Справочных материалов пока нет. Добавьте свой или импортируйте заметки из Evernote (раздел «Ещё»).' : 'Ничего не найдено.'}
+          {materials.length === 0 ? 'Статей пока нет. Добавьте свою или импортируйте заметки из Evernote (раздел «Ещё»).' : 'Ничего не найдено.'}
         </EmptyState>
       )}
       <ul className="list">

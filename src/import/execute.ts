@@ -413,7 +413,7 @@ export async function executeImport(proposal: ImportProposal, decisions: ImportD
     try {
       if (!(await attachAbove(piece))) {
         forReference.push(piece)
-        errors.push(`Фрагмент «${(piece.text || 'вложение').slice(0, 50)}»: запись выше не импортирована — сохранён в справочном материале`)
+        errors.push(`Фрагмент «${(piece.text || 'вложение').slice(0, 50)}»: запись выше не импортирована — сохранён в общей статье`)
       }
     } catch (error) {
       errors.push(`Фрагмент «${(piece.text || 'вложение').slice(0, 50)}»: ${error instanceof Error ? error.message : String(error)}`)

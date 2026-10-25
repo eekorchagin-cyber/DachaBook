@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useRoute } from './app/router'
 import { applyAppearance, useSettings } from './app/store'
 import type { EventType } from './domain/types'
+import { setWorkKinds } from './import/suggest'
 import { LabScreen } from './lab/LabScreen'
 import { DiaryScreen } from './screens/diary/DiaryScreen'
 import { EventEditor } from './screens/diary/EventEditor'
@@ -25,6 +26,10 @@ export default function App() {
 
   useEffect(() => {
     if (settings) applyAppearance(settings)
+  }, [settings])
+
+  useEffect(() => {
+    if (settings) setWorkKinds(settings.workKinds, settings.workKindRenames)
   }, [settings])
 
   const pathKey = route.path.join('/')

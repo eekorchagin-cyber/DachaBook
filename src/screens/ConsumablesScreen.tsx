@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
-import { repo } from '../app/store'
+import { repo, useSettings } from '../app/store'
 import { findConsumable, normalizeUrl, parseQuantity, quantityText, UNITS, urlHost, usageByConsumable } from '../domain/consumables'
 import { todayAtSite } from '../domain/dates'
 import type { CareObject, Consumable, DocInput } from '../domain/types'
@@ -18,6 +18,7 @@ function ConsumableForm({ consumable, consumables, objects, onClose }: { consuma
   const [note, setNote] = useState(consumable?.note ?? '')
   const [description, setDescription] = useState(consumable?.description ?? '')
   const [url, setUrl] = useState(consumable?.url ?? '')
+  const units = useSettings()?.consumableUnits ?? UNITS
   const link = normalizeUrl(url)
   const duplicate = findConsumable(consumables, name)
   const nameTaken = !!duplicate && duplicate.id !== consumable?.id
@@ -53,7 +54,7 @@ function ConsumableForm({ consumable, consumables, objects, onClose }: { consuma
           Единица
           <input list="consumable-units" value={unit} onChange={(event) => setUnit(event.target.value)} />
           <datalist id="consumable-units">
-            {UNITS.map((item) => (
+            {units.map((item) => (
               <option key={item} value={item} />
             ))}
           </datalist>
