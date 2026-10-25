@@ -38,7 +38,7 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
           ✎ Новая запись
         </a>
         <a className="button big secondary" href="#/diary/new?type=measurement">
-          🌡 Измерение почвы
+          🌡 Измерения почвы
         </a>
       </div>
       <section className="card">
