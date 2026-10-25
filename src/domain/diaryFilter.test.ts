@@ -35,6 +35,16 @@ describe('filterEvents', () => {
     expect(filterEvents(events, {}).map((item) => item.date)).toEqual(['2025-06-01', '2025-05-18', '2021-05-10'])
   })
 
+  it('в один день: со временем — по времени, без времени — последняя внесённая сверху', () => {
+    const sameDay = [
+      event({ date: '2025-05-18', comment: 'первая строка', createdAt: '2026-10-25T10:00:00.001Z' }),
+      event({ date: '2025-05-18', comment: 'вторая строка', createdAt: '2026-10-25T10:00:00.002Z' }),
+      event({ date: '2025-05-18', comment: 'утром', time: '08:00', createdAt: '2026-10-25T09:00:00.000Z' }),
+      event({ date: '2025-05-18', comment: 'вечером', time: '19:30', createdAt: '2026-10-25T09:00:00.000Z' }),
+    ]
+    expect(filterEvents(sameDay, {}).map((item) => item.comment)).toEqual(['вечером', 'утром', 'вторая строка', 'первая строка'])
+  })
+
   it('ищет по словам без учёта регистра и «ё»', () => {
     expect(filterEvents(events, { text: 'елки' })).toHaveLength(1)
     expect(filterEvents(events, { text: 'газон фертика' })).toHaveLength(1)

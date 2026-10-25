@@ -40,6 +40,14 @@ describe('Repository', () => {
     expect(await repo.get('events', doc.id)).toEqual(doc)
   })
 
+  it('время создания строго возрастает даже для записей, созданных подряд', async () => {
+    const docs = []
+    for (let index = 0; index < 20; index++) docs.push(await repo.create('events', event))
+    const stamps = docs.map((doc) => doc.createdAt)
+    expect(stamps).toEqual([...stamps].sort())
+    expect(new Set(stamps).size).toBe(20)
+  })
+
   it('сохраняет переданный идентификатор и не создаёт дубль', async () => {
     const doc = await repo.create('events', { ...event, id: 'fixed-id' })
     expect(doc.id).toBe('fixed-id')

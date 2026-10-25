@@ -41,6 +41,14 @@ export async function verifyChecksum(doc: DocMeta): Promise<boolean> {
   return (await contentChecksum(doc)) === doc.checksum
 }
 
+let lastStamp = 0
+
+/** Время записи строго возрастает даже в пределах одной миллисекунды: порядок созданных подряд записей (импорт) сохраняется. */
+function stamp(): string {
+  lastStamp = Math.max(Date.now(), lastStamp + 1)
+  return new Date(lastStamp).toISOString()
+}
+
 export class ConflictError extends Error {
   current: DocMeta | undefined
 
@@ -72,7 +80,7 @@ export class Repository {
   }
 
   async create<K extends CollectionName>(name: K, input: DocInput<Collections[K]>): Promise<Collections[K]> {
-    const now = new Date().toISOString()
+    const now = stamp()
     const author = this.author()
     const doc = {
       ...contentOf(input),
@@ -107,7 +115,7 @@ export class Repository {
       ...content,
       revision: crypto.randomUUID(),
       baseRevision: current.revision,
-      updatedAt: new Date().toISOString(),
+      updatedAt: stamp(),
       updatedBy: this.author(),
       checksum: await sha256Hex(canonicalJson(content)),
     } as Collections[K]
@@ -121,7 +129,7 @@ export class Repository {
 
   /** Перемещение в корзину; запись и связи сохраняются. */
   remove<K extends CollectionName>(name: K, id: string, expectedRevision: string): Promise<Collections[K]> {
-    return this.setDeleted(name, id, expectedRevision, new Date().toISOString())
+    return this.setDeleted(name, id, expectedRevision, stamp())
   }
 
   restore<K extends CollectionName>(name: K, id: string, expectedRevision: string): Promise<Collections[K]> {
@@ -143,7 +151,7 @@ export class Repository {
         deletedAt,
         revision: crypto.randomUUID(),
         baseRevision: current.revision,
-        updatedAt: new Date().toISOString(),
+        updatedAt: stamp(),
         updatedBy: this.author(),
       }
       await this.table(name).put(result)

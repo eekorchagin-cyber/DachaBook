@@ -15,8 +15,9 @@ export function normalizeText(value: string): string {
   return value.toLowerCase().replace(/ё/g, 'е')
 }
 
+/** От последней записи к более ранним: дата события, время, затем порядок внесения (у импорта — порядок строк таблицы). */
 export function compareEvents(a: DiaryEvent, b: DiaryEvent): number {
-  return b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? '') || b.createdAt.localeCompare(a.createdAt)
+  return b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? '') || b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)
 }
 
 /** Фильтры работают в любом сочетании и без сети; удалённые записи не показываются. */
