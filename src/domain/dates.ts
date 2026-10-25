@@ -18,9 +18,16 @@ export function todayAtSite(now = new Date()): { date: string; time: string } {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` }
 }
 
-const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+/** Месяц и день «сегодня» на участке — для календаря примет. */
+export function todayMonthDay(now = new Date()): { month: number; day: number } {
+  const [, month, day] = todayAtSite(now).date.split('-').map(Number)
+  return { month, day }
+}
+
+export const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+export const MONTH_NAMES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
 export function formatDate(date: string): string {
   const [year, month, day] = date.split('-').map(Number)
-  return `${day} ${MONTHS[month - 1]} ${year}`
+  return `${day} ${MONTHS_GENITIVE[month - 1]} ${year}`
 }

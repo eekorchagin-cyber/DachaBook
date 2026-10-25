@@ -4,6 +4,7 @@ import { buildBackup, restoreBackup, type BackupManifest, type RestoreResult } f
 import { errorText, formatBytes } from '../lib/format'
 import { db } from '../storage/db'
 import { Screen } from '../ui/Screen'
+import { AutoBackupSection } from '../ui/AutoBackup'
 import { ActionButton } from '../ui/Section'
 
 /** На iPhone — системное меню «Поделиться» (только файл, без текста: иначе скрываются «Файлы» и Яндекс Диск), иначе скачивание. */
@@ -106,6 +107,8 @@ export function BackupScreen() {
           </div>
         )}
       </section>
+
+      <AutoBackupSection />
 
       <section className="card">
         <h2>Импорт копии</h2>

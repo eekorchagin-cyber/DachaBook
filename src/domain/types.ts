@@ -94,7 +94,35 @@ export interface DiaryEvent extends DocMeta {
   /** Пояснения к фото и вложениям этой записи: идентификатор файла → текст. */
   fileNotes?: Record<string, string>
   weather?: WeatherSnapshot
+  /** Сколько расходных материалов ушло на работу; по этим данным планируются закупки. */
+  consumables?: ConsumableUse[]
   source?: ImportSource
+}
+
+export interface ConsumableUse {
+  consumableId: string
+  quantity: number
+}
+
+/** Расходный материал для ухода за участком: удобрение, средство защиты, семена, мульча. */
+export interface Consumable extends DocMeta {
+  name: string
+  /** Единица учёта: кг, л, шт. Расход в записях дневника указывается в ней же. */
+  unit: string
+  /** Сколько нужно на сезон; основа для планирования закупок. */
+  seasonQuantity?: number
+  objectIds: string[]
+  note?: string
+  active: boolean
+}
+
+/** Народная примета или совет на день года (без привязки к году). */
+export interface FolkSign extends DocMeta {
+  month: number
+  day: number
+  title: string
+  text: string
+  source?: { title: string; url?: string }
 }
 
 export type UploadState = 'local' | 'pending' | 'uploading' | 'uploaded' | 'error'
@@ -164,6 +192,8 @@ export interface Collections {
   references: ReferenceMaterial
   planDrafts: PlanDraftItem
   importArchive: ImportArchiveItem
+  consumables: Consumable
+  folkSigns: FolkSign
 }
 
 export type CollectionName = keyof Collections

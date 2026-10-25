@@ -3,6 +3,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 import { DiaryDatabase } from '../storage/db'
 import { Repository } from '../storage/repository'
+import { seedFolkSigns } from '../app/seed'
 import { buildBackup, restoreBackup } from './backup'
 
 async function filled() {
@@ -93,5 +94,22 @@ describe('резервная копия', () => {
     await expect(restoreBackup(target, new TextEncoder().encode('не архив').buffer as ArrayBuffer)).rejects.toThrow(/не ZIP/)
     const newer = { ...entries, 'manifest.json': strToU8(JSON.stringify({ ...JSON.parse(strFromU8(entries['manifest.json'])), schemaVersion: 99 })) }
     await expect(restoreBackup(target, zipSync(newer).buffer as ArrayBuffer)).rejects.toThrow(/более новой версией/)
+  })
+
+  it('встроенные приметы не дублируются, расход материалов переносится вместе с записью', async () => {
+    const source = await filled()
+    const target = new DiaryDatabase(`seeded-${crypto.randomUUID()}`)
+    expect(await seedFolkSigns(source.database)).toBe(43)
+    expect(await seedFolkSigns(source.database)).toBe(0)
+    await seedFolkSigns(target)
+    const fertilizer = await source.repo.create('consumables', { name: 'Азофоска', unit: 'кг', seasonQuantity: 5, objectIds: [], active: true })
+    await source.repo.update('events', source.event.id, { consumables: [{ consumableId: fertilizer.id, quantity: 2 }] }, source.event.revision)
+
+    const result = await restoreBackup(target, await bytes((await buildBackup(source.database, 'test')).blob))
+    expect(result.conflicts).toEqual([])
+    expect(result.same).toBe(43)
+    expect(await target.folkSigns.count()).toBe(43)
+    expect((await target.events.get(source.event.id))?.consumables).toEqual([{ consumableId: fertilizer.id, quantity: 2 }])
+    expect((await target.consumables.get(fertilizer.id))?.name).toBe('Азофоска')
   })
 })

@@ -4,13 +4,18 @@ import type { PhotoPosition } from '../app/store'
 import { versionLabel } from '../app/version'
 import { compareEvents } from '../domain/diaryFilter'
 import { db } from '../storage/db'
+import { AutoBackupWarning } from '../ui/AutoBackup'
 import { EmptyState, Screen } from '../ui/Screen'
 import { EventCard } from './diary/EventCard'
+import { TodaySignCard } from './FolkSignsScreen'
 
 export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorName: string; plotAddress: string; photoPosition: PhotoPosition }) {
   const events = useLiveQuery(() => db.events.filter((item) => !item.deletedAt).toArray(), [])
   const objects = useLiveQuery(() => db.objects.toArray(), [])
   const objectMap = useMemo(() => new Map((objects ?? []).map((item) => [item.id, item])), [objects])
+  const consumables = useLiveQuery(() => db.consumables.toArray(), [])
+  const consumableMap = useMemo(() => new Map((consumables ?? []).map((item) => [item.id, item])), [consumables])
+  const signs = useLiveQuery(() => db.folkSigns.filter((sign) => !sign.deletedAt).toArray(), [])
   const latest = [...(events ?? [])].sort(compareEvents).slice(0, 5)
 
   return (
@@ -25,6 +30,7 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
           </a>
         </p>
       )}
+      <AutoBackupWarning />
       <div className="quick-actions">
         <a className="button big" href="#/diary/new">
           ✎ Новая запись
@@ -43,6 +49,7 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
         </dl>
         <p className="hint">Текущая погода и прогноз для участка появятся на этапе 4.</p>
       </section>
+      {signs && <TodaySignCard signs={signs} />}
       <section className="card">
         <h2>Ближайшие работы</h2>
         <p className="hint">План работ и погода появятся на этапе 4. Черновик плана из Evernote — в разделе «Ещё».</p>
@@ -50,7 +57,7 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
       <h2 className="section-title">Последние записи</h2>
       {events && latest.length === 0 && <EmptyState>Записей пока нет. Начните с кнопки «Новая запись».</EmptyState>}
       {latest.map((event) => (
-        <EventCard key={event.id} event={event} objects={objectMap} photoPosition={photoPosition} />
+        <EventCard key={event.id} event={event} objects={objectMap} consumables={consumableMap} photoPosition={photoPosition} />
       ))}
       {latest.length > 0 && (
         <a className="button secondary" href="#/diary">

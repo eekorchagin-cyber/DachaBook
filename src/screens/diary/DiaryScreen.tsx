@@ -18,6 +18,8 @@ export function DiaryScreen({ settings }: { settings: AppSettings }) {
   const [limit, setLimit] = useState(PAGE)
 
   const objectMap = useMemo(() => new Map(objects.map((item) => [item.id, item])), [objects])
+  const consumables = useLiveQuery(() => db.consumables.toArray(), [])
+  const consumableMap = useMemo(() => new Map((consumables ?? []).map((item) => [item.id, item])), [consumables])
   const found = useMemo(() => filterEvents(events ?? [], filter), [events, filter])
   const set = (patch: Partial<DiaryFilter>) => {
     setFilter((current) => ({ ...current, ...patch }))
@@ -114,7 +116,7 @@ export function DiaryScreen({ settings }: { settings: AppSettings }) {
       )}
       <p className="muted small">{events && found.length > 0 && `Записей: ${found.length}`}</p>
       {found.slice(0, limit).map((event) => (
-        <EventCard key={event.id} event={event} objects={objectMap} photoPosition={settings.photoPosition} />
+        <EventCard key={event.id} event={event} objects={objectMap} consumables={consumableMap} photoPosition={settings.photoPosition} />
       ))}
       {found.length > limit && (
         <button type="button" className="button secondary" onClick={() => setLimit((value) => value + PAGE)}>

@@ -1,7 +1,8 @@
 import { formatDate } from '../../domain/dates'
 import { EVENT_TYPES, measurementText, weatherText } from '../../domain/labels'
 import type { PhotoPosition } from '../../app/store'
-import type { CareObject, DiaryEvent } from '../../domain/types'
+import { quantityText } from '../../domain/consumables'
+import type { CareObject, Consumable, DiaryEvent } from '../../domain/types'
 import { useFileUrl } from '../../files/files'
 import { WeatherBadge } from '../../ui/WeatherBadge'
 
@@ -17,7 +18,17 @@ export function PhotoThumb({ id, onClick }: { id: string; onClick?: () => void }
   )
 }
 
-export function EventCard({ event, objects, photoPosition = 'right' }: { event: DiaryEvent; objects: Map<string, CareObject>; photoPosition?: PhotoPosition }) {
+export function EventCard({
+  event,
+  objects,
+  consumables,
+  photoPosition = 'right',
+}: {
+  event: DiaryEvent
+  objects: Map<string, CareObject>
+  consumables?: Map<string, Consumable>
+  photoPosition?: PhotoPosition
+}) {
   const type = EVENT_TYPES[event.type]
   const where = event.objectIds.map((id) => objects.get(id)?.name).filter(Boolean).join(', ')
   const side = photoPosition !== 'below' && event.photoIds.length > 0
@@ -51,6 +62,17 @@ export function EventCard({ event, objects, photoPosition = 'right' }: { event: 
           {event.type === 'measurement' && <p>{measurementText(event)}</p>}
           {event.weather && <p className="muted small">☁ {weatherText(event)}</p>}
           {event.comment && <p className="event-text">{event.comment}</p>}
+          {event.consumables && event.consumables.length > 0 && (
+            <p className="small muted">
+              Израсходовано:{' '}
+              {event.consumables
+                .map((use) => {
+                  const consumable = consumables?.get(use.consumableId)
+                  return consumable ? `${consumable.name} — ${quantityText(use.quantity, consumable.unit)}` : quantityText(use.quantity, 'ед.')
+                })
+                .join('; ')}
+            </p>
+          )}
         </div>
         {side && photoPosition === 'right' && photos}
       </div>

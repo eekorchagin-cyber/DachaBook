@@ -1,7 +1,9 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type {
   CareObject,
+  Consumable,
   DiaryEvent,
+  FolkSign,
   ImportArchiveItem,
   PlanDraftItem,
   PlantGroup,
@@ -38,6 +40,8 @@ export class DiaryDatabase extends Dexie {
   references!: EntityTable<ReferenceMaterial, 'id'>
   planDrafts!: EntityTable<PlanDraftItem, 'id'>
   importArchive!: EntityTable<ImportArchiveItem, 'id'>
+  consumables!: EntityTable<Consumable, 'id'>
+  folkSigns!: EntityTable<FolkSign, 'id'>
   settings!: EntityTable<SettingRow, 'key'>
   snapshots!: EntityTable<Snapshot, 'id'>
 
@@ -55,7 +59,11 @@ export class DiaryDatabase extends Dexie {
       settings: 'key',
     })
     this.version(2).stores({ snapshots: 'id, createdAt' })
+    this.version(3).stores({ consumables: 'id, name, active, deletedAt', folkSigns: 'id, month, deletedAt' })
   }
 }
+
+/** Таблицы документов: всё, что входит в резервную копию и меняется пользователем. */
+export const DOC_TABLES = ['objects', 'plantGroups', 'events', 'files', 'references', 'planDrafts', 'importArchive', 'consumables', 'folkSigns'] as const
 
 export const db = new DiaryDatabase()

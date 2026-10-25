@@ -6,7 +6,7 @@ import { createSnapshot } from '../storage/snapshots'
 
 export const BACKUP_FORMAT = 1
 
-const COLLECTIONS = ['objects', 'plantGroups', 'events', 'references', 'planDrafts', 'importArchive', 'files'] as const
+const COLLECTIONS = ['objects', 'plantGroups', 'events', 'references', 'planDrafts', 'importArchive', 'consumables', 'folkSigns', 'files'] as const
 type Collection = (typeof COLLECTIONS)[number]
 
 export interface BackupManifest {
@@ -29,6 +29,8 @@ events/ГГГГ/ — записи дневника по годам даты со
 references/ — справочные материалы (HTML в поле html).
 planDrafts/ — черновик сезонного плана.
 importArchive/ — архив импорта: исходные строки и заметки Evernote.
+consumables/ — расходные материалы; расход по работам — в записях дневника (поле consumables).
+folkSigns/ — народные приметы по дням года.
 files/ — описания фото и вложений; files/originals/ — оригиналы без изменений; files/thumbs/ — уменьшенные копии.
 settings/shared.json — общие настройки дневника (виды работ, адрес и координаты участка).
 
@@ -170,6 +172,9 @@ export async function restoreBackup(database: DiaryDatabase, data: ArrayBuffer):
         result.updated++
       } else if (local.baseRevision === incoming.revision) {
         result.keptLocal++
+      } else if (local.checksum === incoming.checksum && !local.deletedAt === !incoming.deletedAt) {
+        // Одинаковые записи, созданные независимо (например, стартовые приметы на каждом устройстве).
+        result.same++
       } else {
         result.conflicts.push(title(local))
       }

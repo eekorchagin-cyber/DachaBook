@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { navigate } from '../../app/router'
 import { repo, type AppSettings } from '../../app/store'
 import { todayAtSite } from '../../domain/dates'
-import type { DiaryEvent, DocInput, EventType } from '../../domain/types'
+import { findConsumable, resolveUses, rowProblems, UNITS, type ConsumableRow } from '../../domain/consumables'
+import type { Consumable, ConsumableUse, DiaryEvent, DocInput, EventType } from '../../domain/types'
 import { addAttachment, addPhoto } from '../../files/files'
 import { moonPhase } from '../../domain/moon'
 import { NoteField } from '../../ui/NoteField'
@@ -36,9 +37,10 @@ interface Draft {
   moisture: string
   moistureScale: string
   fileNotes: Record<string, string>
+  consumables: ConsumableRow[]
 }
 
-function toDraft(event: DiaryEvent | undefined, type: EventType): Draft {
+function toDraft(event: DiaryEvent | undefined, type: EventType, consumables: Consumable[]): Draft {
   const now = todayAtSite()
   return {
     type: event?.type ?? type,
@@ -54,6 +56,10 @@ function toDraft(event: DiaryEvent | undefined, type: EventType): Draft {
     moisture: event?.measurement?.moisture?.value.toString() ?? '',
     moistureScale: event?.measurement?.moisture?.scale ?? '',
     fileNotes: event?.fileNotes ?? {},
+    consumables: (event?.consumables ?? []).map((use) => {
+      const consumable = consumables.find((item) => item.id === use.consumableId)
+      return { name: consumable?.name ?? 'Удалённый материал', quantity: use.quantity.toLocaleString('ru-RU', { maximumFractionDigits: 3, useGrouping: false }), unit: consumable?.unit ?? '' }
+    }),
   }
 }
 
@@ -62,7 +68,7 @@ function parseNumber(value: string): number | undefined {
   return value.trim() && Number.isFinite(parsed) ? parsed : undefined
 }
 
-function toInput(draft: Draft, event?: DiaryEvent): DocInput<DiaryEvent> {
+function toInput(draft: Draft, event?: DiaryEvent, uses?: ConsumableUse[]): DocInput<DiaryEvent> {
   const temperature = parseNumber(draft.temperature)
   const moisture = parseNumber(draft.moisture)
   return {
@@ -84,6 +90,7 @@ function toInput(draft: Draft, event?: DiaryEvent): DocInput<DiaryEvent> {
         : undefined,
     fileNotes: cleanNotes(draft),
     weather: event?.weather,
+    consumables: draft.type === 'work' && uses && uses.length > 0 ? uses : undefined,
     source: event?.source,
   }
 }
@@ -105,12 +112,14 @@ function problems(draft: Draft): string[] {
   if (draft.type === 'measurement' && parseNumber(draft.temperature) === undefined && parseNumber(draft.moisture) === undefined) {
     list.push('введите температуру или влажность')
   }
+  if (draft.type === 'work') list.push(...rowProblems(draft.consumables))
   return list
 }
 
 export function EventEditor({ id, initialType, settings }: { id?: string; initialType: EventType; settings: AppSettings }) {
   const event = useLiveQuery(async () => (id ? ((await db.events.get(id)) ?? null) : null), [id])
-  if (event === undefined) return null
+  const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), [])
+  if (event === undefined || consumables === undefined) return null
   if (id && !event) {
     return (
       <Screen title="Запись дневника" tab="/diary" back="/diary">
@@ -118,14 +127,14 @@ export function EventEditor({ id, initialType, settings }: { id?: string; initia
       </Screen>
     )
   }
-  return <EventForm key={event?.id ?? 'new'} event={event ?? undefined} initialType={initialType} settings={settings} />
+  return <EventForm key={event?.id ?? 'new'} event={event ?? undefined} initialType={initialType} settings={settings} consumables={consumables} />
 }
 
-function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initialType: EventType; settings: AppSettings }) {
+function EventForm({ event, initialType, settings, consumables }: { event?: DiaryEvent; initialType: EventType; settings: AppSettings; consumables: Consumable[] }) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const [draft, setDraft] = useState<Draft>(() => toDraft(event, initialType))
-  const [initial, setInitial] = useState(() => JSON.stringify(toDraft(event, initialType)))
+  const [draft, setDraft] = useState<Draft>(() => toDraft(event, initialType, consumables))
+  const [initial, setInitial] = useState(() => JSON.stringify(toDraft(event, initialType, consumables)))
   const [error, setError] = useState<string | null>(null)
   const [splitParts, setSplitParts] = useState<PartDraft[] | null>(null)
   const [viewer, setViewer] = useState<number | null>(null)
@@ -154,8 +163,12 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
   const save = async () => {
     setError(null)
     try {
-      if (event) await repo.update('events', event.id, toInput(draft, event), event.revision)
-      else await repo.create('events', toInput(draft))
+      const uses =
+        draft.type === 'work'
+          ? await resolveUses(draft.consumables, consumables, (name, unit) => repo.create('consumables', { name, unit, objectIds: draft.objectIds, active: true }))
+          : undefined
+      if (event) await repo.update('events', event.id, toInput(draft, event, uses), event.revision)
+      else await repo.create('events', toInput(draft, undefined, uses))
       setInitial(JSON.stringify(draft))
       navigate('/diary')
     } catch (caught) {
@@ -266,6 +279,7 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
             </select>
           </label>
         )}
+        {draft.type === 'work' && <ConsumableRows rows={draft.consumables} consumables={consumables} onChange={(rows) => update({ consumables: rows })} />}
         {draft.type === 'measurement' && (
           <div className="row">
             <label className="field">
@@ -404,5 +418,48 @@ function EventForm({ event, initialType, settings }: { event?: DiaryEvent; initi
         )}
       </div>
     </Screen>
+  )
+}
+
+function ConsumableRows({ rows, consumables, onChange }: { rows: ConsumableRow[]; consumables: Consumable[]; onChange: (rows: ConsumableRow[]) => void }) {
+  const set = (index: number, patch: Partial<ConsumableRow>) => onChange(rows.map((row, current) => (current === index ? { ...row, ...patch } : row)))
+  const names = consumables.filter((item) => item.active).map((item) => item.name).sort((a, b) => a.localeCompare(b, 'ru'))
+  return (
+    <fieldset className="consumables">
+      <legend>Расходные материалы</legend>
+      {rows.map((row, index) => {
+        const known = findConsumable(consumables, row.name)
+        return (
+          <div key={index} className="consumable-row">
+            <input aria-label="Материал" list="consumable-names" placeholder="Материал" value={row.name} onChange={(change) => set(index, { name: change.target.value })} />
+            <input aria-label="Количество" inputMode="decimal" placeholder="Кол-во" value={row.quantity} onChange={(change) => set(index, { quantity: change.target.value })} />
+            {known ? (
+              <span className="consumable-unit">{known.unit}</span>
+            ) : (
+              <input aria-label="Единица" list="consumable-units" placeholder="ед." value={row.unit} onChange={(change) => set(index, { unit: change.target.value })} />
+            )}
+            <button type="button" className="icon-button" aria-label="Убрать материал" onClick={() => onChange(rows.filter((_, current) => current !== index))}>
+              ×
+            </button>
+          </div>
+        )
+      })}
+      <datalist id="consumable-names">
+        {names.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+      <datalist id="consumable-units">
+        {UNITS.map((unit) => (
+          <option key={unit} value={unit} />
+        ))}
+      </datalist>
+      <button type="button" className="button secondary" onClick={() => onChange([...rows, { name: '', quantity: '', unit: '' }])}>
+        + Материал
+      </button>
+      {rows.some((row) => row.name.trim() && !findConsumable(consumables, row.name)) && (
+        <p className="hint">Новые материалы добавятся в «Ещё → Расходные материалы» при сохранении записи.</p>
+      )}
+    </fieldset>
   )
 }

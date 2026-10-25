@@ -1,6 +1,6 @@
-import type { DiaryDatabase } from './db'
+import { DOC_TABLES, type DiaryDatabase } from './db'
 
-const COLLECTIONS = ['objects', 'plantGroups', 'events', 'files', 'references', 'planDrafts', 'importArchive', 'settings'] as const
+const COLLECTIONS = [...DOC_TABLES, 'settings'] as const
 const KEEP = 5
 
 /** Снимок всех документов перед массовой операцией; хранится последние пять. */

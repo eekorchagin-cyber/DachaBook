@@ -13,6 +13,8 @@ import { PlanScreen } from './screens/import/PlanScreen'
 import { LibraryScreen } from './screens/library/LibraryScreen'
 import { ReferenceEditor, ReferenceView } from './screens/library/ReferenceScreen'
 import { BackupScreen } from './screens/BackupScreen'
+import { ConsumablesScreen } from './screens/ConsumablesScreen'
+import { FolkSignsScreen } from './screens/FolkSignsScreen'
 import { MoreScreen, TrashScreen } from './screens/MoreScreen'
 import { ObjectsScreen } from './screens/ObjectsScreen'
 import { SettingsScreen, WelcomeScreen } from './screens/SettingsScreen'
@@ -65,6 +67,10 @@ export default function App() {
       return <BackupScreen />
     case 'trash':
       return <TrashScreen />
+    case 'consumables':
+      return <ConsumablesScreen />
+    case 'signs':
+      return <FolkSignsScreen />
     case 'guide':
       return <GuideScreen section={route.query.get('section') ?? undefined} />
     case 'more':

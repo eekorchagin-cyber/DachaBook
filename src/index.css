@@ -426,7 +426,8 @@ body {
 
 .field select,
 .field textarea,
-.search-row input {
+.search-row input,
+.consumable-row input {
   font: inherit;
   padding: 10px;
   border-radius: 8px;
@@ -1056,5 +1057,60 @@ details.card[open] > summary::before {
 }
 
 .plot-address-link {
+  color: var(--accent);
+}
+
+.list-item.today {
+  border-color: var(--accent);
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.consumables {
+  border: none;
+  padding: 0;
+  margin: 12px 0;
+  display: grid;
+  gap: 8px;
+}
+
+.consumables legend {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.consumables > .button {
+  justify-self: start;
+}
+
+.consumable-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5em 4.5em auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.consumable-row input {
+  width: 100%;
+  min-width: 0;
+}
+
+.consumable-unit {
+  padding-left: 4px;
+}
+
+.notice.warning {
+  color: inherit;
+  border: 1px solid var(--warn);
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: var(--card);
+}
+
+.notice.warning p {
+  margin: 0 0 8px;
+}
+
+.source-link {
   color: var(--accent);
 }
