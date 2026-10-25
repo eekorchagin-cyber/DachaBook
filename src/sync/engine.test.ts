@@ -139,6 +139,25 @@ describe('синхронизация двух устройств через об
     expect(await synchronize(phone.database, cloud, options('iPhone'))).toMatchObject({ pulled: 1, thumbs: 1 })
   })
 
+  it('фото без уменьшенной копии (HEIC в Chrome): копию не запрашивают из облака при каждой синхронизации', async () => {
+    const cloud = new MemoryCloud()
+    const mac = device('Mac')
+    const phone = device('iPhone')
+    await synchronize(mac.database, cloud, options('Mac'))
+    const heic = await mac.repo.create('files', { role: 'photo', fileName: 'IMG_1.HEIC', mime: 'image/heic', size: 1, sha256: 'h', uploadState: 'local' })
+    await mac.database.fileContents.put({ id: heic.id, original: new Blob([new Uint8Array([7])], { type: 'image/heic' }) })
+    await synchronize(mac.database, cloud, options('Mac'))
+
+    const thumbReads = () => cloud.readPaths.filter((path) => path === `files/thumbs/${heic.id}.jpg`).length
+    const before = thumbReads()
+    await synchronize(phone.database, cloud, options('iPhone'))
+    expect(thumbReads()).toBe(before + 1)
+    await synchronize(phone.database, cloud, options('iPhone'))
+    await synchronize(mac.database, cloud, options('Mac'))
+    expect(thumbReads()).toBe(before + 1)
+    expect((await phone.database.syncState.get(`blob/${heic.id}`))?.thumbMissingAt).toBeTruthy()
+  })
+
   it('новое устройство получает дневник одним снимком, а не тысячей файлов; одинаковые приметы не дублируются', async () => {
     const cloud = new MemoryCloud()
     const mac = device('Mac')

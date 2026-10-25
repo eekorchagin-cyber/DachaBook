@@ -32,6 +32,8 @@ export interface SyncRecord {
   tombstonePending?: boolean
   originalUploaded?: boolean
   thumbUploaded?: boolean
+  /** Когда уменьшенной копии не оказалось в облаке (например, HEIC без миниатюры): повтор не чаще раза в сутки. */
+  thumbMissingAt?: string
 }
 
 /** Запись, изменённая и здесь, и в облаке: обе версии хранятся до решения пользователя. */

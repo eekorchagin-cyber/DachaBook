@@ -306,12 +306,16 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
       await cloud.write(thumbPath(file.id), content.thumb)
       state.thumbUploaded = true
     }
-    if (!content?.thumb && file.role === 'photo') {
+    const checkedRecently = !!state.thumbMissingAt && Date.now() - Date.parse(state.thumbMissingAt) < 24 * 60 * 60 * 1000
+    if (!content?.thumb && file.role === 'photo' && !checkedRecently) {
       const thumb = await cloud.read(thumbPath(file.id))
       if (thumb) {
         await database.fileContents.put({ ...content, id: file.id, thumb: new Blob([thumb], { type: 'image/jpeg' }) })
         state.thumbUploaded = true
+        state.thumbMissingAt = undefined
         result.thumbs++
+      } else {
+        state.thumbMissingAt = new Date().toISOString()
       }
     }
     await database.syncState.put(state)

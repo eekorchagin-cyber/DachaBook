@@ -73,7 +73,13 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
 
 function SyncLine() {
   const status = useSyncStatus()
-  if (!status.connected) return null
+  if (!status.connected) {
+    return (
+      <a className="sync-line" href="#/sync">
+        ☁ Облако не подключено — дневник хранится только на этом устройстве. Подключить
+      </a>
+    )
+  }
   const summary = syncSummary(status)
   return (
     <a className={summary.warning ? 'sync-line warning' : 'sync-line'} href={status.conflicts > 0 ? '#/conflicts' : '#/sync'}>

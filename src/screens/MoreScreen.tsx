@@ -56,8 +56,12 @@ async function purge(item: TrashItem): Promise<void> {
   if (fileIds.length === 0) return
   const events = await db.events.toArray()
   const references = await db.references.toArray()
+  const plan = await db.planDrafts.toArray()
   for (const id of fileIds) {
-    const used = events.some((event) => event.photoIds.includes(id) || event.attachmentIds.includes(id)) || references.some((reference) => reference.fileIds.includes(id))
+    const used =
+      events.some((event) => event.photoIds.includes(id) || event.attachmentIds.includes(id)) ||
+      references.some((reference) => reference.fileIds.includes(id)) ||
+      plan.some((item) => item.fileIds.includes(id))
     if (!used) await purgeDoc(db, 'files', id)
   }
 }

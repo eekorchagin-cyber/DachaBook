@@ -13,6 +13,7 @@ export class MemoryCloud implements CloudAdapter {
   files = new Map<string, StoredEntry>()
   writes = 0
   reads = 0
+  readPaths: string[] = []
   private clock = 0
 
   private entry(path: string, stored: StoredEntry): RemoteEntry {
@@ -41,6 +42,7 @@ export class MemoryCloud implements CloudAdapter {
 
   async read(path: string): Promise<Blob | null> {
     this.reads++
+    this.readPaths.push(path)
     return this.files.get(path)?.data ?? null
   }
 
