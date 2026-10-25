@@ -10,6 +10,27 @@ export function quantityText(value: number, unit: string): string {
   return `${value.toLocaleString('ru-RU', { maximumFractionDigits: 3 })} ${unit}`
 }
 
+/** «ozon.ru/…» → «https://ozon.ru/…»; пустая строка → undefined; не ссылка → null. */
+export function normalizeUrl(value: string): string | undefined | null {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`
+  try {
+    const url = new URL(candidate)
+    return (url.protocol === 'https:' || url.protocol === 'http:') && url.hostname.includes('.') ? url.href : null
+  } catch {
+    return null
+  }
+}
+
+export function urlHost(value: string): string {
+  try {
+    return new URL(value).hostname.replace(/^www\./, '')
+  } catch {
+    return value
+  }
+}
+
 export function parseQuantity(value: string): number | undefined {
   const parsed = Number(value.replace(',', '.').trim())
   return value.trim() && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined

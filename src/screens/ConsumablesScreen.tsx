@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
 import { repo } from '../app/store'
-import { findConsumable, parseQuantity, quantityText, UNITS, usageByConsumable } from '../domain/consumables'
+import { findConsumable, normalizeUrl, parseQuantity, quantityText, UNITS, urlHost, usageByConsumable } from '../domain/consumables'
 import { todayAtSite } from '../domain/dates'
 import type { CareObject, Consumable, DocInput } from '../domain/types'
 import { db } from '../storage/db'
@@ -16,6 +16,9 @@ function ConsumableForm({ consumable, consumables, objects, onClose }: { consuma
   const [season, setSeason] = useState(consumable?.seasonQuantity?.toString() ?? '')
   const [objectIds, setObjectIds] = useState<string[]>(consumable?.objectIds ?? [])
   const [note, setNote] = useState(consumable?.note ?? '')
+  const [description, setDescription] = useState(consumable?.description ?? '')
+  const [url, setUrl] = useState(consumable?.url ?? '')
+  const link = normalizeUrl(url)
   const duplicate = findConsumable(consumables, name)
   const nameTaken = !!duplicate && duplicate.id !== consumable?.id
   const seasonInvalid = !!season.trim() && parseQuantity(season) === undefined
@@ -27,6 +30,8 @@ function ConsumableForm({ consumable, consumables, objects, onClose }: { consuma
       unit: unit.trim() || 'шт.',
       seasonQuantity: parseQuantity(season),
       objectIds,
+      description: description.trim() || undefined,
+      url: link ?? undefined,
       note: note.trim() || undefined,
       active,
     }
@@ -59,6 +64,22 @@ function ConsumableForm({ consumable, consumables, objects, onClose }: { consuma
         </label>
       </div>
       {seasonInvalid && <p className="error">Количество на сезон — положительное число.</p>}
+      <label className="field">
+        Описание
+        <textarea rows={3} placeholder="Что это и для чего: состав, действие, когда применять" value={description} onChange={(event) => setDescription(event.target.value)} />
+      </label>
+      <label className="field">
+        Ссылка на источник в интернете
+        <input type="url" inputMode="url" placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} />
+      </label>
+      {link === null && <p className="error">Это не похоже на ссылку. Пример: https://fertika.ru/…</p>}
+      {link && (
+        <p className="small">
+          <a className="source-link" href={link} target="_blank" rel="noopener noreferrer">
+            Открыть {urlHost(link)}
+          </a>
+        </p>
+      )}
       {objects.length > 0 && (
         <fieldset className="chips">
           <legend>Для каких объектов</legend>
@@ -71,11 +92,11 @@ function ConsumableForm({ consumable, consumables, objects, onClose }: { consuma
         </fieldset>
       )}
       <label className="field">
-        Примечание (норма, где купить, фасовка)
+        Примечание (норма, фасовка, где купить)
         <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
       </label>
       <div className="actions">
-        <ActionButton disabled={!name.trim() || nameTaken || seasonInvalid} onRun={() => save()}>
+        <ActionButton disabled={!name.trim() || nameTaken || seasonInvalid || link === null} onRun={() => save()}>
           Сохранить
         </ActionButton>
         {consumable && (
@@ -146,7 +167,9 @@ export function ConsumablesScreen() {
                   {item.seasonQuantity !== undefined && used > item.seasonQuantity && ' — больше нормы'}
                 </span>
                 {item.objectIds.length > 0 && <span className="small">Для: {objectNames(item.objectIds)}</span>}
+                {item.description && <span className="small">{item.description}</span>}
                 {item.note && <span className="small">{item.note}</span>}
+                {item.url && <span className="small muted">Источник: {urlHost(item.url)}</span>}
               </button>
             </li>
           )

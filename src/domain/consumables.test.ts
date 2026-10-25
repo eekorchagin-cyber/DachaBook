@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { quantityText, resolveUses, rowProblems, usageByConsumable } from './consumables'
+import { normalizeUrl, quantityText, resolveUses, rowProblems, urlHost, usageByConsumable } from './consumables'
 import type { Consumable } from './types'
 
 const azofoska = { id: 'a', name: 'Азофоска', unit: 'кг', objectIds: [], active: true } as unknown as Consumable
@@ -47,5 +47,14 @@ describe('расходные материалы', () => {
       'укажите название расходного материала',
     ])
     expect(quantityText(2.5, 'кг')).toBe('2,5 кг')
+  })
+
+  it('проверяет и дополняет ссылку на источник', () => {
+    expect(normalizeUrl('')).toBeUndefined()
+    expect(normalizeUrl(' fertika.ru/products/gazon ')).toBe('https://fertika.ru/products/gazon')
+    expect(normalizeUrl('http://shop.example.com/a?b=1')).toBe('http://shop.example.com/a?b=1')
+    expect(normalizeUrl('азофоска')).toBeNull()
+    expect(normalizeUrl('javascript:alert(1)')).toBeNull()
+    expect(urlHost('https://www.fertika.ru/products')).toBe('fertika.ru')
   })
 })

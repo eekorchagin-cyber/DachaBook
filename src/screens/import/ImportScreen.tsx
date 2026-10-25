@@ -20,6 +20,7 @@ import {
 } from '../../import/execute'
 import { makeParts } from '../../import/parts'
 import { buildProposal, type EventCandidate, type ImportProposal, type PlanCandidate } from '../../import/proposal'
+import { reorderImported } from '../../import/reorder'
 import { splitSentences, suggestParts } from '../../import/split'
 import { SplitEditor } from '../../ui/SplitEditor'
 import { errorText, formatBytes } from '../../lib/format'
@@ -234,12 +235,14 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
   const [error, setError] = useState<string | null>(null)
   const [eventFilter, setEventFilter] = useState<'all' | 'suggested' | 'split' | 'changed' | 'existing'>('all')
   const [limit, setLimit] = useState(PAGE)
+  const [reordered, setReordered] = useState<number | null>(null)
 
   const readFiles = async (list: FileList | null) => {
     const chosen = Array.from(list ?? [])
     if (chosen.length === 0) return
     setError(null)
     setResult(null)
+    setReordered(null)
     const files: { fileName: string; notes: EnexNote[] }[] = []
     const broken: string[] = []
     for (const file of chosen) {
@@ -367,6 +370,22 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
           </ul>
         )}
       </section>
+
+      {loaded && stats && stats.existingEvents > 0 && (
+        <section className="card">
+          <h2>Порядок уже импортированных записей</h2>
+          <p className="hint">
+            Записи из этих файлов уже есть в дневнике ({stats.existingEvents}). Если внутри одного дня они идут вперемешку, выстройте их по строкам таблиц:
+            последняя строка дня окажется сверху. Меняется только порядок, текст и связи записей не трогаются.
+          </p>
+          <div className="actions">
+            <ActionButton secondary onRun={async () => setReordered(await reorderImported(db, loaded.proposal))}>
+              Упорядочить записи по этим файлам
+            </ActionButton>
+          </div>
+          {reordered !== null && <p className="notice">Готово: упорядочено записей — {reordered}. Проверьте дневник.</p>}
+        </section>
+      )}
 
       {loaded && decisions && stats && (
         <>

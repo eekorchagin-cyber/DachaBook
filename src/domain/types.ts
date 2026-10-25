@@ -112,6 +112,10 @@ export interface Consumable extends DocMeta {
   /** Сколько нужно на сезон; основа для планирования закупок. */
   seasonQuantity?: number
   objectIds: string[]
+  /** Что это за материал и для чего он. */
+  description?: string
+  /** Страница в интернете: инструкция производителя, магазин. */
+  url?: string
   note?: string
   active: boolean
 }

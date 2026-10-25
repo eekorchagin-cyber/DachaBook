@@ -11,6 +11,8 @@ import { parseEnexStream, type EnexNote } from './enex/parser'
 import { defaultDecisions, executeImport, existingIndex, type FileAdapter } from './execute'
 import { makeParts } from './parts'
 import { buildProposal, type ImportFile } from './proposal'
+import { reorderImported } from './reorder'
+import { filterEvents } from '../domain/diaryFilter'
 
 const samplesDir = join(import.meta.dirname, '../../DOCS/samples')
 const sampleFiles = existsSync(samplesDir) ? readdirSync(samplesDir).filter((file) => file.endsWith('.enex')) : []
@@ -160,5 +162,26 @@ describe('строка, изменённая в Evernote после импорт
     const events = await context.database.events.toArray()
     expect(events).toHaveLength(1)
     expect(events[0].comment).toBe('Подвязали помидоры, отпасынковали их. Сняли первые огурцы')
+  })
+})
+
+describe('порядок записей одного дня', () => {
+  const row = (text: string) => `<tr><td>1</td><td></td><td>${text}</td><td>18.05.2025</td></tr>`
+  const header = '<tr><td>Недели</td><td></td><td>Работы, наблюдения</td><td>Дата выполнения</td></tr>'
+  const content = `<en-note><div>Май</div><table>${header}${row('Газон сухой')}${row('Прочесал газон')}${row('Запустил автополив')}</table><table>${header}</table><table>${header}</table></en-note>`
+  const note: EnexNote = { title: 'Дневник дачных работ 2025 г', tags: [], attributes: {}, content, resources: [] }
+
+  it('последняя строка дня — сверху; перестановка по файлу чинит записи с одинаковым временем внесения', async () => {
+    const context = await setup()
+    const proposal = buildProposal([{ fileName: 'd.enex', notes: [note] }])
+    await executeImport(proposal, defaultDecisions(proposal, context.objects, await existingIndex(context.database)), context)
+    const order = async () => filterEvents(await context.database.events.toArray(), {}).map((event) => event.comment)
+    expect(await order()).toEqual(['Запустил автополив', 'Прочесал газон', 'Газон сухой'])
+
+    // Так выглядели записи, импортированные до исправления: одно время внесения на всех.
+    for (const event of await context.database.events.toArray()) await context.database.events.update(event.id, { createdAt: '2026-10-25T05:00:00.000Z' })
+    expect(await reorderImported(context.database, proposal)).toBe(3)
+    expect(await order()).toEqual(['Запустил автополив', 'Прочесал газон', 'Газон сухой'])
+    expect((await context.database.events.toArray()).every((event) => event.revision && event.checksum)).toBe(true)
   })
 })
