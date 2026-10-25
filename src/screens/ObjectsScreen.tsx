@@ -149,10 +149,10 @@ function GroupForm({ group, objects, onClose }: { group?: PlantGroup; objects: C
   )
 }
 
-export function ObjectsScreen() {
+export function ObjectsScreen({ initialView = 'objects' }: { initialView?: 'objects' | 'groups' }) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const [view, setView] = useState<'objects' | 'groups'>('objects')
+  const [view, setView] = useState<'objects' | 'groups'>(initialView)
   const [editing, setEditing] = useState<{ kind: 'object' | 'group'; id?: string } | null>(null)
 
   useEffect(() => {

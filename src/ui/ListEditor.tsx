@@ -76,8 +76,7 @@ export function ListEditor(props: ListEditorProps) {
 
   return (
     <div className="dictionary">
-      <h3>{props.label}</h3>
-      <ul className="dictionary-list">
+      <ul className="dictionary-list" aria-label={props.label}>
         {props.items.map((item, index) => (
           <ItemRow key={item} item={item} items={props.items} index={index} onSave={props.onSave} onRename={props.onRename} onRemove={props.onRemove} />
         ))}

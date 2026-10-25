@@ -15,6 +15,7 @@ import { LibraryScreen } from './screens/library/LibraryScreen'
 import { ReferenceEditor, ReferenceView } from './screens/library/ReferenceScreen'
 import { BackupScreen } from './screens/BackupScreen'
 import { ConsumablesScreen } from './screens/ConsumablesScreen'
+import { DictionariesScreen, DictionaryScreen } from './screens/DictionariesScreen'
 import { FolkSignsScreen } from './screens/FolkSignsScreen'
 import { MoreScreen, TrashScreen } from './screens/MoreScreen'
 import { ObjectsScreen } from './screens/ObjectsScreen'
@@ -56,7 +57,9 @@ export default function App() {
       }
       return <DiaryScreen settings={settings} />
     case 'objects':
-      return <ObjectsScreen />
+      return <ObjectsScreen key={route.query.get('view') ?? 'objects'} initialView={route.query.get('view') === 'groups' ? 'groups' : 'objects'} />
+    case 'dictionaries':
+      return param ? <DictionaryScreen kind={param} settings={settings} /> : <DictionariesScreen settings={settings} />
     case 'library':
       if (param === 'new') return <ReferenceEditor />
       if (param && route.path[2] === 'edit') return <ReferenceEditor id={param} />
