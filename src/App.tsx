@@ -59,7 +59,13 @@ export default function App() {
       }
       return <DiaryScreen settings={settings} />
     case 'objects':
-      return <ObjectsScreen key={route.query.get('view') ?? 'objects'} initialView={route.query.get('view') === 'groups' ? 'groups' : 'objects'} />
+      return (
+        <ObjectsScreen
+          key={`${route.query.get('view') ?? 'objects'}-${route.query.get('from') ?? ''}`}
+          initialView={route.query.get('view') === 'groups' ? 'groups' : 'objects'}
+          fromDictionaries={route.query.get('from') === 'dictionaries'}
+        />
+      )
     case 'dictionaries':
       return param ? <DictionaryScreen kind={param} settings={settings} /> : <DictionariesScreen settings={settings} />
     case 'library':

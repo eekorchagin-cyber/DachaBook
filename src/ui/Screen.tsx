@@ -10,11 +10,16 @@ const TABS = [
   { path: '/more', label: 'Ещё', icon: '⋯' },
 ]
 
-export function Screen(props: { title: string; help?: string; back?: string; actions?: ReactNode; children: ReactNode; tab: string }) {
+/** back — куда ведёт стрелка «назад»; onBack — вместо перехода закрыть открытую карточку и вернуться к списку. */
+export function Screen(props: { title: string; help?: string; back?: string; onBack?: () => void; actions?: ReactNode; children: ReactNode; tab: string }) {
   return (
     <div className="app">
       <header className="topbar">
-        {props.back ? (
+        {props.onBack ? (
+          <button type="button" className="icon-button" aria-label="Назад" onClick={props.onBack}>
+            ←
+          </button>
+        ) : props.back ? (
           <a className="icon-button" href={`#${props.back}`} aria-label="Назад">
             ←
           </a>

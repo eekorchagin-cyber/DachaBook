@@ -163,7 +163,7 @@ export function FolkSignsScreen() {
 
   if (editing) {
     return (
-      <Screen title="Народные приметы" help="signs" back="/more" tab="/more">
+      <Screen title="Народные приметы" help="signs" onBack={() => setEditing(null)} tab="/more">
         <SignForm key={editing.id ?? 'new'} sign={signs?.find((sign) => sign.id === editing.id)} onClose={() => setEditing(null)} />
       </Screen>
     )
@@ -172,7 +172,7 @@ export function FolkSignsScreen() {
   const months = MONTH_NAMES.map((name, index) => ({ name, month: index + 1, signs: (signs ?? []).filter((sign) => sign.month === index + 1) })).filter((group) => group.signs.length > 0)
 
   return (
-    <Screen title="Народные приметы" help="signs" back="/more" tab="/more">
+    <Screen title="Народные приметы" help="signs" back="/dictionaries" tab="/more">
       {signs && <TodaySignCard signs={signs} />}
       <div className="actions">
         <button type="button" className="button" onClick={() => setEditing({})}>

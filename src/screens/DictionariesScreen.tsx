@@ -16,8 +16,8 @@ export function DictionariesScreen({ settings }: { settings: AppSettings }) {
   const items = [
     { href: '#/dictionaries/work-kinds', title: 'Виды работ', text: 'Стрижка газона, полив, подкормка… — выбор в записях работ', count: settings.workKinds.length },
     { href: '#/dictionaries/units', title: 'Единицы расходных материалов', text: 'кг, л, шт. — для норм и расхода материалов', count: settings.consumableUnits.length },
-    { href: '#/objects', title: 'Объекты и места', text: 'Газон, сад, грядки, места на участке', count: counts?.objects },
-    { href: '#/objects?view=groups', title: 'Группы растений', text: 'Хвойные, ягодные кусты, гортензии…', count: counts?.groups },
+    { href: '#/objects?from=dictionaries', title: 'Объекты и места', text: 'Газон, сад, грядки, места на участке', count: counts?.objects },
+    { href: '#/objects?view=groups&from=dictionaries', title: 'Группы растений', text: 'Хвойные, ягодные кусты, гортензии…', count: counts?.groups },
     { href: '#/consumables', title: 'Расходные материалы', text: 'Удобрения, средства, семена: нормы, описания, ссылки', count: counts?.consumables },
     { href: '#/signs', title: 'Народные приметы', text: 'Приметы и советы по дням года', count: counts?.signs },
   ]

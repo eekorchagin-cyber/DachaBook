@@ -127,7 +127,7 @@ export function ConsumablesScreen() {
 
   if (editing) {
     return (
-      <Screen title="Расходные материалы" help="consumables" back="/more" tab="/more">
+      <Screen title="Расходные материалы" help="consumables" onBack={() => setEditing(null)} tab="/more">
         <ConsumableForm
           key={editing.id ?? 'new'}
           consumable={consumables.find((item) => item.id === editing.id)}
@@ -144,7 +144,7 @@ export function ConsumablesScreen() {
   const archived = consumables.filter((item) => !item.active).sort(byName)
 
   return (
-    <Screen title="Расходные материалы" help="consumables" back="/more" tab="/more">
+    <Screen title="Расходные материалы" help="consumables" back="/dictionaries" tab="/more">
       <div className="actions">
         <button type="button" className="button" onClick={() => setEditing({})}>
           + Добавить материал

@@ -149,7 +149,8 @@ function GroupForm({ group, objects, onClose }: { group?: PlantGroup; objects: C
   )
 }
 
-export function ObjectsScreen({ initialView = 'objects' }: { initialView?: 'objects' | 'groups' }) {
+/** fromDictionaries — открыт из «Ещё → Справочники»: стрелка назад ведёт туда. */
+export function ObjectsScreen({ initialView = 'objects', fromDictionaries = false }: { initialView?: 'objects' | 'groups'; fromDictionaries?: boolean }) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const [view, setView] = useState<'objects' | 'groups'>(initialView)
@@ -166,7 +167,7 @@ export function ObjectsScreen({ initialView = 'objects' }: { initialView?: 'obje
 
   if (editing) {
     return (
-      <Screen title="Объекты и растения" help="objects" tab="/objects">
+      <Screen title="Объекты и растения" help="objects" onBack={close} tab={fromDictionaries ? '/more' : '/objects'}>
         {editing.kind === 'object' ? (
           <ObjectForm key={editing.id ?? 'new'} object={objects.find((item) => item.id === editing.id)} onClose={close} />
         ) : (
@@ -177,7 +178,7 @@ export function ObjectsScreen({ initialView = 'objects' }: { initialView?: 'obje
   }
 
   return (
-    <Screen title="Объекты и растения" help="objects" tab="/objects">
+    <Screen title="Объекты и растения" help="objects" back={fromDictionaries ? '/dictionaries' : undefined} tab={fromDictionaries ? '/more' : '/objects'}>
       <div className="segmented" role="tablist" aria-label="Что показать">
         <button type="button" role="tab" aria-selected={view === 'objects'} className={view === 'objects' ? 'active' : ''} onClick={() => setView('objects')}>
           Объекты ухода ({active.length})
