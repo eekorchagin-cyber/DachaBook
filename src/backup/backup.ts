@@ -59,7 +59,13 @@ function stamp(date: Date): string {
 }
 
 /** Полная резервная копия: каждая запись — отдельный JSON, файлы — отдельно, без личных настроек и секретов. */
-export async function buildBackup(database: DiaryDatabase, appVersion: string): Promise<{ blob: Blob; fileName: string; manifest: BackupManifest }> {
+/** originals: false — снимок для облака: оригиналы там лежат отдельными файлами, копия всё равно отмечается неполной. */
+export async function buildBackup(
+  database: DiaryDatabase,
+  appVersion: string,
+  options: { originals?: boolean } = {},
+): Promise<{ blob: Blob; fileName: string; manifest: BackupManifest }> {
+  const withOriginals = options.originals ?? true
   const entries: Zippable = {}
   const counts: Record<string, number> = {}
   const missingOriginals: string[] = []
@@ -72,7 +78,7 @@ export async function buildBackup(database: DiaryDatabase, appVersion: string): 
 
   for (const file of (await database.files.toArray()) as StoredFile[]) {
     const content = await database.fileContents.get(file.id)
-    if (content?.original) entries[`files/originals/${file.id}${extension(file.fileName)}`] = [new Uint8Array(await content.original.arrayBuffer()), { level: 0 }]
+    if (withOriginals && content?.original) entries[`files/originals/${file.id}${extension(file.fileName)}`] = [new Uint8Array(await content.original.arrayBuffer()), { level: 0 }]
     else missingOriginals.push(file.id)
     if (content?.thumb) entries[`files/thumbs/${file.id}.jpg`] = [new Uint8Array(await content.thumb.arrayBuffer()), { level: 0 }]
   }

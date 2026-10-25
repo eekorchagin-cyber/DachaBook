@@ -22,6 +22,30 @@ export interface SettingRow {
   value: unknown
 }
 
+/** Что облако знает о записи: ревизия и md5 её файла; для файлов — отправлены ли оригинал и уменьшенная копия. */
+export interface SyncRecord {
+  key: string
+  revision?: string
+  remoteMd5?: string
+  purged?: boolean
+  /** Запись окончательно удалена здесь, надгробие ещё не отправлено в облако. */
+  tombstonePending?: boolean
+  originalUploaded?: boolean
+  thumbUploaded?: boolean
+}
+
+/** Запись, изменённая и здесь, и в облаке: обе версии хранятся до решения пользователя. */
+export interface ConflictRecord {
+  id: string
+  key: string
+  collection: string
+  docId: string
+  local: Record<string, unknown>
+  remote: Record<string, unknown>
+  remoteMd5: string
+  detectedAt: string
+}
+
 /** Снимок документов перед массовыми изменениями (импорт); файлы не дублируются — импорт их не меняет. */
 export interface Snapshot {
   id: string
@@ -44,6 +68,8 @@ export class DiaryDatabase extends Dexie {
   folkSigns!: EntityTable<FolkSign, 'id'>
   settings!: EntityTable<SettingRow, 'key'>
   snapshots!: EntityTable<Snapshot, 'id'>
+  syncState!: EntityTable<SyncRecord, 'key'>
+  conflicts!: EntityTable<ConflictRecord, 'id'>
 
   constructor(name = 'dachabook') {
     super(name)
@@ -60,6 +86,7 @@ export class DiaryDatabase extends Dexie {
     })
     this.version(2).stores({ snapshots: 'id, createdAt' })
     this.version(3).stores({ consumables: 'id, name, active, deletedAt', folkSigns: 'id, month, deletedAt' })
+    this.version(4).stores({ syncState: 'key', conflicts: 'id, &key' })
   }
 }
 
