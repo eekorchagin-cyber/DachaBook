@@ -4,6 +4,7 @@ import type { PhotoPosition } from '../app/store'
 import { versionLabel } from '../app/version'
 import { compareEvents } from '../domain/diaryFilter'
 import { db } from '../storage/db'
+import { syncSummary, useSyncStatus } from '../sync/runner'
 import { AutoBackupWarning } from '../ui/AutoBackup'
 import { EmptyState, Screen } from '../ui/Screen'
 import { EventCard } from './diary/EventCard'
@@ -30,6 +31,7 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
           </a>
         </p>
       )}
+      <SyncLine />
       <AutoBackupWarning />
       <div className="quick-actions">
         <a className="button big" href="#/diary/new">
@@ -66,5 +68,16 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
       )}
       <p className="version app-version">{versionLabel()}</p>
     </Screen>
+  )
+}
+
+function SyncLine() {
+  const status = useSyncStatus()
+  if (!status.connected) return null
+  const summary = syncSummary(status)
+  return (
+    <a className={summary.warning ? 'sync-line warning' : 'sync-line'} href={status.conflicts > 0 ? '#/conflicts' : '#/sync'}>
+      ☁ {summary.text}
+    </a>
   )
 }

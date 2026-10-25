@@ -14,12 +14,14 @@ import { PlanScreen } from './screens/import/PlanScreen'
 import { LibraryScreen } from './screens/library/LibraryScreen'
 import { ReferenceEditor, ReferenceView } from './screens/library/ReferenceScreen'
 import { BackupScreen } from './screens/BackupScreen'
+import { ConflictsScreen } from './screens/ConflictsScreen'
 import { ConsumablesScreen } from './screens/ConsumablesScreen'
 import { DictionariesScreen, DictionaryScreen } from './screens/DictionariesScreen'
 import { FolkSignsScreen } from './screens/FolkSignsScreen'
 import { MoreScreen, TrashScreen } from './screens/MoreScreen'
 import { ObjectsScreen } from './screens/ObjectsScreen'
 import { SettingsScreen, WelcomeScreen } from './screens/SettingsScreen'
+import { SyncScreen } from './screens/SyncScreen'
 
 export default function App() {
   const route = useRoute()
@@ -75,6 +77,10 @@ export default function App() {
       return <BackupScreen />
     case 'trash':
       return <TrashScreen />
+    case 'sync':
+      return <SyncScreen />
+    case 'conflicts':
+      return <ConflictsScreen />
     case 'consumables':
       return <ConsumablesScreen />
     case 'signs':

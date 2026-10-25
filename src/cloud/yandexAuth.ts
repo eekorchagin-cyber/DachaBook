@@ -4,6 +4,7 @@ import { authorizeUrl, readTokenFromHash, type YandexToken } from './yandexDisk'
 const TOKEN_KEY = 'dachabook-yandex-token'
 const CLIENT_KEY = 'dachabook-yandex-client-id'
 const STATE_KEY = 'dachabook-yandex-state'
+const RETURN_KEY = 'dachabook-yandex-return'
 
 export function getClientId(): string {
   return YANDEX_CLIENT_ID || localStorage.getItem(CLIENT_KEY) || ''
@@ -27,7 +28,9 @@ export function forgetToken(): void {
   localStorage.removeItem(TOKEN_KEY)
 }
 
-export function startLogin(clientId: string): void {
+/** returnTo — экран, на который вернуться после входа (лаборатория или «Облако»). */
+export function startLogin(clientId: string, returnTo = '#/lab'): void {
+  localStorage.setItem(RETURN_KEY, returnTo)
   const state = crypto.randomUUID()
   sessionStorage.setItem(STATE_KEY, state)
   localStorage.setItem(STATE_KEY, state)
@@ -47,7 +50,8 @@ export type OAuthOutcome =
 export function consumeOAuthRedirect(): OAuthOutcome {
   const parsed = readTokenFromHash(location.hash)
   if (!parsed) return { kind: 'none' }
-  history.replaceState(null, '', `${location.pathname}${location.search}#/lab`)
+  history.replaceState(null, '', `${location.pathname}${location.search}${localStorage.getItem(RETURN_KEY) ?? '#/lab'}`)
+  localStorage.removeItem(RETURN_KEY)
   if ('error' in parsed) return { kind: 'error', message: parsed.error }
 
   const sessionState = sessionStorage.getItem(STATE_KEY)

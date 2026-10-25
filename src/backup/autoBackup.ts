@@ -1,5 +1,6 @@
 import { errorText } from '../lib/format'
-import { db, DOC_TABLES } from '../storage/db'
+import { onLocalChange } from '../storage/changes'
+import { db } from '../storage/db'
 import { buildBackup } from './backup'
 
 /** Минимум File System Access API (Chrome и Edge на компьютере), которого нет в стандартных типах. */
@@ -143,18 +144,7 @@ export async function startAutoBackup(): Promise<void> {
     localStorage.setItem(DIRTY_KEY, '1')
     schedule()
   }
-  for (const name of [...DOC_TABLES, 'fileContents'] as const) {
-    const table = db.table(name)
-    table.hook('creating', () => {
-      mark()
-    })
-    table.hook('updating', () => {
-      mark()
-    })
-    table.hook('deleting', () => {
-      mark()
-    })
-  }
+  onLocalChange(mark)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && configured && localStorage.getItem(DIRTY_KEY)) {
       clearTimeout(timer)

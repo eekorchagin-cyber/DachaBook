@@ -184,4 +184,16 @@ export class YandexDisk {
   async remove(path: string): Promise<void> {
     await this.request('DELETE', '/resources', { path, permanently: 'true' })
   }
+
+  /** Страница содержимого папки с сортировкой (например, «-modified» — сначала изменённые позже). */
+  async listPage(path: string, options: { sort?: string; limit: number; offset: number }): Promise<ResourceMeta[]> {
+    const result = await this.request<{ _embedded?: { items: ResourceMeta[] } }>('GET', '/resources', {
+      path,
+      limit: String(options.limit),
+      offset: String(options.offset),
+      ...(options.sort ? { sort: options.sort } : {}),
+      fields: '_embedded.items.name,_embedded.items.path,_embedded.items.type,_embedded.items.size,_embedded.items.md5,_embedded.items.modified',
+    })
+    return result._embedded?.items ?? []
+  }
 }

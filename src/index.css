@@ -1188,3 +1188,33 @@ details.card[open] > summary::before {
 .dictionary-row .error {
   flex-basis: 100%;
 }
+
+.sync-line {
+  display: block;
+  margin: -4px 0 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.sync-line.warning {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.conflict-versions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.conflict-version {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+}
+
+.conflict-version p {
+  margin: 6px 0 0;
+}

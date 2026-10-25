@@ -5,6 +5,7 @@ import type { StoredFile } from '../domain/types'
 import { sha256Hex } from '../lib/hash'
 import { makeThumbnail, type Thumbnail } from '../photos/thumbnail'
 import { db } from '../storage/db'
+import { requestOriginal } from '../sync/runner'
 
 /** Одинаковые файлы (по SHA-256) хранятся один раз и переиспользуются. */
 async function findSame(sha256: string, role: StoredFile['role']): Promise<StoredFile | undefined> {
@@ -66,7 +67,12 @@ export async function addAttachment(blob: Blob, fileName: string): Promise<Store
 
 /** Временный адрес содержимого файла для <img> или открытия; освобождается при размонтировании. */
 export function useFileUrl(id: string | undefined, variant: 'thumb' | 'original'): string | undefined {
-  const content = useLiveQuery(() => (id ? db.fileContents.get(id) : undefined), [id])
+  const content = useLiveQuery(async () => (id ? ((await db.fileContents.get(id)) ?? null) : null), [id])
+  const missingOriginal = variant === 'original' && !!id && content !== undefined && !content?.original
+  // Оригинала нет на устройстве (пришла только уменьшенная копия) — скачать из облака.
+  useEffect(() => {
+    if (missingOriginal && id) void requestOriginal(id)
+  }, [missingOriginal, id])
   const blob = variant === 'thumb' ? (content?.thumb ?? content?.original) : content?.original
   const url = useMemo(() => (blob ? URL.createObjectURL(blob) : undefined), [blob])
   useEffect(() => () => {
