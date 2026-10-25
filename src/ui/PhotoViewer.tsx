@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useFileUrl } from '../files/files'
 
 /** Просмотр фото внутри приложения (в том числе в режиме программы), с пояснением и листанием. */
@@ -7,6 +7,7 @@ export function PhotoViewer(props: { ids: string[]; index: number; notes?: Recor
   const url = useFileUrl(id, 'original')
   const thumb = useFileUrl(id, 'thumb')
   const count = props.ids.length
+  const [broken, setBroken] = useState<string | null>(null)
   const { onIndex, onClose, index } = props
 
   useEffect(() => {
@@ -29,7 +30,13 @@ export function PhotoViewer(props: { ids: string[]; index: number; notes?: Recor
           ×
         </button>
       </div>
-      {(url ?? thumb) && <img className="viewer-image" src={url ?? thumb} alt={props.notes?.[id] ?? 'Фото'} onClick={(event) => event.stopPropagation()} />}
+      {broken === id ? (
+        <p className="viewer-caption">Этот браузер не показывает формат HEIC. Фото сохранено без изменений и откроется в Safari и на iPhone.</p>
+      ) : (
+        (url ?? thumb) && (
+          <img className="viewer-image" src={url ?? thumb} alt={props.notes?.[id] ?? 'Фото'} onError={() => setBroken(id)} onClick={(event) => event.stopPropagation()} />
+        )
+      )}
       {props.notes?.[id] && <p className="viewer-caption">{props.notes[id]}</p>}
       {count > 1 && (
         <div className="viewer-nav" onClick={(event) => event.stopPropagation()}>

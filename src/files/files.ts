@@ -3,7 +3,7 @@ import { useEffect, useMemo } from 'react'
 import { repo } from '../app/store'
 import type { StoredFile } from '../domain/types'
 import { sha256Hex } from '../lib/hash'
-import { makeThumbnail } from '../photos/thumbnail'
+import { makeThumbnail, type Thumbnail } from '../photos/thumbnail'
 import { db } from '../storage/db'
 
 /** Одинаковые файлы (по SHA-256) хранятся один раз и переиспользуются. */
@@ -11,24 +11,40 @@ async function findSame(sha256: string, role: StoredFile['role']): Promise<Store
   return (await db.files.where('sha256').equals(sha256).toArray()).find((file) => file.role === role && !file.deletedAt)
 }
 
+/** Фото по типу или расширению: перетаскивание из «Фото» и Finder иногда не сообщает тип файла. */
+export function isImageFile(file: File): boolean {
+  return file.type.startsWith('image/') || /\.(jpe?g|png|heic|heif|webp|gif|tiff?|bmp)$/i.test(file.name)
+}
+
+export function isHeic(blob: Blob, fileName: string): boolean {
+  return /image\/hei[cf]/i.test(blob.type) || /\.hei[cf]$/i.test(fileName)
+}
+
 export async function addPhoto(blob: Blob, fileName: string): Promise<StoredFile> {
   const sha256 = await sha256Hex(blob)
   const existing = await findSame(sha256, 'photo')
   if (existing) return existing
-  const thumb = await makeThumbnail(blob)
+  const heic = isHeic(blob, fileName)
+  let thumb: Thumbnail | undefined
+  try {
+    thumb = await makeThumbnail(blob)
+  } catch (error) {
+    // HEIC умеет показывать Safari, но не Chrome: оригинал сохраняется без миниатюры.
+    if (!heic) throw error
+  }
   const file = await repo.create('files', {
     role: 'photo',
     fileName,
-    mime: blob.type || 'image/jpeg',
+    mime: blob.type || (heic ? 'image/heic' : 'image/jpeg'),
     size: blob.size,
     sha256,
-    width: thumb.sourceWidth,
-    height: thumb.sourceHeight,
-    thumbWidth: thumb.width,
-    thumbHeight: thumb.height,
+    width: thumb?.sourceWidth,
+    height: thumb?.sourceHeight,
+    thumbWidth: thumb?.width,
+    thumbHeight: thumb?.height,
     uploadState: 'local',
   })
-  await db.fileContents.put({ id: file.id, original: blob, thumb: thumb.blob })
+  await db.fileContents.put({ id: file.id, original: blob, thumb: thumb?.blob })
   return file
 }
 

@@ -41,4 +41,11 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
+// Файл, брошенный мимо записи дневника, не должен открываться в окне вместо приложения.
+for (const type of ['dragover', 'drop'] as const) {
+  window.addEventListener(type, (event) => {
+    if (event.dataTransfer?.types.includes('Files')) event.preventDefault()
+  })
+}
+
 window.addEventListener('load', () => registerServiceWorker())

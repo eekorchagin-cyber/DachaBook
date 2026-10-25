@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { formatDate } from '../../domain/dates'
 import { EVENT_TYPES, measurementText, weatherText } from '../../domain/labels'
 import type { PhotoPosition } from '../../app/store'
@@ -8,13 +9,23 @@ import { WeatherBadge } from '../../ui/WeatherBadge'
 
 export function PhotoThumb({ id, onClick }: { id: string; onClick?: () => void }) {
   const url = useFileUrl(id, 'thumb')
+  const [broken, setBroken] = useState<string | null>(null)
   if (!url) return <span className="thumb placeholder" />
+  // Без миниатюры остаётся оригинал HEIC: Chrome его не показывает, Safari и iPhone — показывают.
+  const image =
+    broken === url ? (
+      <span className="thumb placeholder" title="Формат HEIC: откроется в Safari и на iPhone">
+        HEIC
+      </span>
+    ) : (
+      <img className="thumb" src={url} alt="Фото" onError={() => setBroken(url)} />
+    )
   return onClick ? (
     <button type="button" className="thumb-button" onClick={onClick}>
-      <img className="thumb" src={url} alt="Фото" />
+      {image}
     </button>
   ) : (
-    <img className="thumb" src={url} alt="Фото" />
+    image
   )
 }
 

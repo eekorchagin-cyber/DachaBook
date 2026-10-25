@@ -1,11 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { navigate } from '../../app/router'
 import { repo, type AppSettings } from '../../app/store'
 import { todayAtSite } from '../../domain/dates'
 import { findConsumable, resolveUses, rowProblems, UNITS, type ConsumableRow } from '../../domain/consumables'
 import type { Consumable, ConsumableUse, DiaryEvent, DocInput, EventType } from '../../domain/types'
-import { addAttachment, addPhoto } from '../../files/files'
+import { addAttachment, addPhoto, isImageFile } from '../../files/files'
 import { moonPhase } from '../../domain/moon'
 import { NoteField } from '../../ui/NoteField'
 import { PhotoViewer } from '../../ui/PhotoViewer'
@@ -177,7 +177,7 @@ function EventForm({ event, initialType, settings, consumables }: { event?: Diar
   }
 
   // Каждый файл добавляется в запись сразу после обработки; пока идёт обработка, сохранять нельзя.
-  const addFilesTo = async (files: FileList | null, key: 'photoIds' | 'attachmentIds') => {
+  const addFilesTo = async (files: FileList | File[] | null, key: 'photoIds' | 'attachmentIds') => {
     const list = Array.from(files ?? [])
     setProcessing((count) => count + list.length)
     for (const file of list) {
@@ -193,6 +193,50 @@ function EventForm({ event, initialType, settings, consumables }: { event?: Diar
   }
   const addPhotos = (files: FileList | null) => addFilesTo(files, 'photoIds')
   const addFiles = (files: FileList | null) => addFilesTo(files, 'attachmentIds')
+  const [dragging, setDragging] = useState(false)
+  const addDropped = useEffectEvent((files: File[]) => {
+    void addFilesTo(files.filter(isImageFile), 'photoIds')
+    void addFilesTo(files.filter((file) => !isImageFile(file)), 'attachmentIds')
+  })
+
+  // Перетаскивание из «Фото» и Finder в любое место записи и вставка скопированного фото (⌘V).
+  useEffect(() => {
+    const hasFiles = (event: DragEvent) => !!event.dataTransfer?.types.includes('Files')
+    let depth = 0
+    const enter = (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      depth++
+      setDragging(true)
+    }
+    const leave = (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      depth = Math.max(0, depth - 1)
+      if (depth === 0) setDragging(false)
+    }
+    const drop = (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      depth = 0
+      setDragging(false)
+      addDropped(Array.from(event.dataTransfer?.files ?? []))
+    }
+    const paste = (event: ClipboardEvent) => {
+      const files = Array.from(event.clipboardData?.files ?? [])
+      if (files.length === 0) return
+      event.preventDefault()
+      addDropped(files)
+    }
+    window.addEventListener('dragenter', enter)
+    window.addEventListener('dragleave', leave)
+    window.addEventListener('drop', drop)
+    window.addEventListener('paste', paste)
+    return () => {
+      window.removeEventListener('dragenter', enter)
+      window.removeEventListener('dragleave', leave)
+      window.removeEventListener('drop', drop)
+      window.removeEventListener('paste', paste)
+    }
+  }, [])
 
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'ru')
   const canSplitEvent = !!event && !dirty && draft.type !== 'measurement' && splitSentences(draft.comment).length > 1
@@ -325,8 +369,10 @@ function EventForm({ event, initialType, settings, consumables }: { event?: Diar
         </p>
       </section>
 
+      {dragging && <div className="drop-overlay">Отпустите, чтобы добавить фото и файлы в запись</div>}
       <section className="card">
         <h2>Фотографии и файлы</h2>
+        <p className="hint desktop-only">На компьютере фото можно перетащить сюда из «Фото» или Finder, а скопированное — вставить сочетанием ⌘V (Ctrl+V).</p>
         {draft.photoIds.length > 0 && (
           <div className="photo-grid">
             {draft.photoIds.map((photoId, index) => (
