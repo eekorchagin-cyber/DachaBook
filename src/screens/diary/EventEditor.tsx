@@ -504,7 +504,7 @@ function ConsumableRows({ rows, consumables, units, onChange }: { rows: Consumab
         + Материал
       </button>
       {rows.some((row) => row.name.trim() && !findConsumable(consumables, row.name)) && (
-        <p className="hint">Новые материалы добавятся в «Ещё → Расходные материалы» при сохранении записи.</p>
+        <p className="hint">Новые материалы добавятся в «Ещё → Справочники → Расходные материалы» при сохранении записи.</p>
       )}
     </fieldset>
   )
