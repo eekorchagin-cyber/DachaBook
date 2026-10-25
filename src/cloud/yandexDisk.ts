@@ -38,7 +38,7 @@ export interface RetryOptions {
 }
 
 /**
- * Повторяет действие при сетевом сбое, 429 и ошибках сервера 5xx.
+ * Повторяет действие при сетевом сбое, занятом ресурсе (423), 429 и ошибках сервера 5xx.
  * Пауза перед повтором нужна, чтобы сервер успел отпустить оборванную передачу.
  */
 export async function withRetry<T>(action: () => Promise<T>, options: RetryOptions = {}): Promise<[T, number]> {
@@ -50,7 +50,8 @@ export async function withRetry<T>(action: () => Promise<T>, options: RetryOptio
       return [await action(), attempt]
     } catch (error) {
       options.onFailure?.(attempt, performance.now() - start, error)
-      const retriable = error instanceof YandexDiskError && (error.status === 0 || error.status === 429 || error.status >= 500)
+      // 423 — ресурс занят другой операцией Диска (например, ещё обрабатывается прошлая загрузка): проходит сам.
+      const retriable = error instanceof YandexDiskError && (error.status === 0 || error.status === 423 || error.status === 429 || error.status >= 500)
       if (!retriable || attempt >= attempts) throw error
       await new Promise((resolve) => setTimeout(resolve, delays[Math.min(attempt - 1, delays.length - 1)]))
     }

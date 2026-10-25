@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { withRetry, YandexDiskError } from '../cloud/yandexDisk'
 import { YandexAuthError, YandexCloud } from './yandexCloud'
 
 type Handler = (url: URL, init?: RequestInit) => Response | Promise<Response>
@@ -73,5 +74,29 @@ describe('адаптер Яндекс Диска', () => {
   it('устаревший вход — понятная ошибка с просьбой войти снова', async () => {
     mockFetch(() => json({ error: 'UnauthorizedError', message: 'Не авторизован.' }, 401))
     await expect(new YandexCloud('token').listChanges('docs/events')).rejects.toBeInstanceOf(YandexAuthError)
+  })
+
+  it('повторяет запрос, если ресурс занят другой операцией Диска (423), но не повторяет отказ в доступе', async () => {
+    let calls = 0
+    const [value, attempts] = await withRetry(
+      async () => {
+        if (++calls < 3) throw new YandexDiskError(423, 'Ресурс заблокирован. Возможно, над ним выполняется другая операция.')
+        return 'ok'
+      },
+      { attempts: 5, delaysMs: [0] },
+    )
+    expect([value, attempts]).toEqual(['ok', 3])
+
+    let denied = 0
+    await expect(
+      withRetry(
+        async () => {
+          denied++
+          throw new YandexDiskError(403, 'Нет доступа')
+        },
+        { attempts: 5, delaysMs: [0] },
+      ),
+    ).rejects.toThrow('Нет доступа')
+    expect(denied).toBe(1)
   })
 })
