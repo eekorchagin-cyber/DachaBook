@@ -8,6 +8,8 @@ import { locationText, parseLocation, roundLocation, type PlotLocation } from '.
 import { errorText } from '../lib/format'
 import { db } from '../storage/db'
 import { Screen } from '../ui/Screen'
+import { ActionButton } from '../ui/Section'
+import { fillMissingWeather, missingWeatherCount } from '../weather/service'
 
 const THEMES: { value: ThemeSetting; label: string }[] = [
   { value: 'system', label: 'Как в системе' },
@@ -148,8 +150,40 @@ function PlotSection({ settings }: { settings: AppSettings }) {
       {message && <p className="hint">{message}</p>}
       <p className="hint">
         Адрес и координаты хранятся только на ваших устройствах и в ваших резервных копиях — в коде приложения и на GitHub их нет. «Определить по месту» нажимайте, находясь на участке.
+        Для погоды сервису Open-Meteo передаются только округлённые координаты.
       </p>
+      {settings.plotLocation && <MissingWeather />}
     </section>
+  )
+}
+
+/** Погода для старых записей (импорт из Evernote, записи без связи): вручную, на одном устройстве. */
+function MissingWeather() {
+  const count = useLiveQuery(() => missingWeatherCount(), [])
+  const [message, setMessage] = useState('')
+  if (!count && !message) return null
+  return (
+    <div className="missing-weather">
+      {!!count && (
+        <>
+          <p className="hint">
+            Записей без погоды: {count}. Погода для них берётся из архива Open-Meteo (модельная оценка, а не измерение на участке) — одним запросом на год.
+            Запускайте на одном устройстве: остальные получат записи с погодой через облако.
+          </p>
+          <ActionButton
+            secondary
+            onRun={async () => {
+              if (!confirm(`Подставить погоду в ${count} записей? Записи изменятся и уйдут в облако.`)) return
+              const result = await fillMissingWeather(setMessage)
+              setMessage(`Погода подставлена в записей: ${result.filled}${result.skipped ? `; без данных в архиве: ${result.skipped}` : ''}.`)
+            }}
+          >
+            Подставить погоду в старые записи
+          </ActionButton>
+        </>
+      )}
+      {message && <p className="notice">{message}</p>}
+    </div>
   )
 }
 

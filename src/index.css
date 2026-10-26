@@ -1307,3 +1307,42 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
     grid-column: 1 / -1;
   }
 }
+
+.weather-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  margin: 8px 0;
+}
+
+.weather-now-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.weather-now-temp {
+  font-size: 1.8rem;
+  font-weight: 600;
+}
+
+.weather-days {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.weather-days li {
+  display: grid;
+  grid-template-columns: 5.5em 2em 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+}
+
+.weather-day-name {
+  color: var(--muted);
+}

@@ -18,13 +18,14 @@ export function weatherText(event: DiaryEvent): string | null {
   const weather = event.weather
   if (!weather) return null
   const parts: string[] = []
-  if (weather.airTemperature !== undefined) parts.push(`воздух ${weather.airTemperature > 0 ? '+' : ''}${weather.airTemperature} °C`)
+  const number = (value: number) => value.toLocaleString('ru-RU', { maximumFractionDigits: 1 })
+  if (weather.airTemperature !== undefined) parts.push(`воздух ${temperatureText(weather.airTemperature)}`)
   else if (weather.airTemperatureMin !== undefined && weather.airTemperatureMax !== undefined) {
-    parts.push(`воздух от ${weather.airTemperatureMin} до ${weather.airTemperatureMax} °C`)
+    parts.push(`воздух от ${temperatureText(weather.airTemperatureMin)} до ${temperatureText(weather.airTemperatureMax)}`)
   }
-  if (weather.precipitationMm !== undefined) parts.push(`осадки ${weather.precipitationMm} мм`)
-  if (weather.humidityPercent !== undefined) parts.push(`влажность ${weather.humidityPercent}%`)
-  if (weather.windMs !== undefined) parts.push(`ветер ${weather.windMs} м/с`)
+  if (weather.precipitationMm !== undefined) parts.push(weather.precipitationMm > 0 ? `осадки ${number(weather.precipitationMm)} мм` : 'без осадков')
+  if (weather.humidityPercent !== undefined) parts.push(`влажность ${Math.round(weather.humidityPercent)}%`)
+  if (weather.windMs !== undefined) parts.push(`ветер ${number(weather.windMs)} м/с`)
   return parts.join(', ')
 }
 

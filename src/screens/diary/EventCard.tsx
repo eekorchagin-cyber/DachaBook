@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { formatDate } from '../../domain/dates'
-import { EVENT_TYPES, measurementText, weatherText } from '../../domain/labels'
+import { EVENT_TYPES, measurementText } from '../../domain/labels'
 import type { PhotoPosition } from '../../app/store'
 import { quantityText } from '../../domain/consumables'
 import type { CareObject, Consumable, DiaryEvent } from '../../domain/types'
@@ -77,7 +77,6 @@ export function EventCard({
         <div className="event-main">
           {event.workKind && <div className="tag">{event.workKind}</div>}
           {event.type === 'measurement' && <p>{measurementText(event)}</p>}
-          {event.weather && <p className="muted small">☁ {weatherText(event)}</p>}
           {event.comment && <p className="event-text">{event.comment}</p>}
           {event.consumables && event.consumables.length > 0 && (
             <p className="small muted">

@@ -69,6 +69,9 @@ export interface WeatherSnapshot {
   fetchedAt: string
   /** За час события или суточная сводка, если время события не указано. */
   period: 'hour' | 'day'
+  /** Дата и час, для которых получены данные: при смене даты или времени записи погода запрашивается заново. */
+  forDate?: string
+  forTime?: string
   /** Осадки и облачность значком на карточке записи. */
   condition?: WeatherCondition
   airTemperature?: number

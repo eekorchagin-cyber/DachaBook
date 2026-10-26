@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import { ensureSeeded } from './app/seed'
 import { startAutoBackup } from './backup/autoBackup'
+import { startWeather } from './weather/service'
 import { startSync } from './sync/runner'
 import { consumeOAuthRedirect } from './cloud/yandexAuth'
 import { saveResult } from './lab/results'
@@ -33,6 +34,7 @@ async function detectOfflineLaunch(): Promise<void> {
 void detectOfflineLaunch()
 void ensureSeeded()
 void startAutoBackup()
+startWeather()
 void startSync()
 
 createRoot(document.getElementById('root')!).render(

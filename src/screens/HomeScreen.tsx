@@ -6,6 +6,7 @@ import { compareEvents } from '../domain/diaryFilter'
 import { db } from '../storage/db'
 import { syncSummary, useSyncStatus } from '../sync/runner'
 import { AutoBackupWarning } from '../ui/AutoBackup'
+import { WeatherCard } from '../ui/WeatherCard'
 import { EmptyState, Screen } from '../ui/Screen'
 import { EventCard } from './diary/EventCard'
 import { TodaySignCard } from './FolkSignsScreen'
@@ -41,16 +42,7 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
           🌡 Измерения почвы
         </a>
       </div>
-      <section className="card">
-        <h2>Погода на участке</h2>
-        <dl className="facts">
-          <dt>Температура воздуха</dt>
-          <dd>—</dd>
-          <dt>Прогноз</dt>
-          <dd>—</dd>
-        </dl>
-        <p className="hint">Текущая погода и прогноз для участка появятся на этапе 4.</p>
-      </section>
+      <WeatherCard />
       {signs && <TodaySignCard signs={signs} />}
       <section className="card">
         <h2>Ближайшие работы</h2>

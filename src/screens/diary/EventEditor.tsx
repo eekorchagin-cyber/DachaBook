@@ -16,7 +16,9 @@ import { db } from '../../storage/db'
 import { AttachmentRow } from '../../ui/AttachmentRow'
 import { Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
-import { EVENT_TYPES, weatherText } from '../../domain/labels'
+import { EVENT_TYPES, WEATHER_CONDITIONS, weatherText } from '../../domain/labels'
+import { processWeatherQueue, queueWeather } from '../../weather/service'
+import { needsWeather, snapshotKindLabel } from '../../weather/snapshot'
 import { makeParts, type PartDraft } from '../../import/parts'
 import { splitSentences } from '../../import/split'
 import { SplitEditor } from '../../ui/SplitEditor'
@@ -168,8 +170,11 @@ function EventForm({ event, initialType, settings, consumables }: { event?: Diar
         draft.type === 'work'
           ? await resolveUses(draft.consumables, consumables, (name, unit) => repo.create('consumables', { name, unit, objectIds: draft.objectIds, active: true }))
           : undefined
-      if (event) await repo.update('events', event.id, toInput(draft, event, uses), event.revision)
-      else await repo.create('events', toInput(draft, undefined, uses))
+      const saved = event ? await repo.update('events', event.id, toInput(draft, event, uses), event.revision) : await repo.create('events', toInput(draft, undefined, uses))
+      if (needsWeather(saved)) {
+        await queueWeather(saved.id)
+        void processWeatherQueue()
+      }
       setInitial(JSON.stringify(draft))
       navigate('/diary')
     } catch (caught) {
@@ -352,22 +357,25 @@ function EventForm({ event, initialType, settings, consumables }: { event?: Diar
           <h2>Погода на участке</h2>
           <WeatherBadge event={{ date: draft.date || todayAtSite().date, weather: event?.weather }} />
         </div>
-        {event?.weather ? (
-          <p>☁ {weatherText(event)}</p>
+        {event?.weather && !needsWeather({ date: draft.date, time: draft.time || undefined, weather: event.weather }) ? (
+          <>
+            <p>
+              {event.weather.condition && `${WEATHER_CONDITIONS[event.weather.condition].icon} ${WEATHER_CONDITIONS[event.weather.condition].label}, `}
+              {weatherText(event)}
+            </p>
+            <p className="small muted">{snapshotKindLabel(event.weather)}</p>
+          </>
         ) : (
-          <dl className="facts">
-            <dt>Осадки</dt>
-            <dd>—</dd>
-            <dt>Температура воздуха</dt>
-            <dd>—</dd>
-            <dt>Луна</dt>
-            <dd>{draft.date ? moonPhase(draft.date).name : '—'}</dd>
-          </dl>
+          <p className="hint">
+            {settings.plotLocation
+              ? 'Погода на дату и время записи подставится сама после сохранения, без интернета — когда появится связь. Для записи задним числом — из архива погоды, на даты дальше недели вперёд — когда дата приблизится.'
+              : 'Чтобы погода подставлялась сама, укажите координаты участка: «Ещё → Настройки → Участок».'}
+          </p>
         )}
-        <p className="hint">
-          На этапе 4 температура воздуха, осадки, влажность и ветер на дату и время записи будут подставляться автоматически из Open-Meteo и
-          сохраняться в записи. Для записей задним числом — из архива погоды.
-        </p>
+        <dl className="facts">
+          <dt>Луна</dt>
+          <dd>{draft.date ? moonPhase(draft.date).name : '—'}</dd>
+        </dl>
       </section>
 
       {dragging && <div className="drop-overlay">Отпустите, чтобы добавить фото и файлы в запись</div>}
