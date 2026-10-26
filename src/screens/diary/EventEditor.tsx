@@ -20,6 +20,7 @@ import { EVENT_TYPES, weatherText } from '../../domain/labels'
 import { makeParts, type PartDraft } from '../../import/parts'
 import { splitSentences } from '../../import/split'
 import { SplitEditor } from '../../ui/SplitEditor'
+import { SuggestInput } from '../../ui/SuggestInput'
 import { PhotoThumb } from './EventCard'
 import { splitEvent } from './splitEvent'
 
@@ -477,12 +478,12 @@ function ConsumableRows({ rows, consumables, units, onChange }: { rows: Consumab
         const known = findConsumable(consumables, row.name)
         return (
           <div key={index} className="consumable-row">
-            <input aria-label="Материал" list="consumable-names" placeholder="Материал" value={row.name} onChange={(change) => set(index, { name: change.target.value })} />
+            <SuggestInput ariaLabel="Материал" placeholder="Материал" value={row.name} options={names} onChange={(name) => set(index, { name })} />
             <input aria-label="Количество" inputMode="decimal" placeholder="Кол-во" value={row.quantity} onChange={(change) => set(index, { quantity: change.target.value })} />
             {known ? (
               <span className="consumable-unit">{known.unit}</span>
             ) : (
-              <input aria-label="Единица" list="consumable-units" placeholder="ед." value={row.unit} onChange={(change) => set(index, { unit: change.target.value })} />
+              <SuggestInput ariaLabel="Единица" placeholder="ед." value={row.unit} options={units} onChange={(unit) => set(index, { unit })} alignEnd />
             )}
             <button type="button" className="icon-button" aria-label="Убрать материал" onClick={() => onChange(rows.filter((_, current) => current !== index))}>
               ×
@@ -490,16 +491,6 @@ function ConsumableRows({ rows, consumables, units, onChange }: { rows: Consumab
           </div>
         )
       })}
-      <datalist id="consumable-names">
-        {names.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
-      <datalist id="consumable-units">
-        {units.map((unit) => (
-          <option key={unit} value={unit} />
-        ))}
-      </datalist>
       <button type="button" className="button secondary" onClick={() => onChange([...rows, { name: '', quantity: '', unit: '' }])}>
         + Материал
       </button>

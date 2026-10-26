@@ -6,6 +6,7 @@ import { todayAtSite } from '../domain/dates'
 import type { CareObject, Consumable, DocInput } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
+import { SuggestInput } from '../ui/SuggestInput'
 import { ActionButton } from '../ui/Section'
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru')
@@ -52,12 +53,7 @@ function ConsumableForm({ consumable, consumables, objects, onClose }: { consuma
       <div className="row">
         <label className="field">
           Единица
-          <input list="consumable-units" value={unit} onChange={(event) => setUnit(event.target.value)} />
-          <datalist id="consumable-units">
-            {units.map((item) => (
-              <option key={item} value={item} />
-            ))}
-          </datalist>
+          <SuggestInput value={unit} options={units} onChange={setUnit} />
         </label>
         <label className="field">
           Нужно на сезон

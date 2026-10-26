@@ -1243,3 +1243,66 @@ details.card[open] > summary::before {
 body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='button']), textarea, select, [contenteditable='true']):focus) .tabbar {
   display: none;
 }
+
+.suggest {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.suggest > input {
+  width: 100%;
+}
+
+.suggest-list {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 15;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(320px, 90vw);
+  max-height: 260px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+}
+
+.suggest-list button {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.suggest-list button:hover,
+.suggest-list button:focus-visible {
+  background: var(--bg);
+}
+
+.suggest-list.end {
+  left: auto;
+  right: 0;
+}
+
+/* Телефон: название материала — во всю ширину, количество и единица — строкой ниже. */
+@media (max-width: 599px) {
+  .consumable-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  .consumable-row > :first-child {
+    grid-column: 1 / -1;
+  }
+}
