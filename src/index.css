@@ -57,8 +57,28 @@
   box-sizing: border-box;
 }
 
+/*
+ * iPhone (П-16): страница не сдвигается вбок и не «тянется» у края — иначе верхняя строка и нижнее меню уезжают
+ * при прокрутке; текст не увеличивается системой сам; длинные ссылки из импорта переносятся.
+ * Автоувеличение при нажатии на мелкое поле ввода запрещено в index.html (maximum-scale), увеличение пальцами остаётся.
+ */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body {
+  overflow-x: clip;
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
+}
+
+.content {
+  overflow-wrap: anywhere;
 }
 
 .screen {
