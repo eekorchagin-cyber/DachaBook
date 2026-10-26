@@ -4,7 +4,8 @@ import { navigate } from '../../app/router'
 import { repo, type AppSettings } from '../../app/store'
 import { todayAtSite } from '../../domain/dates'
 import { findConsumable, resolveUses, rowProblems, type ConsumableRow } from '../../domain/consumables'
-import type { Consumable, ConsumableUse, DiaryEvent, DocInput, EventType } from '../../domain/types'
+import type { Consumable, ConsumableUse, DiaryEvent, DocInput, EventType, PlanWork } from '../../domain/types'
+import { setSeason } from '../../plan/actions'
 import { addAttachment, addPhoto, isImageFile } from '../../files/files'
 import { moonPhase } from '../../domain/moon'
 import { NoteField } from '../../ui/NoteField'
@@ -43,16 +44,18 @@ interface Draft {
   consumables: ConsumableRow[]
 }
 
-function toDraft(event: DiaryEvent | undefined, type: EventType, consumables: Consumable[]): Draft {
+function toDraft(event: DiaryEvent | undefined, type: EventType, consumables: Consumable[], plan?: PlanWork): Draft {
   const now = todayAtSite()
+  // Выполнение плановой работы: запись заполняется по работе, дату и подробности пользователь подтверждает.
+  const fromPlan = !event && plan
   return {
-    type: event?.type ?? type,
+    type: event?.type ?? (fromPlan ? 'work' : type),
     date: event?.date ?? now.date,
     time: event?.time ?? (type === 'measurement' ? now.time : ''),
-    objectIds: event?.objectIds ?? [],
-    plantGroupIds: event?.plantGroupIds ?? [],
-    workKind: event?.workKind ?? '',
-    comment: event?.comment ?? '',
+    objectIds: event?.objectIds ?? (fromPlan ? plan.objectIds : []),
+    plantGroupIds: event?.plantGroupIds ?? (fromPlan ? plan.plantGroupIds : []),
+    workKind: event?.workKind ?? (fromPlan ? (plan.workKind ?? '') : ''),
+    comment: event?.comment ?? (fromPlan ? plan.title : ''),
     photoIds: event?.photoIds ?? [],
     attachmentIds: event?.attachmentIds ?? [],
     temperature: event?.measurement?.temperature?.value.toString() ?? '',
@@ -71,7 +74,7 @@ function parseNumber(value: string): number | undefined {
   return value.trim() && Number.isFinite(parsed) ? parsed : undefined
 }
 
-function toInput(draft: Draft, event?: DiaryEvent, uses?: ConsumableUse[]): DocInput<DiaryEvent> {
+function toInput(draft: Draft, event?: DiaryEvent, uses?: ConsumableUse[], planWorkId?: string): DocInput<DiaryEvent> {
   const temperature = parseNumber(draft.temperature)
   const moisture = parseNumber(draft.moisture)
   return {
@@ -94,6 +97,7 @@ function toInput(draft: Draft, event?: DiaryEvent, uses?: ConsumableUse[]): DocI
     fileNotes: cleanNotes(draft),
     weather: event?.weather,
     consumables: draft.type === 'work' && uses && uses.length > 0 ? uses : undefined,
+    planWorkId: event?.planWorkId ?? planWorkId,
     source: event?.source,
   }
 }
@@ -119,10 +123,11 @@ function problems(draft: Draft): string[] {
   return list
 }
 
-export function EventEditor({ id, initialType, settings }: { id?: string; initialType: EventType; settings: AppSettings }) {
+export function EventEditor({ id, initialType, settings, planId }: { id?: string; initialType: EventType; settings: AppSettings; planId?: string }) {
   const event = useLiveQuery(async () => (id ? ((await db.events.get(id)) ?? null) : null), [id])
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), [])
-  if (event === undefined || consumables === undefined) return null
+  const plan = useLiveQuery(async () => (planId ? ((await db.planWorks.get(planId)) ?? null) : null), [planId])
+  if (event === undefined || consumables === undefined || plan === undefined) return null
   if (id && !event) {
     return (
       <Screen title="Запись дневника" tab="/diary" back="/diary">
@@ -130,14 +135,15 @@ export function EventEditor({ id, initialType, settings }: { id?: string; initia
       </Screen>
     )
   }
-  return <EventForm key={event?.id ?? 'new'} event={event ?? undefined} initialType={initialType} settings={settings} consumables={consumables} />
+  return <EventForm key={event?.id ?? 'new'} event={event ?? undefined} initialType={initialType} settings={settings} consumables={consumables} plan={plan ?? undefined} />
 }
 
-function EventForm({ event, initialType, settings, consumables }: { event?: DiaryEvent; initialType: EventType; settings: AppSettings; consumables: Consumable[] }) {
+function EventForm({ event, initialType, settings, consumables, plan }: { event?: DiaryEvent; initialType: EventType; settings: AppSettings; consumables: Consumable[]; plan?: PlanWork }) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const [draft, setDraft] = useState<Draft>(() => toDraft(event, initialType, consumables))
-  const [initial, setInitial] = useState(() => JSON.stringify(toDraft(event, initialType, consumables)))
+  const [draft, setDraft] = useState<Draft>(() => toDraft(event, initialType, consumables, plan))
+  // Запись по плановой работе уже заполнена — её можно сохранить сразу, без правок.
+  const [initial, setInitial] = useState(() => (plan && !event ? '' : JSON.stringify(toDraft(event, initialType, consumables))))
   const [error, setError] = useState<string | null>(null)
   const [splitParts, setSplitParts] = useState<PartDraft[] | null>(null)
   const [viewer, setViewer] = useState<number | null>(null)
@@ -170,13 +176,14 @@ function EventForm({ event, initialType, settings, consumables }: { event?: Diar
         draft.type === 'work'
           ? await resolveUses(draft.consumables, consumables, (name, unit) => repo.create('consumables', { name, unit, objectIds: draft.objectIds, active: true }))
           : undefined
-      const saved = event ? await repo.update('events', event.id, toInput(draft, event, uses), event.revision) : await repo.create('events', toInput(draft, undefined, uses))
+      const saved = event ? await repo.update('events', event.id, toInput(draft, event, uses), event.revision) : await repo.create('events', toInput(draft, undefined, uses, plan?.id))
+      if (plan && !event) await setSeason(plan.id, saved.date.slice(0, 4), { status: 'done', date: saved.date, eventId: saved.id })
       if (needsWeather(saved)) {
         await queueWeather(saved.id)
         void processWeatherQueue()
       }
       setInitial(JSON.stringify(draft))
-      navigate('/diary')
+      navigate(plan && !event ? '/works' : '/diary')
     } catch (caught) {
       setError(caught instanceof ConflictError ? 'Запись изменили в другом месте. Откройте её заново, чтобы не потерять чужую правку.' : errorText(caught))
     }
@@ -279,7 +286,12 @@ function EventForm({ event, initialType, settings, consumables }: { event?: Diar
   const activeGroups = groups.filter((item) => item.active || draft.plantGroupIds.includes(item.id)).sort(byName)
 
   return (
-    <Screen title={event ? 'Запись дневника' : 'Новая запись'} help="event" tab="/diary" back="/diary">
+    <Screen title={event ? 'Запись дневника' : plan ? 'Выполнение работы' : 'Новая запись'} help="event" tab="/diary" back={plan && !event ? '/works' : '/diary'}>
+      {plan && !event && (
+        <p className="notice">
+          Отмечаете выполнение работы «{plan.title}». Проверьте дату, добавьте подробности, фото и расход материалов — после сохранения работа будет отмечена выполненной в этом сезоне.
+        </p>
+      )}
       <section className="card">
         <div className="segmented" role="radiogroup" aria-label="Тип записи">
           {(Object.keys(EVENT_TYPES) as EventType[]).map((type) => (

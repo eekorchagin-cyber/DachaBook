@@ -10,6 +10,7 @@ import { WeatherCard } from '../ui/WeatherCard'
 import { EmptyState, Screen } from '../ui/Screen'
 import { EventCard } from './diary/EventCard'
 import { TodaySignCard } from './FolkSignsScreen'
+import { UpcomingWorksCard } from './WorksScreen'
 
 export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorName: string; plotAddress: string; photoPosition: PhotoPosition }) {
   const events = useLiveQuery(() => db.events.filter((item) => !item.deletedAt).toArray(), [])
@@ -44,10 +45,7 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
       </div>
       <WeatherCard />
       {signs && <TodaySignCard signs={signs} />}
-      <section className="card">
-        <h2>Ближайшие работы</h2>
-        <p className="hint">План работ и погода появятся на этапе 4. Черновик плана из Evernote — в разделе «Ещё».</p>
-      </section>
+      <UpcomingWorksCard />
       <h2 className="section-title">Последние записи</h2>
       {events && latest.length === 0 && <EmptyState>Записей пока нет. Начните с кнопки «Новая запись».</EmptyState>}
       {latest.map((event) => (

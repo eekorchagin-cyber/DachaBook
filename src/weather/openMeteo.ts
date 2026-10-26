@@ -93,3 +93,10 @@ export function conditionFromCode(code: number | null | undefined): WeatherCondi
   if (code >= 95) return 'thunderstorm'
   return 'rain'
 }
+
+/** Суточные минимумы за много лет (многолетние даты заморозков): один лёгкий запрос. */
+export async function fetchDailyMinimums(location: PlotLocation, start: string, end: string): Promise<{ time: string[]; temperature_2m_min: (number | null)[] }> {
+  const params = new URLSearchParams({ ...common(location), start_date: start, end_date: end, daily: 'temperature_2m_min' })
+  const data = await get<{ daily: { time: string[]; temperature_2m_min: (number | null)[] } }>(`https://archive-api.open-meteo.com/v1/archive?${params}`)
+  return data.daily
+}

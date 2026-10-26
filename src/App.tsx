@@ -20,6 +20,7 @@ import { DictionariesScreen, DictionaryScreen } from './screens/DictionariesScre
 import { FolkSignsScreen } from './screens/FolkSignsScreen'
 import { MoreScreen, TrashScreen } from './screens/MoreScreen'
 import { ObjectsScreen } from './screens/ObjectsScreen'
+import { WorksScreen } from './screens/WorksScreen'
 import { SettingsScreen, WelcomeScreen } from './screens/SettingsScreen'
 import { SyncScreen } from './screens/SyncScreen'
 
@@ -50,10 +51,11 @@ export default function App() {
       if (param) {
         return (
           <EventEditor
-            key={`${param}-${route.query.get('type') ?? ''}`}
+            key={`${param}-${route.query.get('type') ?? ''}-${route.query.get('plan') ?? ''}`}
             id={param === 'new' ? undefined : param}
             initialType={(route.query.get('type') as EventType | null) ?? 'work'}
             settings={settings}
+            planId={route.query.get('plan') ?? undefined}
           />
         )
       }
@@ -75,6 +77,8 @@ export default function App() {
       return <LibraryScreen />
     case 'plan':
       return <PlanScreen />
+    case 'works':
+      return <WorksScreen settings={settings} />
     case 'import':
       return <ImportScreen settings={settings} />
     case 'archive':

@@ -8,7 +8,7 @@ import { createSnapshot } from '../storage/snapshots'
 
 export const BACKUP_FORMAT = 1
 
-const COLLECTIONS = ['objects', 'plantGroups', 'events', 'references', 'planDrafts', 'importArchive', 'consumables', 'folkSigns', 'files'] as const
+const COLLECTIONS = ['objects', 'plantGroups', 'events', 'references', 'planDrafts', 'importArchive', 'consumables', 'folkSigns', 'planWorks', 'files'] as const
 type Collection = (typeof COLLECTIONS)[number]
 
 export interface BackupManifest {
@@ -33,6 +33,7 @@ planDrafts/ — черновик сезонного плана.
 importArchive/ — архив импорта: исходные строки и заметки Evernote.
 consumables/ — расходные материалы; расход по работам — в записях дневника (поле consumables).
 folkSigns/ — народные приметы по дням года.
+planWorks/ — плановые работы: сроки, условия, отметки о выполнении по сезонам.
 files/ — описания фото и вложений; files/originals/ — оригиналы без изменений; files/thumbs/ — уменьшенные копии.
 settings/shared.json — общие настройки дневника (справочники видов работ и единиц, адрес и координаты участка).
 

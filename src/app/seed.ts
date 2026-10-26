@@ -1,4 +1,4 @@
-import type { CareObject, DocInput } from '../domain/types'
+import type { CareObject, DocInput, PlanWork } from '../domain/types'
 import { folkSignKey, parseFolkSigns } from '../import/folkSigns'
 import { stableId } from '../lib/hash'
 import folkSignsMarkdown from '../seed/folk-signs.md?raw'
@@ -18,6 +18,7 @@ const DEFAULT_OBJECTS: DocInput<CareObject>[] = [
 export async function ensureSeeded(): Promise<void> {
   if (navigator.storage?.persist) void navigator.storage.persist()
   await seedFolkSigns(db)
+  await seedPlanWorks(db)
   if ((await db.settings.get('authorName'))?.value) await seedDefaultObjects()
 }
 
@@ -43,5 +44,52 @@ export async function seedFolkSigns(database: DiaryDatabase): Promise<number> {
     added++
   }
   await database.settings.put({ key: 'folkSignsSeeded', value: new Date().toISOString() })
+  return added
+}
+
+/** Встроенные работы, привязанные к заморозкам; слова — для поиска таких работ в дневнике прошлых лет. */
+const FROST_WORKS: (DocInput<PlanWork> & { key: string })[] = [
+  {
+    key: 'water-off',
+    title: 'Слить и законсервировать дачный водопровод',
+    workKind: 'Хозяйственные работы',
+    note: 'Слить воду из труб, продуть, убрать насос — за неделю до первых заморозков.',
+    objectIds: [],
+    plantGroupIds: [],
+    recurrence: 'yearly',
+    periods: [],
+    condition: { type: 'beforeAutumnFrost', leadDays: 7 },
+    historyWords: [['водопровод'], ['слил', 'слить', 'продул', 'демонтир', 'отключил', 'законсерв', 'разобрал']],
+    seasons: {},
+    active: true,
+  },
+  {
+    key: 'water-on',
+    title: 'Смонтировать дачный водопровод',
+    workKind: 'Хозяйственные работы',
+    note: 'В ближайшую субботу после установления положительных температур: ночи без заморозков 3 дня и по прогнозу на неделю.',
+    objectIds: [],
+    plantGroupIds: [],
+    recurrence: 'yearly',
+    periods: [],
+    condition: { type: 'afterSpringFrost', weekday: 6, calmDays: 3 },
+    historyWords: [['водопровод'], ['смонтир', 'монтаж', 'монтир', 'запустил', 'подключил', 'собрал']],
+    seasons: {},
+    active: true,
+  },
+]
+
+/** Одинаковые идентификаторы на всех устройствах: синхронизация и резервные копии не создают дублей. */
+export async function seedPlanWorks(database: DiaryDatabase): Promise<number> {
+  if (await database.settings.get('planWorksSeeded')) return 0
+  const seeder = new Repository(database, () => 'DachaBook')
+  let added = 0
+  for (const { key, ...work } of FROST_WORKS) {
+    const id = await stableId(`plan-work:${key}`)
+    if (await database.planWorks.get(id)) continue
+    await seeder.create('planWorks', { ...work, id })
+    added++
+  }
+  await database.settings.put({ key: 'planWorksSeeded', value: new Date().toISOString() })
   return added
 }

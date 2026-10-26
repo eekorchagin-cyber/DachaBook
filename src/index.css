@@ -1346,3 +1346,106 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
 .weather-day-name {
   color: var(--muted);
 }
+
+.work-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.work-item.urgent {
+  border-left: 4px solid var(--warn);
+  padding-left: 10px;
+}
+
+.work-title {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.work-item p {
+  margin: 4px 0;
+}
+
+.work-state {
+  font-weight: 600;
+}
+
+.state-ready,
+.state-overdue {
+  color: var(--warn);
+}
+
+.state-done {
+  color: var(--ok);
+}
+
+.state-waiting,
+.state-check {
+  color: var(--accent);
+}
+
+.upcoming {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.upcoming li {
+  display: grid;
+  gap: 2px;
+}
+
+.upcoming li.urgent {
+  border-left: 4px solid var(--warn);
+  padding-left: 8px;
+}
+
+.upcoming a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.periods {
+  border: none;
+  padding: 0;
+  margin: 12px 0;
+  display: grid;
+  gap: 8px;
+}
+
+.periods legend {
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+}
+
+.period-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.period-row select {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.periods > .button {
+  justify-self: start;
+}
+
+.climate summary {
+  cursor: pointer;
+}

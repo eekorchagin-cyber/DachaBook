@@ -97,6 +97,8 @@ export interface DiaryEvent extends DocMeta {
   /** Пояснения к фото и вложениям этой записи: идентификатор файла → текст. */
   fileNotes?: Record<string, string>
   weather?: WeatherSnapshot
+  /** Плановая работа, выполнение которой отмечено этой записью. */
+  planWorkId?: string
   /** Сколько расходных материалов ушло на работу; по этим данным планируются закупки. */
   consumables?: ConsumableUse[]
   source?: ImportSource
@@ -177,6 +179,40 @@ export interface PlanDraftItem extends DocMeta {
   source?: ImportSource
 }
 
+/**
+ * Условие готовности, привязанное к заморозкам (раздел 4 ТЗ): «до первых осенних заморозков за N дней»
+ * или «после весенних заморозков — в ближайший выбранный день недели». Порог — минимальная температура воздуха за сутки.
+ */
+export type WorkCondition =
+  | { type: 'beforeAutumnFrost'; leadDays: number; thresholdC?: number }
+  | { type: 'afterSpringFrost'; weekday?: number; calmDays?: number; thresholdC?: number }
+
+/** Состояние работы в одном сезоне (год): выполнена, перенесена или пропущена. Нет записи — работа ещё не отмечена. */
+export interface WorkSeason {
+  status: 'done' | 'postponed' | 'skipped'
+  /** Дата выполнения или новая дата после переноса. */
+  date?: string
+  eventId?: string
+}
+
+/** Плановая работа с ежегодным повтором (или однократная): сроки, условия, история по сезонам. */
+export interface PlanWork extends DocMeta {
+  title: string
+  workKind?: string
+  objectIds: string[]
+  plantGroupIds: string[]
+  note?: string
+  recurrence: 'yearly' | 'once'
+  /** Ориентир по календарю: месяцы и недели; пусто — срок задаёт условие. */
+  periods: PlanPeriod[]
+  condition?: WorkCondition
+  /** Слова для поиска таких работ в дневнике прошлых лет (например, «водопровод» и «слил»). */
+  historyWords?: string[][]
+  sourceDraftId?: string
+  seasons: Record<string, WorkSeason>
+  active: boolean
+}
+
 export interface ImportArchiveItem extends DocMeta {
   sourceFileId: string
   sourceFileName: string
@@ -201,6 +237,7 @@ export interface Collections {
   importArchive: ImportArchiveItem
   consumables: Consumable
   folkSigns: FolkSign
+  planWorks: PlanWork
 }
 
 export type CollectionName = keyof Collections

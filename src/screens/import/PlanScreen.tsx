@@ -6,6 +6,7 @@ import { periodText } from '../../domain/labels'
 import { EmptyState, Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
 import { db } from '../../storage/db'
+import { transferDraft } from '../../plan/actions'
 
 const MONTH_NAMES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
@@ -53,7 +54,10 @@ export function PlanScreen() {
         <input type="search" placeholder="Поиск по тексту" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Поиск" />
       </div>
       {items && items.length === 0 && <EmptyState>Черновик пуст. Он заполняется импортом дневников из Evernote (раздел «Ещё» → «Импорт из Evernote»).</EmptyState>}
-      <p className="hint">Работа, которая повторяется в нескольких месяцах, показана в каждом из них. Превратить позиции в плановые работы можно будет на этапе 4.</p>
+      <p className="hint">
+        Работа, которая повторяется в нескольких месяцах, показана в каждом из них. «В план работ» превращает позицию-работу в плановую работу с теми же
+        сроками и повтором каждый год; наблюдения остаются ориентиром. Перенесённая позиция отмечается и второй раз не переносится.
+      </p>
       {byMonth.map(([month, list]) => (
         <section key={month} className="card">
           <h2>{MONTH_NAMES[month - 1]}</h2>
@@ -69,14 +73,24 @@ export function PlanScreen() {
                 </div>
                 <p className="import-text">{item.text}</p>
                 {item.seasonsDone.length > 0 && <p className="muted small">Выполнялось в сезонах: {item.seasonsDone.join(', ')}</p>}
-                <ActionButton
-                  secondary
-                  onRun={async () => {
-                    if (confirm('Убрать позицию из черновика плана? Исходная строка останется в архиве импорта.')) await repo.remove('planDrafts', item.id, item.revision)
-                  }}
-                >
-                  Убрать
-                </ActionButton>
+                <div className="actions">
+                  {item.itemType === 'work' &&
+                    (item.transferred ? (
+                      <a className="small source-link" href="#/works">
+                        ✓ В плане работ
+                      </a>
+                    ) : (
+                      <ActionButton onRun={async () => void (await transferDraft(item))}>В план работ</ActionButton>
+                    ))}
+                  <ActionButton
+                    secondary
+                    onRun={async () => {
+                      if (confirm('Убрать позицию из черновика плана? Исходная строка останется в архиве импорта.')) await repo.remove('planDrafts', item.id, item.revision)
+                    }}
+                  >
+                    Убрать
+                  </ActionButton>
+                </div>
               </li>
             ))}
           </ul>
