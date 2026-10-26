@@ -1238,3 +1238,8 @@ details.card[open] > summary::before {
 .conflict-version p {
   margin: 6px 0 0;
 }
+
+/* iPhone поднимает нижнее меню над открытой клавиатурой — на время ввода текста оно прячется. */
+body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='button']), textarea, select, [contenteditable='true']):focus) .tabbar {
+  display: none;
+}
