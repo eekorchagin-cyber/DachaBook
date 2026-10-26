@@ -316,8 +316,8 @@ body {
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
-  /* Запас под нижнее меню: его высота плюс отступ под полоску жеста на iPhone — последние кнопки не уходят под меню. */
-  padding: 12px 14px calc(env(safe-area-inset-bottom) + 120px);
+  /* Запас под нижнее меню — его измеренная высота (с отступом под полоску жеста iPhone) и зазор: последние кнопки не уходят под меню. */
+  padding: 12px 14px calc(var(--tabbar-height, calc(env(safe-area-inset-bottom) + 96px)) + 32px);
 }
 
 .tabbar {
