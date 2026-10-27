@@ -35,9 +35,14 @@ export function DiaryScreen({ settings, initialFilter }: { settings: AppSettings
       help="diary"
       tab="/diary"
       actions={
-        <a className="button small" href="#/diary/new">
-          + Запись
-        </a>
+        <>
+          <a className="button small secondary" href="#/diary/book">
+            PDF
+          </a>
+          <a className="button small" href="#/diary/new">
+            + Запись
+          </a>
+        </>
       }
     >
       <div className="search-row">

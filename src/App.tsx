@@ -1,11 +1,14 @@
 import { useEffect } from 'react'
-import { useRoute } from './app/router'
+import { navigate, useRoute } from './app/router'
+import { inboxHasFiles } from './share/inbox'
 import { applyAppearance, useSettings } from './app/store'
 import type { EventType } from './domain/types'
 import { setWorkKinds } from './import/suggest'
 import { LabScreen } from './lab/LabScreen'
+import { DiaryBookScreen } from './screens/diary/DiaryBookScreen'
 import { DiaryScreen } from './screens/diary/DiaryScreen'
 import { EventEditor } from './screens/diary/EventEditor'
+import { ShareScreen } from './screens/ShareScreen'
 import { GuideScreen } from './screens/GuideScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { ArchiveScreen } from './screens/import/ArchiveScreen'
@@ -41,21 +44,34 @@ export default function App() {
     window.scrollTo({ top: 0 })
   }, [pathKey])
 
+  useEffect(() => {
+    if (!settings?.authorName) return
+    if (location.hash.replace(/^#\/?/, '').startsWith('share')) return
+    void inboxHasFiles().then((has) => {
+      if (has) navigate('/share')
+    })
+  }, [settings?.authorName])
+
   const [section, param] = route.path
   if (section === 'lab') return <LabScreen />
   if (!settings) return null
   if (!settings.authorName) return <WelcomeScreen />
 
   switch (section) {
+    case 'share':
+      return <ShareScreen />
     case 'diary':
+      if (param === 'book') return <DiaryBookScreen settings={settings} />
       if (param) {
         return (
           <EventEditor
-            key={`${param}-${route.query.get('type') ?? ''}-${route.query.get('plan') ?? ''}`}
+            key={`${param}-${route.query.get('type') ?? ''}-${route.query.get('plan') ?? ''}-${route.query.get('photos') ?? ''}`}
             id={param === 'new' ? undefined : param}
             initialType={(route.query.get('type') as EventType | null) ?? 'work'}
             settings={settings}
             planId={route.query.get('plan') ?? undefined}
+            initialPhotoIds={route.query.get('photos')?.split(',').filter(Boolean)}
+            initialComment={route.query.get('comment') ?? undefined}
           />
         )
       }

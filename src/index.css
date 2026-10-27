@@ -1542,3 +1542,128 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
   color: inherit;
   opacity: 0.8;
 }
+
+.book-cover {
+  text-align: center;
+  padding: 20px 8px 28px;
+}
+
+.book-kicker {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: 0 0 8px;
+}
+
+.book-cover h1 {
+  font-size: 2rem;
+  margin: 0 0 8px;
+}
+
+.book-place {
+  font-size: 1.05rem;
+  margin: 4px 0;
+}
+
+.book-year h2 {
+  font-size: 1.45rem;
+  margin: 28px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--accent);
+}
+
+.book-month h3 {
+  font-size: 1.15rem;
+  margin: 20px 0 6px;
+}
+
+.book-entry {
+  padding: 10px 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.book-text {
+  white-space: pre-line;
+  margin: 8px 0 0;
+}
+
+.book-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.book-photos figure {
+  margin: 0;
+  width: calc(50% - 4px);
+}
+
+.book-photo {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.book-photos figcaption {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+@media print {
+  .topbar,
+  .tabbar,
+  .update-banner,
+  .no-print {
+    display: none !important;
+  }
+
+  html,
+  body {
+    overflow: visible !important;
+    background: #fff !important;
+    color: #111;
+  }
+
+  .app {
+    display: block;
+    min-height: 0;
+  }
+
+  .content {
+    max-width: none;
+    margin: 0;
+    padding: 0 !important;
+  }
+
+  .book-cover {
+    break-after: page;
+    padding-top: 28%;
+  }
+
+  .book-year + .book-year {
+    break-before: page;
+  }
+
+  .book-entry {
+    break-inside: avoid;
+  }
+
+  .book-photo {
+    height: 42mm;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 14mm 12mm;
+}

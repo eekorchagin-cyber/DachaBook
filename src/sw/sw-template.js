@@ -35,11 +35,43 @@ async function cached(request) {
   return own ?? (await caches.match(request, MATCH))
 }
 
+/** Фото из системного «Поделиться»: кладём во временный кэш и открываем экран приёма. */
+async function handleShare(request) {
+  const formData = await request.formData()
+  const cache = await caches.open('share-inbox')
+  const named = ['photos', 'file', 'media', 'image'].flatMap((name) => formData.getAll(name))
+  const files = (named.length > 0 ? named : [...formData.values()]).filter((item) => item instanceof File && item.size > 0)
+  let index = (await cache.keys()).length
+  for (const file of files) {
+    index++
+    await cache.put(
+      `./inbox/${Date.now()}-${index}-${encodeURIComponent(file.name || 'photo.jpg')}`,
+      new Response(file, {
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          'X-Filename': encodeURIComponent(file.name || 'photo.jpg'),
+        },
+      }),
+    )
+  }
+  const caption = [formData.get('title'), formData.get('text'), formData.get('url')]
+    .filter((value) => typeof value === 'string' && value.trim())
+    .join('\n')
+  if (caption) {
+    await cache.put('./inbox/caption', new Response(caption, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }))
+  }
+  return Response.redirect(new URL('./#/share', request.url).href, 303)
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request
-  if (request.method !== 'GET') return
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
+  if (request.method === 'POST' && /\/share\/?$/.test(url.pathname)) {
+    event.respondWith(handleShare(request))
+    return
+  }
+  if (request.method !== 'GET') return
   if (url.pathname.endsWith('/version.json')) return
 
   if (request.mode === 'navigate') {

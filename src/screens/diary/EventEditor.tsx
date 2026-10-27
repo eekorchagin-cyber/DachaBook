@@ -44,7 +44,7 @@ interface Draft {
   consumables: ConsumableRow[]
 }
 
-function toDraft(event: DiaryEvent | undefined, type: EventType, consumables: Consumable[], plan?: PlanWork): Draft {
+function toDraft(event: DiaryEvent | undefined, type: EventType, consumables: Consumable[], plan?: PlanWork, incoming?: { photoIds?: string[]; comment?: string }): Draft {
   const now = todayAtSite()
   // Выполнение плановой работы: запись заполняется по работе, дату и подробности пользователь подтверждает.
   const fromPlan = !event && plan
@@ -55,8 +55,8 @@ function toDraft(event: DiaryEvent | undefined, type: EventType, consumables: Co
     objectIds: event?.objectIds ?? (fromPlan ? plan.objectIds : []),
     plantGroupIds: event?.plantGroupIds ?? (fromPlan ? plan.plantGroupIds : []),
     workKind: event?.workKind ?? (fromPlan ? (plan.workKind ?? '') : ''),
-    comment: event?.comment ?? (fromPlan ? plan.title : ''),
-    photoIds: event?.photoIds ?? [],
+    comment: event?.comment ?? (fromPlan ? plan.title : (incoming?.comment ?? '')),
+    photoIds: event?.photoIds ?? incoming?.photoIds ?? [],
     attachmentIds: event?.attachmentIds ?? [],
     temperature: event?.measurement?.temperature?.value.toString() ?? '',
     moisture: event?.measurement?.moisture?.value.toString() ?? '',
@@ -123,7 +123,21 @@ function problems(draft: Draft): string[] {
   return list
 }
 
-export function EventEditor({ id, initialType, settings, planId }: { id?: string; initialType: EventType; settings: AppSettings; planId?: string }) {
+export function EventEditor({
+  id,
+  initialType,
+  settings,
+  planId,
+  initialPhotoIds,
+  initialComment,
+}: {
+  id?: string
+  initialType: EventType
+  settings: AppSettings
+  planId?: string
+  initialPhotoIds?: string[]
+  initialComment?: string
+}) {
   const event = useLiveQuery(async () => (id ? ((await db.events.get(id)) ?? null) : null), [id])
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), [])
   const plan = useLiveQuery(async () => (planId ? ((await db.planWorks.get(planId)) ?? null) : null), [planId])
@@ -135,15 +149,39 @@ export function EventEditor({ id, initialType, settings, planId }: { id?: string
       </Screen>
     )
   }
-  return <EventForm key={event?.id ?? 'new'} event={event ?? undefined} initialType={initialType} settings={settings} consumables={consumables} plan={plan ?? undefined} />
+  return (
+    <EventForm
+      key={event?.id ?? 'new'}
+      event={event ?? undefined}
+      initialType={initialType}
+      settings={settings}
+      consumables={consumables}
+      plan={plan ?? undefined}
+      incoming={{ photoIds: initialPhotoIds, comment: initialComment }}
+    />
+  )
 }
 
-function EventForm({ event, initialType, settings, consumables, plan }: { event?: DiaryEvent; initialType: EventType; settings: AppSettings; consumables: Consumable[]; plan?: PlanWork }) {
+function EventForm({
+  event,
+  initialType,
+  settings,
+  consumables,
+  plan,
+  incoming,
+}: {
+  event?: DiaryEvent
+  initialType: EventType
+  settings: AppSettings
+  consumables: Consumable[]
+  plan?: PlanWork
+  incoming?: { photoIds?: string[]; comment?: string }
+}) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const [draft, setDraft] = useState<Draft>(() => toDraft(event, initialType, consumables, plan))
+  const [draft, setDraft] = useState<Draft>(() => toDraft(event, initialType, consumables, plan, incoming))
   // Запись по плановой работе уже заполнена — её можно сохранить сразу, без правок.
-  const [initial, setInitial] = useState(() => (plan && !event ? '' : JSON.stringify(toDraft(event, initialType, consumables))))
+  const [initial, setInitial] = useState(() => (plan && !event ? '' : JSON.stringify(toDraft(event, initialType, consumables, undefined, incoming))))
   const [error, setError] = useState<string | null>(null)
   const [splitParts, setSplitParts] = useState<PartDraft[] | null>(null)
   const [viewer, setViewer] = useState<number | null>(null)
