@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { repo } from '../app/store'
 import { db } from '../storage/db'
-import { setSeason, transferDraft } from './actions'
+import { markDone, setSeason, transferDraft, undoMark } from './actions'
 
 beforeEach(async () => {
   await Promise.all(db.tables.map((table) => table.clear()))
@@ -36,5 +36,24 @@ describe('перенос черновика в план работ', () => {
     expect((await db.planWorks.get(work.id))?.seasons).toEqual({ '2025': { status: 'done', date: '2025-04-10' }, '2026': { status: 'skipped' } })
     await setSeason(work.id, '2026', null)
     expect((await db.planWorks.get(work.id))?.seasons).toEqual({ '2025': { status: 'done', date: '2025-04-10' } })
+  })
+
+  it('короткая отметка ставится на дату и снимается, не затирая прошлый год', async () => {
+    const work = await repo.create('planWorks', {
+      title: 'Полив',
+      objectIds: [],
+      plantGroupIds: [],
+      recurrence: 'season',
+      periods: [],
+      seasonSchedule: { fromMonth: 5, fromDay: 10, toMonth: 9, toDay: 5, weekdays: [1, 3, 5] },
+      doneDates: ['2025-06-02'],
+      seasons: {},
+      active: true,
+    })
+    await markDone(work.id, '2026-05-11')
+    await markDone(work.id, '2026-05-11')
+    expect((await db.planWorks.get(work.id))?.doneDates).toEqual(['2025-06-02', '2026-05-11'])
+    await undoMark(work.id, '2026')
+    expect((await db.planWorks.get(work.id))?.doneDates).toEqual(['2025-06-02'])
   })
 })

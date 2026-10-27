@@ -1442,10 +1442,103 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
   color: var(--text);
 }
 
+.period-row .field {
+  flex: 1;
+  margin-top: 0;
+}
+
 .periods > .button {
   justify-self: start;
 }
 
 .climate summary {
   cursor: pointer;
+}
+
+.weather-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.weather-toggle .weather-now-icon {
+  font-size: 1.5rem;
+}
+
+.weather-toggle .weather-now-temp {
+  font-size: 1.4rem;
+}
+
+.weather-now-text {
+  flex: 1 1 10em;
+  min-width: 0;
+}
+
+.weather-chevron {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.jump-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.jump-row .chip:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.jump-count {
+  color: var(--muted);
+  font-size: 0.8em;
+}
+
+.jump-all {
+  font-weight: 600;
+}
+
+.jump-date-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.jump-date input {
+  max-width: 14em;
+}
+
+.period-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.jump-row button.chip {
+  background: var(--card);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.jump-row button.chip.active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.jump-row .chip.active .jump-count {
+  color: inherit;
+  opacity: 0.8;
 }

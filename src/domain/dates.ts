@@ -31,3 +31,18 @@ export function formatDate(date: string): string {
   const [year, month, day] = date.split('-').map(Number)
   return `${day} ${MONTHS_GENITIVE[month - 1]} ${year}`
 }
+
+/** Период дневника по-русски: «5 мая 2024», «1–7 мая 2024», «1 мая — 30 июня 2024», «с 1 мая 2024». */
+export function rangeText(from?: string, to?: string): string {
+  if (from && to) {
+    if (from === to) return formatDate(from)
+    const [fy, fm, fd] = from.split('-').map(Number)
+    const [ty, tm, td] = to.split('-').map(Number)
+    if (fy === ty && fm === tm) return `${fd}–${td} ${MONTHS_GENITIVE[tm - 1]} ${ty}`
+    if (fy === ty) return `${fd} ${MONTHS_GENITIVE[fm - 1]} — ${td} ${MONTHS_GENITIVE[tm - 1]} ${ty}`
+    return `${formatDate(from)} — ${formatDate(to)}`
+  }
+  if (from) return `с ${formatDate(from)}`
+  if (to) return `по ${formatDate(to)}`
+  return ''
+}

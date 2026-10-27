@@ -59,7 +59,13 @@ export default function App() {
           />
         )
       }
-      return <DiaryScreen settings={settings} />
+      return (
+        <DiaryScreen
+          key={`${route.query.get('from') ?? ''}-${route.query.get('to') ?? ''}`}
+          settings={settings}
+          initialFilter={{ from: route.query.get('from') ?? undefined, to: route.query.get('to') ?? undefined }}
+        />
+      )
     case 'objects':
       return (
         <ObjectsScreen

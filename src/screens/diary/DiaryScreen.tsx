@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import type { AppSettings } from '../../app/store'
+import { rangeText } from '../../domain/dates'
 import { filterEvents, type DiaryFilter } from '../../domain/diaryFilter'
 import { db } from '../../storage/db'
 import { EmptyState, Screen } from '../../ui/Screen'
@@ -8,12 +9,13 @@ import { EventCard } from './EventCard'
 
 const PAGE = 50
 
-export function DiaryScreen({ settings }: { settings: AppSettings }) {
+/** initialFilter — период из перехода к дате на главном экране. */
+export function DiaryScreen({ settings, initialFilter }: { settings: AppSettings; initialFilter?: DiaryFilter }) {
   const events = useLiveQuery(() => db.events.toArray(), [])
   const loadedObjects = useLiveQuery(() => db.objects.toArray(), [])
   const objects = useMemo(() => loadedObjects ?? [], [loadedObjects])
   const groups = useLiveQuery(() => db.plantGroups.toArray(), []) ?? []
-  const [filter, setFilter] = useState<DiaryFilter>({})
+  const [filter, setFilter] = useState<DiaryFilter>(initialFilter ?? {})
   const [showFilters, setShowFilters] = useState(false)
   const [limit, setLimit] = useState(PAGE)
 
@@ -113,6 +115,21 @@ export function DiaryScreen({ settings }: { settings: AppSettings }) {
         <EmptyState>
           {events.length === 0 ? 'В дневнике пока нет записей. Нажмите «+ Запись» или импортируйте дневник из Evernote в разделе «Ещё».' : 'Ничего не найдено — измените поиск или фильтры.'}
         </EmptyState>
+      )}
+      {(filter.from || filter.to) && (
+        <p className="period-line">
+          Период: <strong>{rangeText(filter.from, filter.to)}</strong>{' '}
+          <button
+            type="button"
+            className="button secondary small"
+            onClick={() => {
+              set({ from: undefined, to: undefined })
+              if (initialFilter) history.replaceState(null, '', '#/diary')
+            }}
+          >
+            Сбросить
+          </button>
+        </p>
       )}
       <p className="muted small">{events && found.length > 0 && `Записей: ${found.length}`}</p>
       {found.slice(0, limit).map((event) => (

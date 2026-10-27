@@ -26,6 +26,44 @@ export async function transferDraft(item: PlanDraftItem): Promise<PlanWork> {
   return work
 }
 
+/** Короткая отметка «сделано» на дату: следующий раз по расписанию считается от неё, дневник не создаётся. */
+export async function markDone(workId: string, date: string): Promise<void> {
+  const work = await db.planWorks.get(workId)
+  if (!work || work.doneDates?.includes(date)) return
+  await repo.update('planWorks', workId, { doneDates: [...(work.doneDates ?? []), date].sort() }, work.revision)
+}
+
+/** Снимает отметку этого года: статус сезона или последнюю короткую отметку «сделано». Запись дневника не трогает. */
+export async function undoMark(workId: string, year: string): Promise<void> {
+  const work = await db.planWorks.get(workId)
+  if (!work) return
+  if (work.seasons[year]) {
+    await setSeason(workId, year, null)
+    return
+  }
+  const latest = (work.doneDates ?? []).filter((date) => date.startsWith(year)).sort().at(-1)
+  if (!latest) return
+  await repo.update('planWorks', workId, { doneDates: (work.doneDates ?? []).filter((date) => date !== latest) }, work.revision)
+}
+
+/** Записи дневника, из которых собрано предложение, связываются с новой плановой работой. */
+export async function attachPlanWork(eventIds: string[], workId: string): Promise<void> {
+  for (const id of eventIds) {
+    const event = await db.events.get(id)
+    if (!event || event.deletedAt || event.planWorkId) continue
+    await repo.update('events', id, { planWorkId: workId }, event.revision)
+  }
+}
+
+/** Убрать работу из предложений плана. Записи дневника остаются. */
+export async function dismissPlanSuggestions(eventIds: string[]): Promise<void> {
+  for (const id of eventIds) {
+    const event = await db.events.get(id)
+    if (!event || event.deletedAt || event.planSuggestionDismissed) continue
+    await repo.update('events', id, { planSuggestionDismissed: true }, event.revision)
+  }
+}
+
 /** Отметка сезона (выполнена, перенесена, пропущена) или её снятие; читает свежую версию работы. */
 export async function setSeason(workId: string, year: string, season: WorkSeason | null): Promise<void> {
   const work = await db.planWorks.get(workId)

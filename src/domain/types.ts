@@ -99,6 +99,8 @@ export interface DiaryEvent extends DocMeta {
   weather?: WeatherSnapshot
   /** Плановая работа, выполнение которой отмечено этой записью. */
   planWorkId?: string
+  /** Эту работу больше не предлагать для плана. Сама запись дневника остаётся. */
+  planSuggestionDismissed?: boolean
   /** Сколько расходных материалов ушло на работу; по этим данным планируются закупки. */
   consumables?: ConsumableUse[]
   source?: ImportSource
@@ -195,17 +197,39 @@ export interface WorkSeason {
   eventId?: string
 }
 
-/** Плановая работа с ежегодным повтором (или однократная): сроки, условия, история по сезонам. */
+/**
+ * Повтор внутри сезона, каждый год в том же окне дат.
+ * Либо дни недели, либо шаг в неделях от первого дня окна — одновременно не оба.
+ * Время суток — подпись, когда работу удобно делать; напоминание в этот час не приходит.
+ */
+export interface SeasonSchedule {
+  fromMonth: number
+  fromDay: number
+  toMonth: number
+  toDay: number
+  /** 1 — каждую неделю, 2 — раз в две недели. Пусто, если заданы дни недели. */
+  everyWeeks?: number
+  /** 1 — понедельник … 7 — воскресенье. */
+  weekdays?: number[]
+  timeFrom?: string
+  timeTo?: string
+}
+
+/** Плановая работа: каждый год, один раз или по расписанию внутри сезона. */
 export interface PlanWork extends DocMeta {
   title: string
   workKind?: string
   objectIds: string[]
   plantGroupIds: string[]
   note?: string
-  recurrence: 'yearly' | 'once'
-  /** Ориентир по календарю: месяцы и недели; пусто — срок задаёт условие. */
+  recurrence: 'yearly' | 'once' | 'season'
+  /** Ориентир по календарю: месяцы и недели; пусто — срок задаёт условие или расписание сезона. */
   periods: PlanPeriod[]
   condition?: WorkCondition
+  /** Окно и шаг повтора, если recurrence равен season. */
+  seasonSchedule?: SeasonSchedule
+  /** Даты короткой отметки «сделано» без записи в дневнике. */
+  doneDates?: string[]
   /** Слова для поиска таких работ в дневнике прошлых лет (например, «водопровод» и «слил»). */
   historyWords?: string[][]
   sourceDraftId?: string

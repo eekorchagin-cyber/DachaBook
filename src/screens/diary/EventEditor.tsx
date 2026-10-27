@@ -177,7 +177,7 @@ function EventForm({ event, initialType, settings, consumables, plan }: { event?
           ? await resolveUses(draft.consumables, consumables, (name, unit) => repo.create('consumables', { name, unit, objectIds: draft.objectIds, active: true }))
           : undefined
       const saved = event ? await repo.update('events', event.id, toInput(draft, event, uses), event.revision) : await repo.create('events', toInput(draft, undefined, uses, plan?.id))
-      if (plan && !event) await setSeason(plan.id, saved.date.slice(0, 4), { status: 'done', date: saved.date, eventId: saved.id })
+      if (plan && !event && plan.recurrence !== 'season') await setSeason(plan.id, saved.date.slice(0, 4), { status: 'done', date: saved.date, eventId: saved.id })
       if (needsWeather(saved)) {
         await queueWeather(saved.id)
         void processWeatherQueue()
@@ -289,7 +289,9 @@ function EventForm({ event, initialType, settings, consumables, plan }: { event?
     <Screen title={event ? 'Запись дневника' : plan ? 'Выполнение работы' : 'Новая запись'} help="event" tab="/diary" back={plan && !event ? '/works' : '/diary'}>
       {plan && !event && (
         <p className="notice">
-          Отмечаете выполнение работы «{plan.title}». Проверьте дату, добавьте подробности, фото и расход материалов — после сохранения работа будет отмечена выполненной в этом сезоне.
+          {plan.recurrence === 'season'
+            ? `Запись о работе «${plan.title}». После сохранения этот день считается сделанным, следующие разы по расписанию остаются.`
+            : `Отмечаете выполнение работы «${plan.title}». Проверьте дату, добавьте подробности, фото и расход материалов — после сохранения работа будет отмечена выполненной в этом сезоне.`}
         </p>
       )}
       <section className="card">

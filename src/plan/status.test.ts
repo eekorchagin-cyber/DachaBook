@@ -45,6 +45,35 @@ describe('статусы плановых работ', () => {
     expect(workStatus({ ...mowing, seasons: { '2026': { status: 'done', date: '2026-06-03' } } }, [], { today: '2027-06-10' }).state).toBe('ready')
   })
 
+  it('раз в две недели: срок, просрочка, отметка закрывает только этот раз', () => {
+    const feeding = work({
+      recurrence: 'season',
+      seasonSchedule: { fromMonth: 6, fromDay: 10, toMonth: 9, toDay: 10, everyWeeks: 2 },
+    })
+    expect(workStatus(feeding, [], { today: '2026-06-01' })).toMatchObject({ state: 'soon', date: '2026-06-10' })
+    expect(workStatus(feeding, [], { today: '2026-06-10' }).state).toBe('ready')
+    expect(workStatus(feeding, [], { today: '2026-06-12' }).state).toBe('overdue')
+    expect(workStatus({ ...feeding, doneDates: ['2026-06-12'] }, [], { today: '2026-06-13' })).toMatchObject({ state: 'soon', date: '2026-06-24' })
+    expect(workStatus({ ...feeding, doneDates: ['2026-06-12'] }, [], { today: '2026-06-24' }).state).toBe('ready')
+    expect(workStatus({ ...feeding, doneDates: ['2026-06-12'] }, [], { today: '2027-06-10' }).state).toBe('ready')
+  })
+
+  it('дни недели: сегодня закрывается отметкой, следующий день недели остаётся', () => {
+    const watering = work({
+      recurrence: 'season',
+      seasonSchedule: { fromMonth: 5, fromDay: 10, toMonth: 9, toDay: 5, weekdays: [1, 3, 5], timeFrom: '07:00', timeTo: '07:20' },
+    })
+    expect(workStatus(watering, [], { today: '2026-05-11' })).toMatchObject({ state: 'ready', message: 'сегодня, 07:00–07:20' })
+    expect(workStatus({ ...watering, doneDates: ['2026-05-11'] }, [], { today: '2026-05-11' })).toMatchObject({ state: 'soon', date: '2026-05-13' })
+    expect(workStatus(watering, ['2026-05-11'], { today: '2026-05-12' })).toMatchObject({ state: 'soon', date: '2026-05-13' })
+  })
+
+  it('однократная работа после выполнения не возвращается в следующем году', () => {
+    const once = work({ recurrence: 'once', periods: [{ month: 6 }], seasons: { '2025': { status: 'done', date: '2025-06-02' } } })
+    expect(workStatus(once, [], { today: '2026-06-10' })).toMatchObject({ state: 'done', closed: true })
+    expect(workStatus({ ...once, seasons: {} }, [], { today: '2026-06-10' }).state).toBe('ready')
+  })
+
   it('монтаж водопровода весной: тёплые ночи — готова, с рекомендуемой субботой', () => {
     const water = work({ condition: { type: 'afterSpringFrost', weekday: 6 } })
     expect(workStatus(water, [], { today: '2026-05-06', forecast: warm('2026-04-29', '2026-05-13') })).toMatchObject({ state: 'ready', date: '2026-05-09' })
