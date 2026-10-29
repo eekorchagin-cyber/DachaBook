@@ -1,6 +1,7 @@
 import { repo } from '../app/store'
 import type { PlanDraftItem, PlanWork, WorkSeason } from '../domain/types'
 import { suggestWorkKind } from '../import/suggest'
+import { seasonWindow } from './status'
 import { db } from '../storage/db'
 
 /** Позиция черновика (работа) → плановая работа с теми же сроками и объектами; в черновике отмечается перенос. */
@@ -41,7 +42,14 @@ export async function undoMark(workId: string, year: string): Promise<void> {
     await setSeason(workId, year, null)
     return
   }
-  const latest = (work.doneDates ?? []).filter((date) => date.startsWith(year)).sort().at(-1)
+  const inWindow = (date: string) => {
+    if (work.recurrence === 'season' && work.seasonSchedule) {
+      const { start, end } = seasonWindow(work.seasonSchedule, Number(year))
+      return date >= start && date <= end
+    }
+    return date.startsWith(year)
+  }
+  const latest = (work.doneDates ?? []).filter(inWindow).sort().at(-1)
   if (!latest) return
   await repo.update('planWorks', workId, { doneDates: (work.doneDates ?? []).filter((date) => date !== latest) }, work.revision)
 }

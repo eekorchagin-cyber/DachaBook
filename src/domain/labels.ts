@@ -46,7 +46,10 @@ const WEEKDAYS_SHORT = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
 
 /** Подпись расписания внутри сезона: шаг или дни недели, время и окно дат. */
 export function scheduleText(schedule: SeasonSchedule): string {
-  const span = `с ${schedule.fromDay} ${MONTHS_SHORT[schedule.fromMonth - 1]} по ${schedule.toDay} ${MONTHS_SHORT[schedule.toMonth - 1]}`
+  const crosses = schedule.toMonth * 40 + schedule.toDay < schedule.fromMonth * 40 + schedule.fromDay
+  const span = crosses
+    ? `с ${schedule.fromDay} ${MONTHS_SHORT[schedule.fromMonth - 1]} по ${schedule.toDay} ${MONTHS_SHORT[schedule.toMonth - 1]} следующего года`
+    : `с ${schedule.fromDay} ${MONTHS_SHORT[schedule.fromMonth - 1]} по ${schedule.toDay} ${MONTHS_SHORT[schedule.toMonth - 1]}`
   const rhythm = schedule.weekdays?.length
     ? `по ${[...schedule.weekdays].sort((a, b) => a - b).map((day) => WEEKDAYS_SHORT[day - 1]).join(', ')}`
     : schedule.everyWeeks === 1

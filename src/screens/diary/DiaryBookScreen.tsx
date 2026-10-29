@@ -1,14 +1,16 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import type { AppSettings } from '../../app/store'
+import { renderBookPdf, sharePdf, type PdfBook } from '../../diary/pdfBook'
 import { quantityText } from '../../domain/consumables'
 import { formatDate } from '../../domain/dates'
-import { bookPhotoCount, bookRange, bookYears, diaryBook } from '../../domain/diaryBook'
+import { bookPhotoCount, bookRange, bookYears, diaryBook, type BookChapter } from '../../domain/diaryBook'
 import { EVENT_TYPES, measurementText, weatherText } from '../../domain/labels'
 import type { CareObject, Consumable, DiaryEvent, PlantGroup } from '../../domain/types'
 import { useFileUrl } from '../../files/files'
 import { db } from '../../storage/db'
 import { EmptyState, Screen } from '../../ui/Screen'
+import { ActionButton } from '../../ui/Section'
 import { WeatherBadge } from '../../ui/WeatherBadge'
 
 const NONE: never[] = []
@@ -29,24 +31,23 @@ export function DiaryBookScreen({ settings }: { settings: AppSettings }) {
   const consumableMap = useMemo(() => new Map((consumables ?? NONE).map((item) => [item.id, item])), [consumables])
   const photos = bookPhotoCount(chapters)
   const entries = chapters.reduce((sum, chapter) => sum + chapter.months.reduce((monthSum, month) => monthSum + month.events.length, 0), 0)
-
   const savePdf = async () => {
-    const images = [...document.querySelectorAll<HTMLImageElement>('.book img')]
-    await Promise.all(images.map((image) => (image.complete ? undefined : new Promise<void>((resolve) => { image.onload = () => resolve(); image.onerror = () => resolve() }))))
-    window.print()
+    const thumbs = await loadThumbs(chapters)
+    const blob = await renderBookPdf(toPdfBook(settings, chapters, objectMap, groupMap, consumableMap, printedAt, thumbs))
+    await sharePdf(blob, `dachabook-dnevnik-${bookRange(chapters).replace('–', '-') || 'dnevnik'}.pdf`)
   }
 
   return (
     <Screen title="Дневник в PDF" help="book" tab="/diary" back="/diary">
       <div className="no-print">
         <p className="hint">
-          Книга дневника: главы — годы, параграфы — месяцы. Нажмите «Сохранить PDF» и в диалоге печати выберите «Сохранить как PDF» (на iPhone — «Сохранить в
-          Файлы» или значок «Поделиться»).
+          Книга дневника: главы — годы, параграфы — месяцы. На iPhone после «Сохранить PDF» откроется «Поделиться» — выберите «Сохранить в Файлы». На компьютере файл
+          скачается или откроется системное меню.
         </p>
         <div className="actions">
-          <button type="button" className="button" disabled={entries === 0} onClick={() => void savePdf()}>
+          <ActionButton disabled={entries === 0} onRun={savePdf}>
             Сохранить PDF
-          </button>
+          </ActionButton>
         </div>
         {years.length > 1 && (
           <div className="jump-row" role="group" aria-label="Годы книги">
@@ -161,4 +162,69 @@ function BookPhoto({ id }: { id: string }) {
   const url = useFileUrl(id, 'thumb')
   if (!url) return <span className="book-photo placeholder" />
   return <img className="book-photo" src={url} alt="" />
+}
+
+async function loadThumbs(chapters: BookChapter[]): Promise<Map<string, Blob>> {
+  const ids = [...new Set(chapters.flatMap((chapter) => chapter.months.flatMap((month) => month.events.flatMap((event) => event.photoIds))))]
+  const thumbs = new Map<string, Blob>()
+  for (const id of ids) {
+    const content = await db.fileContents.get(id)
+    const blob = content?.thumb ?? content?.original
+    if (blob) thumbs.set(id, blob)
+  }
+  return thumbs
+}
+
+function toPdfBook(
+  settings: AppSettings,
+  chapters: BookChapter[],
+  objects: Map<string, CareObject>,
+  groups: Map<string, PlantGroup>,
+  consumables: Map<string, Consumable>,
+  printedAt: string,
+  thumbs: Map<string, Blob>,
+): PdfBook {
+  return {
+    author: settings.authorName,
+    place: settings.plotAddress || undefined,
+    range: bookRange(chapters),
+    printedAt,
+    chapters: chapters.map((chapter) => ({
+      title: chapter.title,
+      months: chapter.months.map((month) => ({
+        title: month.title,
+        events: month.events.map((event) => {
+          const extras = [
+            event.type === 'measurement' ? measurementText(event) : '',
+            event.consumables?.length
+              ? `Израсходовано: ${event.consumables
+                  .map((use) => {
+                    const item = consumables.get(use.consumableId)
+                    return item ? `${item.name} — ${quantityText(use.quantity, item.unit)}` : quantityText(use.quantity, 'ед.')
+                  })
+                  .join('; ')}`
+              : '',
+            weatherText(event) ?? '',
+          ].filter(Boolean)
+          return {
+            dateLabel: `${formatDate(event.date)}${event.time ? `, ${event.time}` : ''}`,
+            typeLabel: EVENT_TYPES[event.type].label,
+            where: [
+              event.objectIds.map((id) => objects.get(id)?.name).filter(Boolean).join(', '),
+              event.plantGroupIds.map((id) => groups.get(id)?.name).filter(Boolean).join(', '),
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            workKind: event.workKind,
+            comment: event.comment,
+            extras,
+            photos: event.photoIds.flatMap((id) => {
+              const blob = thumbs.get(id)
+              return blob ? [{ blob, caption: event.fileNotes?.[id] }] : []
+            }),
+          }
+        }),
+      })),
+    })),
+  }
 }

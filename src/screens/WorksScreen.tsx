@@ -10,7 +10,7 @@ import { attachPlanWork, dismissPlanSuggestions, markDone, setSeason, undoMark }
 import { useWorkContext } from '../plan/context'
 import { useWorkStatuses } from '../plan/useWorkStatuses'
 import { dateText } from '../plan/frost'
-import { WORK_STATES, type WorkStatus } from '../plan/status'
+import { seasonStartYear, seasonWindow, WORK_STATES, type WorkStatus } from '../plan/status'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
@@ -81,7 +81,6 @@ function dayExists(month: number, day: number): boolean {
 
 function scheduleProblem(schedule: SeasonSchedule, rhythm: 'weeks' | 'days'): string {
   if (!dayExists(schedule.fromMonth, schedule.fromDay) || !dayExists(schedule.toMonth, schedule.toDay)) return 'В этом месяце нет такого дня.'
-  if (schedule.toMonth * 40 + schedule.toDay < schedule.fromMonth * 40 + schedule.fromDay) return 'Окончание окна раньше начала. Даты должны быть внутри одного года.'
   if (rhythm === 'days' && !(schedule.weekdays ?? []).length) return 'Выберите хотя бы один день недели.'
   if (schedule.timeTo && !schedule.timeFrom) return 'Укажите время начала.'
   if (schedule.timeFrom && schedule.timeTo && schedule.timeFrom > schedule.timeTo) return 'Время окончания раньше начала.'
@@ -105,11 +104,12 @@ function historyText(dates: string[], year: string): string {
 }
 
 function WorkItem({ work, history, status, objectNames, today, onEdit }: { work: PlanWork; history: string[]; status: WorkStatus; objectNames: string; today: string; onEdit: () => void }) {
-  const currentYear = today.slice(0, 4)
+  const currentYear = work.recurrence === 'season' && work.seasonSchedule ? String(seasonStartYear(work.seasonSchedule, today)) : today.slice(0, 4)
   const [postpone, setPostpone] = useState<string | null>(null)
   const past = historyText(history, currentYear)
   const repeating = work.recurrence === 'season'
-  const canUndo = !!work.seasons[currentYear] || (work.doneDates ?? []).some((date) => date.startsWith(currentYear))
+  const window = work.seasonSchedule ? seasonWindow(work.seasonSchedule, Number(currentYear)) : null
+  const canUndo = !!work.seasons[currentYear] || (work.doneDates ?? []).some((date) => (window ? date >= window.start && date <= window.end : date.startsWith(currentYear)))
   const open = status.state !== 'done' && status.state !== 'skipped' && !(work.condition && status.state === 'planned')
   return (
     <li className={`work-item work-${status.state}${status.urgent ? ' urgent' : ''}`}>
@@ -130,7 +130,7 @@ function WorkItem({ work, history, status, objectNames, today, onEdit }: { work:
           <ActionButton
             disabled={!postpone}
             onRun={async () => {
-              await setSeason(work.id, postpone!.slice(0, 4), { status: 'postponed', date: postpone! })
+              await setSeason(work.id, work.seasonSchedule ? String(seasonStartYear(work.seasonSchedule, postpone!)) : postpone!.slice(0, 4), { status: 'postponed', date: postpone! })
               setPostpone(null)
             }}
           >
@@ -307,7 +307,10 @@ function SeasonEditor({ schedule, rhythm, onSchedule, onRhythm }: { schedule: Se
           <input type="time" value={schedule.timeTo ?? ''} onChange={(event) => onSchedule(patchSchedule(schedule, { timeTo: event.target.value }))} />
         </label>
       </div>
-      <p className="hint">Окно повторяется каждый год. Время только подписывает, когда работу удобно делать: в этот час напоминание не приходит.</p>
+      <p className="hint">
+        Окно повторяется каждый год. Если окончание раньше начала (уборка снега с ноября по март), сезон заканчивается в следующем календарном году. Время только
+        подписывает, когда работу удобно делать: в этот час напоминание не приходит.
+      </p>
     </fieldset>
   )
 }

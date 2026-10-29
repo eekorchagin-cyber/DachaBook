@@ -76,6 +76,26 @@ function calendarDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(safe).padStart(2, '0')}`
 }
 
+/** Снежный сезон и другие окна «через Новый год»: окончание раньше начала в календаре. */
+export function scheduleCrossesYear(schedule: SeasonSchedule): boolean {
+  return schedule.toMonth * 40 + schedule.toDay < schedule.fromMonth * 40 + schedule.fromDay
+}
+
+/** Окно сезона, начавшегося в startYear: при переходе через Новый год конец — в следующем году. */
+export function seasonWindow(schedule: SeasonSchedule, startYear: number): { start: string; end: string; year: number } {
+  const start = calendarDate(startYear, schedule.fromMonth, schedule.fromDay)
+  const end = calendarDate(scheduleCrossesYear(schedule) ? startYear + 1 : startYear, schedule.toMonth, schedule.toDay)
+  return { start, end, year: startYear }
+}
+
+/** Год начала сезона, которому принадлежит день (январь уборки снега — сезон ноября прошлого года). */
+export function seasonStartYear(schedule: SeasonSchedule, today: string): number {
+  const year = Number(today.slice(0, 4))
+  if (!scheduleCrossesYear(schedule)) return year
+  const previous = seasonWindow(schedule, year - 1)
+  return today >= previous.start && today <= previous.end ? year - 1 : year
+}
+
 /** 1 — понедельник … 7 — воскресенье. */
 function isoWeekday(date: string): number {
   const js = new Date(`${date}T12:00:00Z`).getUTCDay()
@@ -88,11 +108,9 @@ function timeSuffix(schedule: SeasonSchedule): string {
   return ''
 }
 
-/** Дни, когда работа по расписанию приходится в этом году. Окно не переходит через Новый год. */
+/** Дни, когда работа по расписанию приходится в сезоне, начавшемся в этом году (окно может зайти в следующий). */
 export function seasonOccurrences(schedule: SeasonSchedule, year: number): string[] {
-  const start = calendarDate(year, schedule.fromMonth, schedule.fromDay)
-  const end = calendarDate(year, schedule.toMonth, schedule.toDay)
-  if (start > end) return []
+  const { start, end } = seasonWindow(schedule, year)
   const dates: string[] = []
   if (schedule.weekdays?.length) {
     const days = new Set(schedule.weekdays)
@@ -104,27 +122,25 @@ export function seasonOccurrences(schedule: SeasonSchedule, year: number): strin
   return dates
 }
 
-function yearCompletions(work: PlanWork, history: string[], year: string): string[] {
-  return [...new Set([...(work.doneDates ?? []), ...history].filter((date) => date.startsWith(year)))].sort()
+function windowCompletions(work: PlanWork, history: string[], start: string, end: string): string[] {
+  return [...new Set([...(work.doneDates ?? []), ...history].filter((date) => date >= start && date <= end))].sort()
 }
 
 /** Состояние работы по расписанию сезона: закрывается один раз, а не весь год. */
 function seasonWorkStatus(work: PlanWork, history: string[], context: WorkContext): WorkStatus {
   const { today } = context
-  const year = today.slice(0, 4)
+  const schedule = work.seasonSchedule
+  if (!schedule) return { state: 'check', message: 'Не указано расписание — откройте работу и задайте окно и повтор.' }
+  const year = String(seasonStartYear(schedule, today))
   const season = work.seasons[year]
   if (season?.status === 'skipped') return { state: 'skipped' }
   if (season?.status === 'done') return { state: 'done', date: season.date, message: season.date ? `выполнено ${dateText(season.date)}` : undefined }
   if (season?.status === 'postponed' && season.date && today < season.date) {
     return { state: 'postponed', date: season.date, message: `перенесена на ${dateText(season.date)}` }
   }
-  const schedule = work.seasonSchedule
-  if (!schedule) return { state: 'check', message: 'Не указано расписание — откройте работу и задайте окно и повтор.' }
-  const start = calendarDate(Number(year), schedule.fromMonth, schedule.fromDay)
-  const end = calendarDate(Number(year), schedule.toMonth, schedule.toDay)
-  if (start > end) return { state: 'check', message: 'Окно расписания переходит через Новый год — укажите даты внутри одного года.' }
+  const { start, end } = seasonWindow(schedule, Number(year))
   const occurrences = seasonOccurrences(schedule, Number(year))
-  const completions = yearCompletions(work, history, year)
+  const completions = windowCompletions(work, history, start, end)
   const suffix = timeSuffix(schedule)
   if (!occurrences.length) return { state: 'check', message: 'В этом окне нет дней по расписанию.' }
   if (today < start) {

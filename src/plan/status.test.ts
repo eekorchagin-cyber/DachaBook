@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { DiaryEvent, PlanWork } from '../domain/types'
 import { addDays, type DailyMinimums } from './frost'
-import { periodRange, workHistory, workStatus } from './status'
+import { periodRange, seasonOccurrences, seasonStartYear, workHistory, workStatus } from './status'
 
 const work = (extra: Partial<PlanWork>): PlanWork =>
   ({ id: 'w', title: 'Работа', objectIds: [], plantGroupIds: [], recurrence: 'yearly', periods: [], seasons: {}, active: true, ...extra }) as PlanWork
@@ -72,6 +72,22 @@ describe('статусы плановых работ', () => {
     const once = work({ recurrence: 'once', periods: [{ month: 6 }], seasons: { '2025': { status: 'done', date: '2025-06-02' } } })
     expect(workStatus(once, [], { today: '2026-06-10' })).toMatchObject({ state: 'done', closed: true })
     expect(workStatus({ ...once, seasons: {} }, [], { today: '2026-06-10' }).state).toBe('ready')
+  })
+
+  it('снежный сезон ноябрь–март заканчивается в следующем календарном году', () => {
+    const snow = work({
+      recurrence: 'season',
+      seasonSchedule: { fromMonth: 11, fromDay: 1, toMonth: 3, toDay: 31, everyWeeks: 1 },
+    })
+    const dates = seasonOccurrences(snow.seasonSchedule!, 2025)
+    expect(dates[0]).toBe('2025-11-01')
+    expect(dates.at(-1)).toBe('2026-03-28')
+    expect(dates.some((date) => date.startsWith('2026-01'))).toBe(true)
+    expect(seasonStartYear(snow.seasonSchedule!, '2026-01-15')).toBe(2025)
+    expect(seasonStartYear(snow.seasonSchedule!, '2026-04-10')).toBe(2026)
+    expect(['overdue', 'ready', 'soon']).toContain(workStatus(snow, [], { today: '2026-01-15' }).state)
+    expect(workStatus(snow, [], { today: '2026-04-10' }).state).toBe('planned')
+    expect(workStatus({ ...snow, seasons: { '2025': { status: 'skipped' } } }, [], { today: '2026-01-15' }).state).toBe('skipped')
   })
 
   it('монтаж водопровода весной: тёплые ночи — готова, с рекомендуемой субботой', () => {
