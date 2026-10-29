@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { DiaryEvent, PlanWork } from '../domain/types'
 import { addDays, type DailyMinimums } from './frost'
-import { periodRange, seasonOccurrences, seasonStartYear, workHistory, workStatus } from './status'
+import { isUpcoming, periodRange, seasonOccurrences, seasonStartYear, workHistory, workStatus } from './status'
 
 const work = (extra: Partial<PlanWork>): PlanWork =>
   ({ id: 'w', title: 'Работа', objectIds: [], plantGroupIds: [], recurrence: 'yearly', periods: [], seasons: {}, active: true, ...extra }) as PlanWork
@@ -88,6 +88,16 @@ describe('статусы плановых работ', () => {
     expect(['overdue', 'ready', 'soon']).toContain(workStatus(snow, [], { today: '2026-01-15' }).state)
     expect(workStatus(snow, [], { today: '2026-04-10' }).state).toBe('planned')
     expect(workStatus({ ...snow, seasons: { '2025': { status: 'skipped' } } }, [], { today: '2026-01-15' }).state).toBe('skipped')
+  })
+
+  it('уборка снега через два дня попадает в ближайшие работы на главной', () => {
+    const snow = work({
+      recurrence: 'season',
+      seasonSchedule: { fromMonth: 10, fromDay: 31, toMonth: 3, toDay: 31, everyWeeks: 1 },
+    })
+    const status = workStatus(snow, [], { today: '2026-10-29' })
+    expect(status).toMatchObject({ state: 'soon', date: '2026-10-31' })
+    expect(isUpcoming(status)).toBe(true)
   })
 
   it('монтаж водопровода весной: тёплые ночи — готова, с рекомендуемой субботой', () => {

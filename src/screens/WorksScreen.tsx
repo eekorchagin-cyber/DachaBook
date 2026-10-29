@@ -10,7 +10,7 @@ import { attachPlanWork, dismissPlanSuggestions, markDone, setSeason, undoMark }
 import { useWorkContext } from '../plan/context'
 import { useWorkStatuses } from '../plan/useWorkStatuses'
 import { dateText } from '../plan/frost'
-import { seasonStartYear, seasonWindow, WORK_STATES, type WorkStatus } from '../plan/status'
+import { isUpcoming, seasonStartYear, seasonWindow, WORK_STATES, type WorkStatus } from '../plan/status'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
@@ -19,7 +19,8 @@ const GROUPS: { title: string; states: WorkStatus['state'][] }[] = [
   { title: 'Сейчас', states: ['overdue', 'ready'] },
   { title: 'Ждёт условий', states: ['waiting', 'check'] },
   { title: 'Скоро и позже', states: ['soon', 'postponed', 'planned'] },
-  { title: 'Выполнено в этом году', states: ['done', 'skipped'] },
+  { title: 'Выполнено в этом году', states: ['done'] },
+  { title: 'Пропущено в этом году', states: ['skipped'] },
 ]
 
 const conditionText = (condition?: WorkCondition) =>
@@ -111,6 +112,8 @@ function WorkItem({ work, history, status, objectNames, today, onEdit }: { work:
   const window = work.seasonSchedule ? seasonWindow(work.seasonSchedule, Number(currentYear)) : null
   const canUndo = !!work.seasons[currentYear] || (work.doneDates ?? []).some((date) => (window ? date >= window.start && date <= window.end : date.startsWith(currentYear)))
   const open = status.state !== 'done' && status.state !== 'skipped' && !(work.condition && status.state === 'planned')
+  const diaryHref = `/diary/new?plan=${work.id}${status.date && status.date > today ? `&date=${status.date}` : ''}`
+  const undoLabel = status.state === 'skipped' ? 'Вернуть в этот год' : repeating ? 'Отменить последнее «сделано»' : 'Снова показать как несделанную'
   return (
     <li className={`work-item work-${status.state}${status.urgent ? ' urgent' : ''}`}>
       <button type="button" className="work-title" onClick={onEdit}>
@@ -145,32 +148,61 @@ function WorkItem({ work, history, status, objectNames, today, onEdit }: { work:
           {open &&
             (repeating ? (
               <>
-                {(status.state === 'ready' || status.state === 'overdue') && <ActionButton onRun={() => markDone(work.id, today)}>Сделано</ActionButton>}
-                <button type="button" className="button secondary small" onClick={() => navigate(`/diary/new?plan=${work.id}`)}>
-                  В дневник
+                <button type="button" className="button small" onClick={() => navigate(diaryHref)}>
+                  Сделано
                 </button>
-                <ActionButton secondary onRun={() => setSeason(work.id, currentYear, { status: 'skipped' })}>
+                {(status.state === 'ready' || status.state === 'overdue') && (
+                  <ActionButton secondary onRun={() => markDone(work.id, today)}>
+                    Без записи в дневник
+                  </ActionButton>
+                )}
+                <ActionButton
+                  secondary
+                  onRun={async () => {
+                    if (
+                      !confirm(
+                        'Пропустить до следующего года? Работа останется в плане, в списке дел её не будет. Если нажали по ошибке — откройте блок «Пропущено в этом году» и нажмите «Вернуть в этот год».',
+                      )
+                    )
+                      return
+                    await setSeason(work.id, currentYear, { status: 'skipped' })
+                  }}
+                >
                   Пропустить в этом году
                 </ActionButton>
               </>
             ) : (
               <>
-                <button type="button" className="button small" onClick={() => navigate(`/diary/new?plan=${work.id}`)}>
+                <button type="button" className="button small" onClick={() => navigate(diaryHref)}>
                   Выполнено
                 </button>
                 <button type="button" className="button secondary small" onClick={() => setPostpone(status.date && status.date > today ? status.date : '')}>
                   Перенести
                 </button>
-                <ActionButton secondary onRun={() => setSeason(work.id, currentYear, { status: 'skipped' })}>
+                <ActionButton
+                  secondary
+                  onRun={async () => {
+                    if (
+                      !confirm(
+                        'Пропустить до следующего года? Работа останется в плане, в списке дел её не будет. Если нажали по ошибке — откройте блок «Пропущено в этом году» и нажмите «Вернуть в этот год».',
+                      )
+                    )
+                      return
+                    await setSeason(work.id, currentYear, { status: 'skipped' })
+                  }}
+                >
                   Пропустить в этом году
                 </ActionButton>
               </>
             ))}
           {canUndo && (
             <ActionButton secondary onRun={() => undoMark(work.id, currentYear)}>
-              Отменить отметку
+              {undoLabel}
             </ActionButton>
           )}
+          <button type="button" className="button secondary small" onClick={onEdit}>
+            Изменить
+          </button>
           <ActionButton
             secondary
             onRun={async () => {
@@ -524,6 +556,9 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
         return (
           <section key={group.title}>
             <h2 className="section-title">{group.title}</h2>
+            {group.title === 'Пропущено в этом году' && (
+              <p className="hint">Если пропустили по ошибке — «Вернуть в этот год». Сама работа из плана не удаляется.</p>
+            )}
             <ul className="list">
               {items.map((item) => (
                 <WorkItem key={item.work.id} {...item} today={context.today} objectNames={names(item.work.objectIds)} onEdit={() => setEditing({ id: item.work.id })} />
@@ -600,13 +635,7 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
 /** Карточка на главном экране: что делать сейчас и в ближайшие две недели, предупреждения о заморозках. */
 export function UpcomingWorksCard() {
   const { list } = useWorkStatuses()
-  const upcoming = list
-    .filter((item) => {
-      if (item.status.closed) return false
-      if (item.work.recurrence === 'season') return item.status.state === 'ready' || item.status.state === 'overdue'
-      return ['overdue', 'ready', 'waiting', 'check', 'soon'].includes(item.status.state)
-    })
-    .slice(0, 5)
+  const upcoming = list.filter((item) => !item.status.closed && isUpcoming(item.status)).slice(0, 5)
   return (
     <section className="card">
       <div className="card-header">

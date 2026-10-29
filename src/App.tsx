@@ -65,13 +65,14 @@ export default function App() {
       if (param) {
         return (
           <EventEditor
-            key={`${param}-${route.query.get('type') ?? ''}-${route.query.get('plan') ?? ''}-${route.query.get('photos') ?? ''}`}
+            key={`${param}-${route.query.get('type') ?? ''}-${route.query.get('plan') ?? ''}-${route.query.get('photos') ?? ''}-${route.query.get('date') ?? ''}`}
             id={param === 'new' ? undefined : param}
             initialType={(route.query.get('type') as EventType | null) ?? 'work'}
             settings={settings}
             planId={route.query.get('plan') ?? undefined}
             initialPhotoIds={route.query.get('photos')?.split(',').filter(Boolean)}
             initialComment={route.query.get('comment') ?? undefined}
+            initialDate={route.query.get('date') ?? undefined}
           />
         )
       }

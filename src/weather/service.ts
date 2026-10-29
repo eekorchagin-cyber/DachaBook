@@ -48,7 +48,19 @@ export function useForecast(): { forecast?: Forecast; location?: PlotLocation | 
   }, [load])
   const hasLocation = !!data?.location
   useEffect(() => {
-    if (hasLocation) void load(false)
+    if (!hasLocation) return
+    void load(false)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void load(false)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    window.addEventListener('pageshow', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+      window.removeEventListener('pageshow', onVisible)
+    }
   }, [hasLocation, load])
   return { forecast: data?.forecast && data.location && sameLocation(data.forecast, data.location) ? data.forecast : undefined, location: data?.location, error, loading, refresh }
 }

@@ -44,13 +44,19 @@ interface Draft {
   consumables: ConsumableRow[]
 }
 
-function toDraft(event: DiaryEvent | undefined, type: EventType, consumables: Consumable[], plan?: PlanWork, incoming?: { photoIds?: string[]; comment?: string }): Draft {
+function toDraft(
+  event: DiaryEvent | undefined,
+  type: EventType,
+  consumables: Consumable[],
+  plan?: PlanWork,
+  incoming?: { photoIds?: string[]; comment?: string; date?: string },
+): Draft {
   const now = todayAtSite()
   // Выполнение плановой работы: запись заполняется по работе, дату и подробности пользователь подтверждает.
   const fromPlan = !event && plan
   return {
     type: event?.type ?? (fromPlan ? 'work' : type),
-    date: event?.date ?? now.date,
+    date: event?.date ?? incoming?.date ?? now.date,
     time: event?.time ?? (type === 'measurement' ? now.time : ''),
     objectIds: event?.objectIds ?? (fromPlan ? plan.objectIds : []),
     plantGroupIds: event?.plantGroupIds ?? (fromPlan ? plan.plantGroupIds : []),
@@ -130,6 +136,7 @@ export function EventEditor({
   planId,
   initialPhotoIds,
   initialComment,
+  initialDate,
 }: {
   id?: string
   initialType: EventType
@@ -137,6 +144,7 @@ export function EventEditor({
   planId?: string
   initialPhotoIds?: string[]
   initialComment?: string
+  initialDate?: string
 }) {
   const event = useLiveQuery(async () => (id ? ((await db.events.get(id)) ?? null) : null), [id])
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), [])
@@ -157,7 +165,7 @@ export function EventEditor({
       settings={settings}
       consumables={consumables}
       plan={plan ?? undefined}
-      incoming={{ photoIds: initialPhotoIds, comment: initialComment }}
+      incoming={{ photoIds: initialPhotoIds, comment: initialComment, date: initialDate }}
     />
   )
 }
@@ -175,7 +183,7 @@ function EventForm({
   settings: AppSettings
   consumables: Consumable[]
   plan?: PlanWork
-  incoming?: { photoIds?: string[]; comment?: string }
+  incoming?: { photoIds?: string[]; comment?: string; date?: string }
 }) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), []) ?? []

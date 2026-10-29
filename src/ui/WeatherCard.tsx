@@ -65,6 +65,7 @@ export function WeatherCard() {
           <span className="weather-now-temp">{temperatureText(current.temperature_2m)}</span>
           <span className="muted weather-now-text">
             {summary}
+            {forecast ? ` · ${age(forecast.fetchedAt, now)}` : ''}
             {error ? ' · нет связи' : ''}
           </span>
           <span className="weather-chevron" aria-hidden="true">
