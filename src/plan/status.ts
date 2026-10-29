@@ -123,7 +123,20 @@ export function seasonOccurrences(schedule: SeasonSchedule, year: number): strin
 }
 
 function windowCompletions(work: PlanWork, history: string[], start: string, end: string): string[] {
-  return [...new Set([...(work.doneDates ?? []), ...history].filter((date) => date >= start && date <= end))].sort()
+  return [...new Set([...(work.doneDates ?? []), ...(work.skippedDates ?? []), ...history].filter((date) => date >= start && date <= end))].sort()
+}
+
+function slotClosed(occurrence: string, next: string, completions: string[], exact: boolean): boolean {
+  return exact ? completions.includes(occurrence) : completions.some((date) => date >= occurrence && date < next)
+}
+
+function openOccurrences(occurrences: string[], completions: string[], end: string, exact: boolean): string[] {
+  return occurrences.filter((occurrence, index) => !slotClosed(occurrence, occurrences[index + 1] ?? addDays(end, 1), completions, exact))
+}
+
+function upcomingStatus(date: string, today: string, suffix: string, prefix: 'с' | 'следующий раз'): WorkStatus {
+  const soon = date <= addDays(today, SOON_DAYS)
+  return { state: soon ? 'soon' : 'planned', date, message: `${prefix} ${dateText(date)}${suffix}` }
 }
 
 /** Состояние работы по расписанию сезона: закрывается один раз, а не весь год. */
@@ -142,37 +155,28 @@ function seasonWorkStatus(work: PlanWork, history: string[], context: WorkContex
   const occurrences = seasonOccurrences(schedule, Number(year))
   const completions = windowCompletions(work, history, start, end)
   const suffix = timeSuffix(schedule)
+  const exact = !!schedule.weekdays?.length
+  const open = openOccurrences(occurrences, completions, end, exact)
   if (!occurrences.length) return { state: 'check', message: 'В этом окне нет дней по расписанию.' }
   if (today < start) {
-    const first = occurrences[0]
-    return { state: first <= addDays(today, SOON_DAYS) ? 'soon' : 'planned', date: first, message: `с ${dateText(first)}${suffix}` }
+    const first = open[0]
+    if (!first) return { state: 'done', message: 'в этом сезоне повторы прошли' }
+    return upcomingStatus(first, today, suffix, 'с')
   }
   if (today > end) {
     return completions.length
       ? { state: 'done', message: 'сезон этого расписания закончился' }
       : { state: 'overdue', date: end, message: `сезон был до ${dateText(end)}` }
   }
-  if (schedule.weekdays?.length) {
-    const doneToday = completions.some((date) => date === today)
-    if (occurrences.includes(today) && !doneToday) return { state: 'ready', date: today, message: `сегодня${suffix}` }
-    const next = occurrences.find((date) => date > today)
-    if (next) return { state: next <= addDays(today, SOON_DAYS) ? 'soon' : 'planned', date: next, message: `следующий раз ${dateText(next)}${suffix}` }
-    return { state: 'done', message: 'в этом сезоне дни по расписанию прошли' }
+  const due = open.find((date) => date <= today)
+  if (due) {
+    return due < today
+      ? { state: 'overdue', date: due, message: `срок был ${dateText(due)}${suffix}` }
+      : { state: 'ready', date: due, message: `сегодня${suffix}` }
   }
-  for (let index = 0; index < occurrences.length; index += 1) {
-    const occurrence = occurrences[index]
-    if (occurrence > today) break
-    const next = occurrences[index + 1] ?? addDays(end, 1)
-    const done = completions.some((date) => date >= occurrence && date < next)
-    if (!done) {
-      return occurrence < today
-        ? { state: 'overdue', date: occurrence, message: `срок был ${dateText(occurrence)}${suffix}` }
-        : { state: 'ready', date: occurrence, message: `сегодня${suffix}` }
-    }
-  }
-  const next = occurrences.find((date) => date > today)
-  if (next) return { state: next <= addDays(today, SOON_DAYS) ? 'soon' : 'planned', date: next, message: `следующий раз ${dateText(next)}${suffix}` }
-  return { state: 'done', message: 'в этом сезоне повторы прошли' }
+  const next = open.find((date) => date > today)
+  if (next) return upcomingStatus(next, today, suffix, 'следующий раз')
+  return { state: 'done', message: exact ? 'в этом сезоне дни по расписанию прошли' : 'в этом сезоне повторы прошли' }
 }
 
 function onceClosed(work: PlanWork, history: string[], today: string): boolean {

@@ -2,9 +2,10 @@ import { useSyncExternalStore } from 'react'
 import { getSetting } from '../app/store'
 import { forgetToken, getToken } from '../cloud/yandexAuth'
 import type { StoredFile } from '../domain/types'
-import { errorText } from '../lib/format'
+import { errorText, isIdbTransient } from '../lib/format'
 import { onLocalChange } from '../storage/changes'
 import { db } from '../storage/db'
+import { reopenDatabase } from '../storage/idb'
 import type { CloudAdapter } from './cloud'
 import { fetchOriginal, forgetSync, pendingCount, readSyncMeta, synchronize, type SyncOptions, type SyncResult } from './engine'
 import { YandexAuthError, YandexCloud } from './yandexCloud'
@@ -92,12 +93,19 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
   set({ running: true, progress: 'Синхронизация…', error: undefined, offline: false, needsLogin: false })
   let result: SyncResult | undefined
   try {
-    result = await synchronize(db, adapter, {
+    const options = {
       appVersion: __APP_VERSION__,
       author: (await getSetting('authorName')) || 'Без имени',
       ...extra,
-      onProgress: (progress) => set({ progress }),
-    })
+      onProgress: (progress: string) => set({ progress }),
+    }
+    try {
+      result = await synchronize(db, adapter, options)
+    } catch (caught) {
+      if (!isIdbTransient(caught)) throw caught
+      await reopenDatabase(db)
+      result = await synchronize(db, adapter, options)
+    }
     const error =
       result.failed > 0
         ? `не передано ${result.failed} (будет повтор): ${result.errors[0] ?? 'ошибка связи'}`

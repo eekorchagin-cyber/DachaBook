@@ -1,6 +1,7 @@
 import SparkMD5 from 'spark-md5'
 import { strFromU8, unzipSync } from 'fflate'
 import { buildBackup } from '../backup/backup'
+import { errorText } from '../lib/format'
 import { createSnapshot } from '../storage/snapshots'
 import type { DocMeta, StoredFile } from '../domain/types'
 import { DOC_TABLES, type ConflictRecord, type DiaryDatabase, type SyncRecord } from '../storage/db'
@@ -94,6 +95,11 @@ async function readJson<T>(cloud: CloudAdapter, path: string): Promise<T | null>
  * Параллельная обработка, в которой сбой одного элемента не останавливает остальные: ошибки собираются,
  * а необработанное уйдёт при следующей синхронизации. Возвращает число сбоев.
  */
+function ioParallel(requested: number): number {
+  if (typeof navigator !== 'undefined' && /iP(hone|ad|od)/.test(navigator.userAgent)) return 1
+  return requested
+}
+
 async function pool<T>(items: T[], size: number, work: (item: T) => Promise<void>, errors: string[]): Promise<number> {
   let next = 0
   let failed = 0
@@ -104,7 +110,7 @@ async function pool<T>(items: T[], size: number, work: (item: T) => Promise<void
           await work(items[next++])
         } catch (error) {
           failed++
-          const message = error instanceof Error ? error.message : String(error)
+          const message = errorText(error)
           if (!errors.includes(message)) errors.push(message)
         }
       }
@@ -222,7 +228,7 @@ async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta
     const states = await database.syncState.bulkGet(keys)
     const changed = entries.filter((entry, index) => !entry.md5 || states[index]?.remoteMd5 !== entry.md5)
     let done = 0
-    const failed = await pool(changed, cloud.parallel ?? 4, async (entry: RemoteEntry) => {
+    const failed = await pool(changed, ioParallel(cloud.parallel ?? 4), async (entry: RemoteEntry) => {
       const blob = await cloud.read(entry.path)
       if (!blob) return
       const text = await blob.text()
@@ -280,7 +286,7 @@ async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<st
     const states = await database.syncState.bulkGet(docs.map((doc) => `${collection}/${doc.id}`))
     const dirty = docs.filter((doc, index) => doc.revision !== states[index]?.revision && !conflicted.has(`${collection}/${doc.id}`))
     let done = 0
-    result.failed += await pool(dirty, cloud.parallel ?? 4, async (doc) => {
+    result.failed += await pool(dirty, ioParallel(cloud.parallel ?? 4), async (doc) => {
       const key = `${collection}/${doc.id}`
       const path = docPath(collection, doc.id)
       const state = await database.syncState.get(key)
@@ -311,7 +317,7 @@ async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<st
 async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: (text: string) => void): Promise<void> {
   const files = ((await database.files.toArray()) as StoredFile[]).filter((file) => !file.deletedAt)
   let done = 0
-  result.failed += await pool(files, Math.min(cloud.parallel ?? 3, 3), async (file) => {
+  result.failed += await pool(files, ioParallel(Math.min(cloud.parallel ?? 3, 3)), async (file) => {
     const key = `blob/${file.id}`
     const state = (await database.syncState.get(key)) ?? { key }
     const content = await database.fileContents.get(file.id)

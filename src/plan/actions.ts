@@ -30,11 +30,18 @@ export async function transferDraft(item: PlanDraftItem): Promise<PlanWork> {
 /** Короткая отметка «сделано» на дату: следующий раз по расписанию считается от неё, дневник не создаётся. */
 export async function markDone(workId: string, date: string): Promise<void> {
   const work = await db.planWorks.get(workId)
-  if (!work || work.doneDates?.includes(date)) return
+  if (!work || work.doneDates?.includes(date) || work.skippedDates?.includes(date)) return
   await repo.update('planWorks', workId, { doneDates: [...(work.doneDates ?? []), date].sort() }, work.revision)
 }
 
-/** Снимает отметку этого года: статус сезона или последнюю короткую отметку «сделано». Запись дневника не трогает. */
+/** Пропуск только этого раза по расписанию: следующий срок остаётся, дневник не создаётся. */
+export async function skipOccurrence(workId: string, date: string): Promise<void> {
+  const work = await db.planWorks.get(workId)
+  if (!work || work.skippedDates?.includes(date) || work.doneDates?.includes(date)) return
+  await repo.update('planWorks', workId, { skippedDates: [...(work.skippedDates ?? []), date].sort() }, work.revision)
+}
+
+/** Снимает отметку этого года: статус сезона, последний пропуск или последнюю короткую отметку «сделано». Запись дневника не трогает. */
 export async function undoMark(workId: string, year: string): Promise<void> {
   const work = await db.planWorks.get(workId)
   if (!work) return
@@ -49,9 +56,14 @@ export async function undoMark(workId: string, year: string): Promise<void> {
     }
     return date.startsWith(year)
   }
-  const latest = (work.doneDates ?? []).filter(inWindow).sort().at(-1)
-  if (!latest) return
-  await repo.update('planWorks', workId, { doneDates: (work.doneDates ?? []).filter((date) => date !== latest) }, work.revision)
+  const latestSkip = (work.skippedDates ?? []).filter(inWindow).sort().at(-1)
+  const latestDone = (work.doneDates ?? []).filter(inWindow).sort().at(-1)
+  if (latestSkip && (!latestDone || latestSkip >= latestDone)) {
+    await repo.update('planWorks', workId, { skippedDates: (work.skippedDates ?? []).filter((date) => date !== latestSkip) }, work.revision)
+    return
+  }
+  if (!latestDone) return
+  await repo.update('planWorks', workId, { doneDates: (work.doneDates ?? []).filter((date) => date !== latestDone) }, work.revision)
 }
 
 /** Записи дневника, из которых собрано предложение, связываются с новой плановой работой. */

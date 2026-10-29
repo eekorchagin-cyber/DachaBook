@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { repo } from '../app/store'
 import { db } from '../storage/db'
-import { markDone, setSeason, transferDraft, undoMark } from './actions'
+import { markDone, setSeason, skipOccurrence, transferDraft, undoMark } from './actions'
 
 beforeEach(async () => {
   await Promise.all(db.tables.map((table) => table.clear()))
@@ -55,5 +55,23 @@ describe('перенос черновика в план работ', () => {
     expect((await db.planWorks.get(work.id))?.doneDates).toEqual(['2025-06-02', '2026-05-11'])
     await undoMark(work.id, '2026')
     expect((await db.planWorks.get(work.id))?.doneDates).toEqual(['2025-06-02'])
+  })
+
+  it('пропуск этого раза снимается отдельно от «сделано»', async () => {
+    const work = await repo.create('planWorks', {
+      title: 'Уборка снега',
+      objectIds: [],
+      plantGroupIds: [],
+      recurrence: 'season',
+      periods: [],
+      seasonSchedule: { fromMonth: 10, fromDay: 31, toMonth: 3, toDay: 31, weekdays: [6] },
+      seasons: {},
+      active: true,
+    })
+    await skipOccurrence(work.id, '2026-10-31')
+    await skipOccurrence(work.id, '2026-10-31')
+    expect((await db.planWorks.get(work.id))?.skippedDates).toEqual(['2026-10-31'])
+    await undoMark(work.id, '2026')
+    expect((await db.planWorks.get(work.id))?.skippedDates).toEqual([])
   })
 })

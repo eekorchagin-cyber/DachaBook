@@ -90,6 +90,17 @@ describe('статусы плановых работ', () => {
     expect(workStatus({ ...snow, seasons: { '2025': { status: 'skipped' } } }, [], { today: '2026-01-15' }).state).toBe('skipped')
   })
 
+  it('пропуск только этого раза оставляет следующий срок уборки снега', () => {
+    const snow = work({
+      recurrence: 'season',
+      seasonSchedule: { fromMonth: 10, fromDay: 31, toMonth: 3, toDay: 31, weekdays: [6] },
+    })
+    expect(workStatus(snow, [], { today: '2026-10-29' })).toMatchObject({ state: 'soon', date: '2026-10-31' })
+    expect(workStatus({ ...snow, skippedDates: ['2026-10-31'] }, [], { today: '2026-10-29' })).toMatchObject({ state: 'soon', date: '2026-11-07' })
+    expect(workStatus({ ...snow, skippedDates: ['2026-10-31'] }, [], { today: '2026-10-31' })).toMatchObject({ state: 'soon', date: '2026-11-07' })
+    expect(isUpcoming(workStatus({ ...snow, skippedDates: ['2026-10-31'] }, [], { today: '2026-10-31' }))).toBe(true)
+  })
+
   it('уборка снега через два дня попадает в ближайшие работы на главной', () => {
     const snow = work({
       recurrence: 'season',

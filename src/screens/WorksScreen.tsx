@@ -6,7 +6,7 @@ import { MONTH_NAMES } from '../domain/dates'
 import { normalizeText } from '../domain/diaryFilter'
 import { periodText, scheduleText } from '../domain/labels'
 import type { DiaryEvent, DocInput, PlanPeriod, PlanWork, SeasonSchedule, WorkCondition } from '../domain/types'
-import { attachPlanWork, dismissPlanSuggestions, markDone, setSeason, undoMark } from '../plan/actions'
+import { attachPlanWork, dismissPlanSuggestions, markDone, setSeason, skipOccurrence, undoMark } from '../plan/actions'
 import { useWorkContext } from '../plan/context'
 import { useWorkStatuses } from '../plan/useWorkStatuses'
 import { dateText } from '../plan/frost'
@@ -110,10 +110,20 @@ function WorkItem({ work, history, status, objectNames, today, onEdit }: { work:
   const past = historyText(history, currentYear)
   const repeating = work.recurrence === 'season'
   const window = work.seasonSchedule ? seasonWindow(work.seasonSchedule, Number(currentYear)) : null
-  const canUndo = !!work.seasons[currentYear] || (work.doneDates ?? []).some((date) => (window ? date >= window.start && date <= window.end : date.startsWith(currentYear)))
+  const inSeason = (date: string) => (window ? date >= window.start && date <= window.end : date.startsWith(currentYear))
+  const latestSkip = (work.skippedDates ?? []).filter(inSeason).sort().at(-1)
+  const latestDone = (work.doneDates ?? []).filter(inSeason).sort().at(-1)
+  const canUndo = !!work.seasons[currentYear] || !!latestSkip || !!latestDone
   const open = status.state !== 'done' && status.state !== 'skipped' && !(work.condition && status.state === 'planned')
   const diaryHref = `/diary/new?plan=${work.id}${status.date && status.date > today ? `&date=${status.date}` : ''}`
-  const undoLabel = status.state === 'skipped' ? 'Вернуть в этот год' : repeating ? 'Отменить последнее «сделано»' : 'Снова показать как несделанную'
+  const undoLabel =
+    status.state === 'skipped'
+      ? 'Вернуть в этот год'
+      : latestSkip && (!latestDone || latestSkip >= latestDone)
+        ? 'Отменить пропуск'
+        : repeating
+          ? 'Отменить последнее «сделано»'
+          : 'Снова показать как несделанную'
   return (
     <li className={`work-item work-${status.state}${status.urgent ? ' urgent' : ''}`}>
       <button type="button" className="work-title" onClick={onEdit}>
@@ -156,19 +166,8 @@ function WorkItem({ work, history, status, objectNames, today, onEdit }: { work:
                     Без записи в дневник
                   </ActionButton>
                 )}
-                <ActionButton
-                  secondary
-                  onRun={async () => {
-                    if (
-                      !confirm(
-                        'Пропустить до следующего года? Работа останется в плане, в списке дел её не будет. Если нажали по ошибке — откройте блок «Пропущено в этом году» и нажмите «Вернуть в этот год».',
-                      )
-                    )
-                      return
-                    await setSeason(work.id, currentYear, { status: 'skipped' })
-                  }}
-                >
-                  Пропустить в этом году
+                <ActionButton secondary onRun={() => skipOccurrence(work.id, status.date ?? today)}>
+                  Пропустить в этот раз
                 </ActionButton>
               </>
             ) : (
@@ -398,6 +397,7 @@ function WorkForm({ work, suggestion, settings, onClose }: { work?: PlanWork; su
       condition,
       seasonSchedule,
       doneDates: work?.doneDates,
+      skippedDates: work?.skippedDates,
       historyWords: work?.historyWords,
       sourceDraftId: work?.sourceDraftId,
       seasons: work?.seasons ?? {},

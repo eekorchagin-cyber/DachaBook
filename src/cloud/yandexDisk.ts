@@ -20,14 +20,27 @@ export class YandexDiskError extends Error {
   }
 }
 
+function timeoutSignal(ms: number, outer?: AbortSignal): AbortSignal {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ms)
+  const cancel = () => clearTimeout(timer)
+  controller.signal.addEventListener('abort', cancel, { once: true })
+  outer?.addEventListener('abort', () => controller.abort(), { once: true })
+  return controller.signal
+}
+
 /** Браузер не сообщает причину сетевой ошибки («Load failed»), поэтому указываем шаг и сервер. */
-async function send(url: string, init: RequestInit, purpose: string): Promise<Response> {
+async function send(url: string, init: RequestInit, purpose: string, timeoutMs = 25_000): Promise<Response> {
   try {
-    return await fetch(url, init)
+    return await fetch(url, { ...init, signal: timeoutSignal(timeoutMs, init.signal ?? undefined) })
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    if (error instanceof DOMException && error.name === 'AbortError' && init.signal?.aborted) throw error
     const host = new URL(url).host
-    throw new YandexDiskError(0, `${purpose}: нет ответа от ${host} — пропала сеть, сервер отклонил слишком частые запросы или браузер заблокировал запрос (CORS)`, 'network')
+    throw new YandexDiskError(
+      0,
+      `${purpose}: нет ответа от ${host}. Проверьте сеть; если Яндекс или посредник недоступны без VPN — включите VPN.`,
+      'network',
+    )
   }
 }
 
@@ -156,7 +169,7 @@ export class YandexDisk {
 
   async upload(path: string, data: Blob, signal?: AbortSignal): Promise<void> {
     const target = await this.request<{ href: string; method: string }>('GET', '/resources/upload', { path, overwrite: 'true' })
-    const response = await send(target.href, { method: target.method || 'PUT', body: data, signal }, 'Загрузка файла на сервер Диска')
+    const response = await send(target.href, { method: target.method || 'PUT', body: data, signal }, 'Загрузка файла на сервер Диска', 120_000)
     if (!response.ok) throw new YandexDiskError(response.status, `Загрузка не принята: ${response.statusText}`)
   }
 

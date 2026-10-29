@@ -231,6 +231,8 @@ export interface PlanWork extends DocMeta {
   seasonSchedule?: SeasonSchedule
   /** Даты короткой отметки «сделано» без записи в дневнике. */
   doneDates?: string[]
+  /** Пропуск только этого раза по расписанию: снега не было, на даче не были — следующий срок остаётся. */
+  skippedDates?: string[]
   /** Слова для поиска таких работ в дневнике прошлых лет (например, «водопровод» и «слил»). */
   historyWords?: string[][]
   sourceDraftId?: string

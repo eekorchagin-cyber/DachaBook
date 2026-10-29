@@ -49,7 +49,7 @@ async function get<T>(url: string): Promise<T> {
   try {
     response = await fetch(url, { signal: AbortSignal.timeout(20_000) })
   } catch {
-    throw new Error('Нет связи с сервисом погоды Open-Meteo')
+    throw new Error('Нет связи с сервисом погоды Open-Meteo. Если зарубежные сайты недоступны, включите VPN.')
   }
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { reason?: string }
