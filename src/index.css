@@ -1385,8 +1385,16 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
 }
 
 .state-waiting,
-.state-check {
+.state-check,
+.state-rain {
   color: var(--accent);
+}
+
+.state-soon,
+.state-skipped,
+.state-off,
+.state-planned {
+  color: var(--muted);
 }
 
 .upcoming {

@@ -11,6 +11,7 @@ import { WeatherCard } from '../ui/WeatherCard'
 import { EmptyState, Screen } from '../ui/Screen'
 import { EventCard } from './diary/EventCard'
 import { TodaySignCard } from './FolkSignsScreen'
+import { UpcomingWateringCard } from './WateringScreen'
 import { UpcomingWorksCard } from './WorksScreen'
 
 export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorName: string; plotAddress: string; photoPosition: PhotoPosition }) {
@@ -47,6 +48,7 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
       <WeatherCard />
       {signs && <TodaySignCard signs={signs} />}
       <UpcomingWorksCard />
+      <UpcomingWateringCard />
       {events && <DateJump events={events} />}
       <h2 className="section-title">Последние записи</h2>
       {events && latest.length === 0 && <EmptyState>Записей пока нет. Начните с кнопки «Новая запись».</EmptyState>}

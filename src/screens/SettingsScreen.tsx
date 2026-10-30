@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import { seedDefaultObjects } from '../app/seed'
+import { ensureSeeded } from '../app/seed'
 import { restoreBackup, type RestoreResult } from '../backup/backup'
 import { setSetting, type AppSettings, type PhotoPosition, type ThemeSetting } from '../app/store'
 import { versionLabel } from '../app/version'
@@ -199,7 +199,7 @@ export function WelcomeScreen() {
         className="card"
         onSubmit={(event) => {
           event.preventDefault()
-          if (name.trim()) void setSetting('authorName', name.trim()).then(seedDefaultObjects)
+          if (name.trim()) void setSetting('authorName', name.trim()).then(() => ensureSeeded())
         }}
       >
         <h2>Как вас зовут?</h2>

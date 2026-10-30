@@ -254,6 +254,38 @@ export interface ImportArchiveItem extends DocMeta {
   createdRecordIds: string[]
 }
 
+/**
+ * Зона полива (раздел 6 ТЗ): газон, сад и грядки независимы.
+ * Если окончание сезона раньше начала, окно переходит на следующий календарный год.
+ */
+export type WateringKind = 'sprinkler' | 'drip' | 'hose' | 'other'
+
+export interface WateringZone extends DocMeta {
+  name: string
+  kind: WateringKind
+  objectIds: string[]
+  plantGroupIds: string[]
+  areaM2?: number
+  dripLineM?: number
+  emitters?: number
+  soil?: string
+  /** Производительность системы, л/мин. */
+  flowLpm?: number
+  /** 1 — понедельник … 7 — воскресенье. */
+  weekdays: number[]
+  durationMin: number
+  timeFrom?: string
+  fromMonth: number
+  fromDay: number
+  toMonth: number
+  toDay: number
+  /** Не поливать, если осадки вчера+сегодня или прогноз на сегодня не меньше этого (мм). */
+  skipRainMm: number
+  skippedDates?: string[]
+  note?: string
+  active: boolean
+}
+
 export interface Collections {
   objects: CareObject
   plantGroups: PlantGroup
@@ -265,6 +297,7 @@ export interface Collections {
   consumables: Consumable
   folkSigns: FolkSign
   planWorks: PlanWork
+  wateringZones: WateringZone
 }
 
 export type CollectionName = keyof Collections

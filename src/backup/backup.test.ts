@@ -21,6 +21,20 @@ async function filled() {
     photoIds: [photo.id],
     attachmentIds: [],
   })
+  await repo.create('wateringZones', {
+    name: 'Газон',
+    kind: 'sprinkler',
+    objectIds: [lawn.id],
+    plantGroupIds: [],
+    weekdays: [2, 5],
+    durationMin: 20,
+    fromMonth: 5,
+    fromDay: 15,
+    toMonth: 9,
+    toDay: 15,
+    skipRainMm: 5,
+    active: true,
+  })
   await database.settings.put({ key: 'workKinds', value: ['Подкормка', 'Свой вид'] })
   await database.settings.put({ key: 'authorName', value: 'Егор' })
   await database.settings.put({ key: 'plotAddress', value: 'СНТ «Пример», участок 1' })
@@ -37,7 +51,7 @@ describe('резервная копия', () => {
     const { database, event, photo } = await filled()
     const { blob, fileName, manifest } = await buildBackup(database, 'test')
     expect(fileName).toMatch(/^dachabook-backup-\d{8}-\d{4}\.zip$/)
-    expect(manifest).toMatchObject({ app: 'dachabook', complete: true, counts: { events: 1, objects: 1, files: 1 } })
+    expect(manifest).toMatchObject({ app: 'dachabook', complete: true, counts: { events: 1, objects: 1, files: 1, wateringZones: 1 } })
     const entries = unzipSync(new Uint8Array(await bytes(blob)))
     expect(Object.keys(entries)).toEqual(
       expect.arrayContaining([`events/2025/${event.id}.json`, `files/originals/${photo.id}.jpg`, `files/thumbs/${photo.id}.jpg`, 'manifest.json', 'README.txt', 'settings/shared.json']),
@@ -51,12 +65,12 @@ describe('резервная копия', () => {
     const target = new DiaryDatabase(`restore-${crypto.randomUUID()}`)
 
     const first = await restoreBackup(target, await bytes(blob))
-    expect(first).toMatchObject({ added: 3, files: 1, conflicts: [], corrupted: [] })
+    expect(first).toMatchObject({ added: 4, files: 1, conflicts: [], corrupted: [] })
     expect(await target.events.get(source.event.id)).toEqual(await source.database.events.get(source.event.id))
     expect(new Uint8Array(await (await target.fileContents.get(source.photo.id))!.original!.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3, 4]))
 
     const again = await restoreBackup(target, await bytes(blob))
-    expect(again).toMatchObject({ added: 0, same: 3, files: 0 })
+    expect(again).toMatchObject({ added: 0, same: 4, files: 0 })
     expect(await target.events.count()).toBe(1)
     expect(await target.snapshots.count()).toBe(2)
     expect((await target.settings.get('plotAddress'))?.value).toBe('СНТ «Пример», участок 1')
