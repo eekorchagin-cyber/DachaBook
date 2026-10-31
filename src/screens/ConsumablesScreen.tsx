@@ -1,11 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
+import { navigate, useRoute } from '../app/router'
 import { repo, useSettings } from '../app/store'
-import { applicationHint, applicationWorks, plannedTimes } from '../domain/applications'
-import { findConsumable, normalizeUrl, parseNonNegative, parseQuantity, quantityText, UNITS, urlHost, usageByConsumable } from '../domain/consumables'
+import { findConsumable, normalizeUrl, parseQuantity, quantityText, UNITS, urlHost, usageByConsumable } from '../domain/consumables'
 import { todayAtSite } from '../domain/dates'
-import { convertQuantity, pastYearUsage, purchaseLine, purchasePlan, substanceUnit, suggestedRateUnit } from '../domain/purchases'
-import type { CareObject, Consumable, DiaryEvent, DocInput, PlanWork } from '../domain/types'
+import { convertQuantity, purchasePlan, substanceUnit, suggestedRateUnit } from '../domain/purchases'
+import type { CareObject, Consumable, DocInput } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { SuggestInput } from '../ui/SuggestInput'
@@ -19,27 +19,17 @@ function ConsumableForm({
   consumable,
   consumables,
   objects,
-  events,
-  works,
-  year,
-  today,
   onClose,
 }: {
   consumable?: Consumable
   consumables: Consumable[]
   objects: CareObject[]
-  events: DiaryEvent[]
-  works: PlanWork[]
-  year: number
-  today: string
   onClose: () => void
 }) {
   const [name, setName] = useState(consumable?.name ?? '')
   const [unit, setUnit] = useState(consumable?.unit ?? 'кг')
-  const [season, setSeason] = useState(consumable?.seasonQuantity?.toString() ?? '')
   const [rate, setRate] = useState(consumable?.ratePerM2?.toString() ?? '')
   const [rateUnit, setRateUnit] = useState(consumable?.rateUnit ?? suggestedRateUnit(consumable?.unit ?? 'кг'))
-  const [stock, setStock] = useState(consumable?.stockQuantity?.toString() ?? '')
   const [pack, setPack] = useState(consumable?.packQuantity?.toString() ?? '')
   const [objectIds, setObjectIds] = useState<string[]>(consumable?.objectIds ?? [])
   const [note, setNote] = useState(consumable?.note ?? '')
@@ -49,27 +39,21 @@ function ConsumableForm({
   const link = normalizeUrl(url)
   const duplicate = findConsumable(consumables, name)
   const nameTaken = !!duplicate && duplicate.id !== consumable?.id
-  const seasonInvalid = !!season.trim() && parseQuantity(season) === undefined
   const rateInvalid = !!rate.trim() && parseQuantity(rate) === undefined
-  const stockInvalid = !!stock.trim() && parseNonNegative(stock) === undefined
   const packInvalid = !!pack.trim() && parseQuantity(pack) === undefined
   const materialUnit = unit.trim() || 'шт.'
   const substance = substanceUnit(rateUnit, materialUnit)
   const separate = convertQuantity(1, materialUnit, substance) === null
-  const matched = applicationWorks(works, objectIds, today)
-  const times = plannedTimes(matched)
   const plan = purchasePlan({
     unit: materialUnit,
-    seasonQuantity: parseQuantity(season),
     ratePerM2: parseQuantity(rate),
     rateUnit,
-    applications: times,
-    stockQuantity: parseNonNegative(stock),
+    applications: 1,
     packQuantity: parseQuantity(pack),
     packUnit: separate ? substance : undefined,
     areas: objects.filter((object) => objectIds.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 })),
-    usedThisYear: consumable ? (usageByConsumable(events, year).get(consumable.id) ?? 0) : 0,
-    pastUsage: consumable ? pastYearUsage(events, consumable.id, year) : [],
+    usedThisYear: 0,
+    pastUsage: [],
   })
   const toggle = (id: string) => setObjectIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]))
   const changeUnit = (next: string) => {
@@ -81,11 +65,8 @@ function ConsumableForm({
     const input: DocInput<Consumable> = {
       name: name.trim().replace(/\s+/g, ' '),
       unit: materialUnit,
-      seasonQuantity: plan.source === 'rate' ? (separate ? plan.unitsNeed : plan.need) : parseQuantity(season),
       ratePerM2: parseQuantity(rate),
       rateUnit: parseQuantity(rate) ? rateUnit.trim() || 'г' : undefined,
-      applications: times > 0 ? times : undefined,
-      stockQuantity: parseNonNegative(stock),
       packQuantity: parseQuantity(pack),
       packUnit: separate && parseQuantity(pack) ? substance : undefined,
       objectIds,
@@ -167,66 +148,21 @@ function ConsumableForm({
             <span className="suffix">{plan.perUse === undefined ? '' : plan.measureUnit}</span>
           </span>
         </label>
-        <label className="field">
-          Количество внесений за 1 сезон
-          <span className="result-line">
-            <input aria-label="Количество внесений за 1 сезон" readOnly value={times > 0 ? String(times) : ''} placeholder="—" />
-            <span className="suffix">из плана работ</span>
-          </span>
-        </label>
-        <label className="field">
-          Требуется на 1 сезон
-          {plan.source === 'rate' || plan.perUse !== undefined ? (
-            <span className="result-line">
-              <input aria-label="Требуется на сезон" readOnly value={num(plan.need)} placeholder="—" />
-              <span className="suffix">{plan.need === undefined ? '' : plan.measureUnit}</span>
-              {plan.unitsNeed !== undefined && (
-                <>
-                  <input aria-label="Требуется в единицах учёта" readOnly value={num(plan.unitsNeed)} />
-                  <span className="suffix">{separate ? materialUnit : 'уп.'}</span>
-                </>
-              )}
-            </span>
-          ) : (
-            <span className="result-line">
-              <input aria-label="Требуется на сезон" inputMode="decimal" placeholder="если нормы нет" value={season} onChange={(event) => setSeason(event.target.value)} />
-              <span className="suffix">{materialUnit}</span>
-            </span>
-          )}
-        </label>
-        <p className="hint span">{applicationHint(matched)}</p>
         {rateInvalid && <p className="error span">Норма — положительное число, обычно в граммах.</p>}
-        {seasonInvalid && plan.source !== 'rate' && <p className="error span">Количество на сезон — положительное число.</p>}
         {packInvalid && <p className="error span">Содержимое одной единицы — положительное число.</p>}
         {plan.warnings.map((warning) => (
           <p key={warning} className="hint span">
             {warning}
           </p>
         ))}
+        <p className="hint span">Сколько раз вносить и сколько купить на сезон считается в карточке работы, где выбран этот материал.</p>
       </div>
-      <div className="row pair">
-        <label className="field">
-          Запас сейчас
-          <span className="result-line">
-            <input aria-label="Запас сейчас" inputMode="decimal" placeholder="0" value={stock} onChange={(event) => setStock(event.target.value)} />
-            <span className="suffix">({materialUnit})</span>
-          </span>
-        </label>
-        <label className="field">
-          Купить
-          <span className="result-line">
-            <input aria-label="Купить" readOnly value={num(plan.toBuy)} placeholder="—" />
-            <span className="suffix">({materialUnit})</span>
-          </span>
-        </label>
-      </div>
-      {stockInvalid && <p className="error">Запас — ноль или положительное число.</p>}
       <label className="field">
         Примечание
         <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
       </label>
       <div className="actions">
-        <ActionButton disabled={!name.trim() || nameTaken || (seasonInvalid && plan.source !== 'rate') || rateInvalid || stockInvalid || packInvalid || link === null} onRun={() => save()}>
+        <ActionButton disabled={!name.trim() || nameTaken || rateInvalid || packInvalid || link === null} onRun={() => save()}>
           Сохранить
         </ActionButton>
         {consumable && (
@@ -243,34 +179,43 @@ function ConsumableForm({
 }
 
 export function ConsumablesScreen() {
-  const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), []) ?? []
+  const loaded = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), [])
+  const consumables = loaded ?? []
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const works = useLiveQuery(() => db.planWorks.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const today = todayAtSite().date
-  const year = Number(today.slice(0, 4))
+  const year = Number(todayAtSite().date.slice(0, 4))
   const loadedEvents = useLiveQuery(() => db.events.toArray(), [])
-  const events = loadedEvents ?? []
   const usage = useMemo(() => usageByConsumable(loadedEvents ?? [], year), [loadedEvents, year])
-  const [editing, setEditing] = useState<{ id?: string } | null>(null)
+  const requested = useRoute().query.get('id')
+  const [editing, setEditing] = useState<{ id?: string } | null>(requested ? { id: requested } : null)
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
   }, [editing])
 
+  const close = () => {
+    setEditing(null)
+    if (requested) navigate('/consumables')
+  }
+
   if (editing) {
+    if (editing.id && !loaded) {
+      return (
+        <Screen title="Расходные материалы" help="consumables" onBack={close} tab="/more">
+          <p className="hint">Загрузка…</p>
+        </Screen>
+      )
+    }
+    const consumable = consumables.find((item) => item.id === editing.id)
+    if (editing.id && !consumable) {
+      return (
+        <Screen title="Расходные материалы" help="consumables" onBack={close} tab="/more">
+          <p className="hint">Такого материала нет.</p>
+        </Screen>
+      )
+    }
     return (
-      <Screen title="Расходные материалы" help="consumables" onBack={() => setEditing(null)} tab="/more">
-        <ConsumableForm
-          key={editing.id ?? 'new'}
-          consumable={consumables.find((item) => item.id === editing.id)}
-          consumables={consumables}
-          objects={[...objects].sort(byName)}
-          events={events}
-          works={works}
-          year={year}
-          today={today}
-          onClose={() => setEditing(null)}
-        />
+      <Screen title="Расходные материалы" help="consumables" onBack={close} tab="/more">
+        <ConsumableForm key={editing.id ?? 'new'} consumable={consumable} consumables={consumables} objects={[...objects].sort(byName)} onClose={close} />
       </Screen>
     )
   }
@@ -288,34 +233,30 @@ export function ConsumablesScreen() {
         </button>
       </div>
       <p className="hint">
-        Удобрения, средства защиты, семена, мульча. Норма на м² умножается на площадь и на число внесений из плана работ. Запас и покупка — в единице учёта.
+        Удобрения, средства защиты, семена, мульча. Здесь — само вещество: единица, фасовка и норма на м². Сколько внести за сезон считается в работе плана, где материал выбран.
       </p>
       {active.length === 0 && <EmptyState>Материалов пока нет. Добавьте их здесь или прямо в записи работы в дневнике.</EmptyState>}
       <ul className="list">
         {active.map((item) => {
           const used = usage.get(item.id) ?? 0
-          const times = plannedTimes(applicationWorks(works, item.objectIds, today))
           const plan = purchasePlan({
             unit: item.unit,
-            seasonQuantity: item.seasonQuantity,
             ratePerM2: item.ratePerM2,
             rateUnit: item.rateUnit,
-            applications: times,
-            stockQuantity: item.stockQuantity,
+            applications: 1,
             packQuantity: item.packQuantity,
             packUnit: item.packUnit,
             areas: linked(item.objectIds),
-            usedThisYear: used,
-            pastUsage: pastYearUsage(events, item.id, year),
+            usedThisYear: 0,
+            pastUsage: [],
           })
-          const line = purchaseLine(plan, item.unit)
           return (
             <li key={item.id}>
               <button type="button" className="list-item" onClick={() => setEditing({ id: item.id })}>
                 <strong>{item.name}</strong>
                 <span className="muted">
-                  {line ?? `единица: ${item.unit} · израсходовано в ${year}: ${quantityText(used, item.unit)}`}
-                  {plan.need !== undefined && used > plan.need && ' — больше нормы'}
+                  {plan.perUse !== undefined ? `на один раз ${quantityText(plan.perUse, plan.measureUnit)}` : `единица: ${item.unit}`}
+                  {` · израсходовано в ${year}: ${quantityText(used, item.unit)}`}
                 </span>
                 {item.objectIds.length > 0 && <span className="small">Для: {objectNames(item.objectIds)}</span>}
                 {item.description && <span className="small">{item.description}</span>}

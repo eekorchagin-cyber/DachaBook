@@ -121,10 +121,7 @@ export interface Consumable extends DocMeta {
   /** Норма одного внесения на 1 м². Единица — rateUnit, иначе unit. Пример: 20 г/м² при учёте в кг. */
   ratePerM2?: number
   rateUnit?: string
-  /**
-   * Сколько раз за сезон вносится эта норма.
-   * В карточке берётся из плана работ и здесь только запоминается.
-   */
+  /** Прежнее поле кратности. Сейчас число внесений считается по расписанию работы, где выбран этот материал. */
   applications?: number
   /** Сколько есть сейчас, в unit. Ноль — запас пуст. */
   stockQuantity?: number
@@ -253,6 +250,8 @@ export interface PlanWork extends DocMeta {
   /** Слова для поиска таких работ в дневнике прошлых лет (например, «водопровод» и «слил»). */
   historyWords?: string[][]
   sourceDraftId?: string
+  /** Материалы, которые расходуются на эту работу. Сколько нужно на сезон считается здесь, по расписанию работы. */
+  consumableIds?: string[]
   seasons: Record<string, WorkSeason>
   active: boolean
 }

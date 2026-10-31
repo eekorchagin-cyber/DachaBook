@@ -72,6 +72,7 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
         Описание
         <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
       </label>
+      {object && <ObjectWorks objectId={object.id} />}
       {object && <ObjectGroups objectId={object.id} />}
       <div className="actions">
         <ActionButton disabled={!name.trim()} onRun={() => save()}>
@@ -87,6 +88,30 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
         </button>
       </div>
     </section>
+  )
+}
+
+function ObjectWorks({ objectId }: { objectId: string }) {
+  const works = useLiveQuery(() => db.planWorks.filter((work) => !work.deletedAt && work.objectIds.includes(objectId)).toArray(), [objectId]) ?? []
+  const sorted = [...works].sort((a, b) => Number(b.active) - Number(a.active) || a.title.localeCompare(b.title, 'ru'))
+  return (
+    <>
+      <h3 className="section-title">Работы</h3>
+      {sorted.length === 0 ? (
+        <p className="hint">Работ по этому объекту пока нет. Они появятся, когда в плане у работы будет выбран этот объект.</p>
+      ) : (
+        <ul className="list">
+          {sorted.map((work) => (
+            <li key={work.id}>
+              <a className="list-item" href={`#/works?work=${work.id}`}>
+                <strong>{work.title}</strong>
+                {!work.active && <span className="muted">в архиве плана</span>}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   )
 }
 
