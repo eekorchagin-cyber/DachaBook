@@ -15,6 +15,8 @@ export interface PurchasePlan {
   source: PurchaseSource
   /** Сколько нужно на сезон, в единице материала. */
   need?: number
+  /** Сколько уходит за одно внесение, в единице материала. */
+  perUse?: number
   formula?: string
   used: number
   /** Запас в единице материала. Нет числа — запас не задан. */
@@ -92,6 +94,7 @@ export function purchasePlan(input: {
   const warnings: string[] = []
   const used = round3(input.usedThisYear)
   let need: number | undefined
+  let perUse: number | undefined
   let source: PurchaseSource = 'none'
   let formula: string | undefined
 
@@ -107,7 +110,8 @@ export function purchasePlan(input: {
       else {
         const area = rated.reduce((sum, item) => sum + (item.areaM2 ?? 0), 0)
         const times = Math.max(1, Math.round(input.applications ?? 1))
-        need = round3(area * perM2 * times)
+        perUse = round3(area * perM2)
+        need = round3(perUse * times)
         source = 'rate'
         formula = `${round3(area).toLocaleString('ru-RU')} м² × ${quantityText(input.ratePerM2, rateUnit)}/м² × ${times} = ${quantityText(need, input.unit)}`
         if (missing.length) warnings.push(`Без площади, в расчёт не вошли: ${missing.map((item) => item.name).join(', ')}.`)
@@ -135,13 +139,13 @@ export function purchasePlan(input: {
     if (input.packQuantity) packs = toBuy === 0 ? 0 : Math.ceil(toBuy / input.packQuantity - 1e-9)
   }
 
-  return { source, need, formula, used, stock, toBuy, packs, warnings }
+  return { source, need, perUse, formula, used, stock, toBuy, packs, warnings }
 }
 
 /** Строка для списка материалов. */
 export function purchaseLine(plan: PurchasePlan, unit: string): string | undefined {
   if (!plan.formula) return undefined
-  const parts = [plan.formula, `израсходовано ${quantityText(plan.used, unit)}`]
+  const parts = [plan.perUse !== undefined ? `на один раз ${quantityText(plan.perUse, unit)}` : '', plan.formula, `израсходовано ${quantityText(plan.used, unit)}`].filter(Boolean)
   if (plan.stock !== undefined) parts.push(`запас ${quantityText(plan.stock, unit)}`)
   if (plan.toBuy === undefined) parts.push('укажите запас, чтобы посчитать закупку')
   else if (plan.toBuy === 0) parts.push('покупать не нужно')

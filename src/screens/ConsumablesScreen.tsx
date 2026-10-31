@@ -98,24 +98,28 @@ function ConsumableForm({
         <SuggestInput value={unit} options={units} onChange={setUnit} ariaLabel="Единица учёта" />
       </label>
       <p className="hint">В чём ведётся материал: кг, л или шт. В этой же единице — расход в дневнике, запас и «нужно на сезон». Это не число упаковок.</p>
-      <div className="row">
-        <label className="field">
-          Норма одного внесения на 1 м²
-          <span className="measure-line">
-            <input aria-label="Норма на 1 м²" inputMode="decimal" placeholder="20" value={rate} onChange={(event) => setRate(event.target.value)} />
-            <select aria-label="Единица нормы" value={rateUnit} onChange={(event) => setRateUnit(event.target.value)}>
-              {units.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-            <span className="suffix">/ м²</span>
-          </span>
-        </label>
+      <label className="field">
+        Норма одного внесения на 1 м²
+        <span className="measure-line">
+          <input aria-label="Норма на 1 м²" inputMode="decimal" placeholder="20" value={rate} onChange={(event) => setRate(event.target.value)} />
+          <select aria-label="Единица нормы" value={rateUnit} onChange={(event) => setRateUnit(event.target.value)}>
+            {units.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+          <span className="suffix">/ м²</span>
+        </span>
+      </label>
+      <div className="row pair">
         <label className="field">
           Раз за сезон
           <input aria-label="Раз за сезон" inputMode="numeric" value={times} onChange={(event) => setTimes(event.target.value)} />
+        </label>
+        <label className="field">
+          На один раз, {materialUnit}
+          <input aria-label="На один раз" readOnly value={plan.perUse === undefined ? '' : plan.perUse.toLocaleString('ru-RU', { maximumFractionDigits: 3 })} placeholder="—" />
         </label>
       </div>
       {rateInvalid && <p className="error">Норма — положительное число, обычно в граммах.</p>}
@@ -131,7 +135,7 @@ function ConsumableForm({
         />
       </label>
       {plan.source === 'rate' ? (
-        <p className="hint">Считается само: площадь × норма × сколько раз за сезон. Это {materialUnit} материала, не упаковки.</p>
+        <p className="hint">«На один раз» — площадь × норма. «Нужно на сезон» — это число × сколько раз. И то и другое в {materialUnit}, не в упаковках.</p>
       ) : (
         <p className="hint">Нормы нет — впишите, сколько {materialUnit} нужно на весь сезон. Упаковки сюда не пишутся.</p>
       )}

@@ -14,9 +14,9 @@ describe('расчёт закупок', () => {
       usedThisYear: 1,
       pastUsage: [],
     })
-    expect(plan).toMatchObject({ source: 'rate', need: 4, used: 1, stock: 0.5, toBuy: 2.5, packs: 3 })
+    expect(plan).toMatchObject({ source: 'rate', perUse: 4, need: 4, used: 1, stock: 0.5, toBuy: 2.5, packs: 3 })
     expect(plan.formula).toBe('200 м² × 20 г/м² × 1 = 4 кг')
-    expect(purchaseLine(plan, 'кг')).toBe('200 м² × 20 г/м² × 1 = 4 кг · израсходовано 1 кг · запас 0,5 кг · купить 2,5 кг (3 уп.)')
+    expect(purchaseLine(plan, 'кг')).toBe('на один раз 4 кг · 200 м² × 20 г/м² × 1 = 4 кг · израсходовано 1 кг · запас 0,5 кг · купить 2,5 кг (3 уп.)')
   })
 
   it('три внесения за сезон утраивают килограммы, не упаковки в норме', () => {
@@ -31,7 +31,7 @@ describe('расчёт закупок', () => {
       usedThisYear: 0,
       pastUsage: [],
     })
-    expect(plan).toMatchObject({ need: 12, toBuy: 12, packs: 12 })
+    expect(plan).toMatchObject({ perUse: 4, need: 12, toBuy: 12, packs: 12 })
     expect(plan.formula).toBe('200 м² × 20 г/м² × 3 = 12 кг')
   })
 
