@@ -116,8 +116,15 @@ export interface Consumable extends DocMeta {
   name: string
   /** Единица учёта: кг, л, шт. Расход в записях дневника указывается в ней же. */
   unit: string
-  /** Сколько нужно на сезон; основа для планирования закупок. */
+  /** Сколько нужно на сезон, если нет нормы на площадь. */
   seasonQuantity?: number
+  /** Норма на 1 м². Единица — rateUnit, иначе unit. Пример: 20 г/м² при учёте в кг. */
+  ratePerM2?: number
+  rateUnit?: string
+  /** Сколько есть сейчас, в unit. Ноль — запас пуст. */
+  stockQuantity?: number
+  /** Сколько материала в одной упаковке, в unit. */
+  packQuantity?: number
   objectIds: string[]
   /** Что это за материал и для чего он. */
   description?: string

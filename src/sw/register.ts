@@ -96,9 +96,20 @@ export function useServiceWorkerState(): SwState {
 
 /** Проверяет version.json; если вышла новая версия — обновляет офлайн-кэш и перезапускает страницу. */
 export async function updateApp(): Promise<'latest' | 'reloading'> {
-  const response = await fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store' })
-  if (!response.ok) throw new Error(`Не удалось проверить версию: ${response.status}`)
-  const { version } = (await response.json()) as { version: string }
+  let response: Response
+  try {
+    response = await fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store' })
+  } catch {
+    throw new Error('Нет связи, чтобы проверить обновление.')
+  }
+  if (!response.ok) throw new Error('Не удалось проверить обновление. Проверьте интернет и откройте DachaBook с ярлыка.')
+  let version: string | undefined
+  try {
+    version = ((await response.json()) as { version?: string }).version
+  } catch {
+    throw new Error('Не удалось прочитать номер версии. Откройте DachaBook с ярлыка и повторите.')
+  }
+  if (!version) throw new Error('Не удалось прочитать номер версии.')
   if (version === __APP_VERSION__) return 'latest'
   const registration = await navigator.serviceWorker?.getRegistration()
   if (registration) {
