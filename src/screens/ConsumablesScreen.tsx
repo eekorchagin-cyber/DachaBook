@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { repo, useSettings } from '../app/store'
 import { findConsumable, normalizeUrl, parseNonNegative, parseQuantity, quantityText, UNITS, urlHost, usageByConsumable } from '../domain/consumables'
 import { todayAtSite } from '../domain/dates'
-import { pastYearUsage, purchaseLine, purchasePlan, suggestedRateUnit } from '../domain/purchases'
+import { parseApplications, pastYearUsage, purchaseLine, purchasePlan, suggestedRateUnit } from '../domain/purchases'
 import type { CareObject, Consumable, DiaryEvent, DocInput } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
@@ -32,6 +32,7 @@ function ConsumableForm({
   const [season, setSeason] = useState(consumable?.seasonQuantity?.toString() ?? '')
   const [rate, setRate] = useState(consumable?.ratePerM2?.toString() ?? '')
   const [rateUnit, setRateUnit] = useState(consumable?.rateUnit ?? suggestedRateUnit(consumable?.unit ?? 'кг'))
+  const [times, setTimes] = useState(String(consumable?.applications ?? 1))
   const [stock, setStock] = useState(consumable?.stockQuantity?.toString() ?? '')
   const [pack, setPack] = useState(consumable?.packQuantity?.toString() ?? '')
   const [objectIds, setObjectIds] = useState<string[]>(consumable?.objectIds ?? [])
@@ -44,6 +45,7 @@ function ConsumableForm({
   const nameTaken = !!duplicate && duplicate.id !== consumable?.id
   const seasonInvalid = !!season.trim() && parseQuantity(season) === undefined
   const rateInvalid = !!rate.trim() && parseQuantity(rate) === undefined
+  const timesInvalid = parseApplications(times) === undefined
   const stockInvalid = !!stock.trim() && parseNonNegative(stock) === undefined
   const packInvalid = !!pack.trim() && parseQuantity(pack) === undefined
   const materialUnit = unit.trim() || 'шт.'
@@ -52,6 +54,7 @@ function ConsumableForm({
     seasonQuantity: parseQuantity(season),
     ratePerM2: parseQuantity(rate),
     rateUnit,
+    applications: parseApplications(times),
     stockQuantity: parseNonNegative(stock),
     packQuantity: parseQuantity(pack),
     areas: objects.filter((object) => objectIds.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 })),
@@ -65,9 +68,10 @@ function ConsumableForm({
     const input: DocInput<Consumable> = {
       name: name.trim().replace(/\s+/g, ' '),
       unit: materialUnit,
-      seasonQuantity: parseQuantity(season),
+      seasonQuantity: plan.source === 'rate' ? plan.need : parseQuantity(season),
       ratePerM2: parseQuantity(rate),
-      rateUnit: parseQuantity(rate) ? rateUnit.trim() || materialUnit : undefined,
+      rateUnit: parseQuantity(rate) ? rateUnit.trim() || 'г' : undefined,
+      applications: parseApplications(times),
       stockQuantity: parseNonNegative(stock),
       packQuantity: parseQuantity(pack),
       objectIds,
@@ -89,28 +93,49 @@ function ConsumableForm({
         <input placeholder="Например, «Азофоска» или «Мульча из коры»" value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       {nameTaken && <p className="error">Материал с таким названием уже есть.</p>}
+      <label className="field">
+        Единица учёта
+        <SuggestInput value={unit} options={units} onChange={setUnit} ariaLabel="Единица учёта" />
+      </label>
+      <p className="hint">В чём ведётся материал: кг, л или шт. В этой же единице — расход в дневнике, запас и «нужно на сезон». Это не число упаковок.</p>
       <div className="row">
         <label className="field">
-          Единица
-          <SuggestInput value={unit} options={units} onChange={setUnit} />
+          Норма одного внесения на 1 м²
+          <span className="measure-line">
+            <input aria-label="Норма на 1 м²" inputMode="decimal" placeholder="20" value={rate} onChange={(event) => setRate(event.target.value)} />
+            <select aria-label="Единица нормы" value={rateUnit} onChange={(event) => setRateUnit(event.target.value)}>
+              {units.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+            <span className="suffix">/ м²</span>
+          </span>
         </label>
         <label className="field">
-          Нужно на сезон
-          <input inputMode="decimal" placeholder="необязательно" value={season} onChange={(event) => setSeason(event.target.value)} />
+          Раз за сезон
+          <input aria-label="Раз за сезон" inputMode="numeric" value={times} onChange={(event) => setTimes(event.target.value)} />
         </label>
       </div>
-      {seasonInvalid && <p className="error">Количество на сезон — положительное число.</p>}
-      <div className="row">
-        <label className="field">
-          Норма на 1 м²
-          <input inputMode="decimal" placeholder="например, 20" value={rate} onChange={(event) => setRate(event.target.value)} />
-        </label>
-        <label className="field">
-          Единица нормы
-          <SuggestInput value={rateUnit} options={units} onChange={setRateUnit} />
-        </label>
-      </div>
-      {rateInvalid && <p className="error">Норма — положительное число.</p>}
+      {rateInvalid && <p className="error">Норма — положительное число, обычно в граммах.</p>}
+      {timesInvalid && <p className="error">Число внесений — целое, от 1.</p>}
+      <label className="field">
+        Нужно на сезон, {materialUnit}
+        <input
+          inputMode="decimal"
+          readOnly={plan.source === 'rate'}
+          placeholder="если нормы нет"
+          value={plan.source === 'rate' && plan.need !== undefined ? plan.need.toLocaleString('ru-RU', { maximumFractionDigits: 3 }) : season}
+          onChange={(event) => setSeason(event.target.value)}
+        />
+      </label>
+      {plan.source === 'rate' ? (
+        <p className="hint">Считается само: площадь × норма × сколько раз за сезон. Это {materialUnit} материала, не упаковки.</p>
+      ) : (
+        <p className="hint">Нормы нет — впишите, сколько {materialUnit} нужно на весь сезон. Упаковки сюда не пишутся.</p>
+      )}
+      {seasonInvalid && plan.source !== 'rate' && <p className="error">Количество на сезон — положительное число.</p>}
       <div className="row">
         <label className="field">
           Запас сейчас, {materialUnit}
@@ -164,7 +189,7 @@ function ConsumableForm({
         <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
       </label>
       <div className="actions">
-        <ActionButton disabled={!name.trim() || nameTaken || seasonInvalid || rateInvalid || stockInvalid || packInvalid || link === null} onRun={() => save()}>
+        <ActionButton disabled={!name.trim() || nameTaken || (seasonInvalid && plan.source !== 'rate') || rateInvalid || timesInvalid || stockInvalid || packInvalid || link === null} onRun={() => save()}>
           Сохранить
         </ActionButton>
         {consumable && (
@@ -222,7 +247,7 @@ export function ConsumablesScreen() {
         </button>
       </div>
       <p className="hint">
-        Удобрения, средства защиты, семена, мульча. Норма на м² и площадь объекта дают потребность на сезон; из неё вычитаются расход этого года и запас.
+        Удобрения, средства защиты, семена, мульча. Норма одного внесения в граммах на м² умножается на площадь и на число раз за сезон. «Нужно на сезон» — килограммы, литры или штуки, не упаковки.
       </p>
       {active.length === 0 && <EmptyState>Материалов пока нет. Добавьте их здесь или прямо в записи работы в дневнике.</EmptyState>}
       <ul className="list">
@@ -233,6 +258,7 @@ export function ConsumablesScreen() {
             seasonQuantity: item.seasonQuantity,
             ratePerM2: item.ratePerM2,
             rateUnit: item.rateUnit,
+            applications: item.applications,
             stockQuantity: item.stockQuantity,
             packQuantity: item.packQuantity,
             areas: linked(item.objectIds),

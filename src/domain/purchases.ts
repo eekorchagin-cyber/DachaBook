@@ -65,16 +65,24 @@ export function pastYearUsage(events: Pick<DiaryEvent, 'date' | 'deletedAt' | 'c
   return [...totals.values()]
 }
 
+/** «3» → 3. Пустое, дробное и меньше 1 — не число раз. */
+export function parseApplications(value: string): number | undefined {
+  if (!/^\d+$/.test(value.trim())) return undefined
+  const parsed = Number(value.trim())
+  return parsed >= 1 ? parsed : undefined
+}
+
 /**
  * Сколько купить.
- * Сначала норма × площадь объектов, иначе число «на сезон», иначе максимум расхода прошлых лет.
- * Из потребности вычитаются расход этого года и запас. Упаковки — с округлением вверх.
+ * Норма одного внесения × площадь × сколько раз за сезон. Иначе число «на сезон», иначе максимум расхода прошлых лет.
+ * Потребность — в единице материала, не в упаковках. Из неё вычитаются расход этого года и запас.
  */
 export function purchasePlan(input: {
   unit: string
   seasonQuantity?: number
   ratePerM2?: number
   rateUnit?: string
+  applications?: number
   stockQuantity?: number
   packQuantity?: number
   areas: PurchaseArea[]
@@ -98,9 +106,10 @@ export function purchasePlan(input: {
       if (perM2 === null) warnings.push(`Единицу «${rateUnit}» нельзя перевести в «${input.unit}».`)
       else {
         const area = rated.reduce((sum, item) => sum + (item.areaM2 ?? 0), 0)
-        need = round3(area * perM2)
+        const times = Math.max(1, Math.round(input.applications ?? 1))
+        need = round3(area * perM2 * times)
         source = 'rate'
-        formula = `${round3(area).toLocaleString('ru-RU')} м² × ${quantityText(input.ratePerM2, rateUnit)}/м² = ${quantityText(need, input.unit)}`
+        formula = `${round3(area).toLocaleString('ru-RU')} м² × ${quantityText(input.ratePerM2, rateUnit)}/м² × ${times} = ${quantityText(need, input.unit)}`
         if (missing.length) warnings.push(`Без площади, в расчёт не вошли: ${missing.map((item) => item.name).join(', ')}.`)
       }
     }

@@ -445,6 +445,27 @@ body {
   flex: 1 1 140px;
 }
 
+.measure-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.measure-line input {
+  width: 5.5rem;
+  flex: 0 0 5.5rem;
+}
+
+.measure-line select {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.measure-line .suffix {
+  white-space: nowrap;
+}
+
 .field select,
 .field textarea,
 .search-row input,

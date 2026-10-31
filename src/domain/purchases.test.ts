@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { convertQuantity, pastYearUsage, purchaseLine, purchasePlan, suggestedRateUnit } from './purchases'
+import { convertQuantity, parseApplications, pastYearUsage, purchaseLine, purchasePlan, suggestedRateUnit } from './purchases'
 
 describe('расчёт закупок', () => {
-  it('200 м² × 20 г/м² = 4 кг; из потребности вычитаются расход и запас, упаковки округляются вверх', () => {
+  it('одно внесение: 200 м² × 20 г/м² × 1 = 4 кг; из потребности вычитаются расход и запас', () => {
     const plan = purchasePlan({
       unit: 'кг',
       ratePerM2: 20,
       rateUnit: 'г',
+      applications: 1,
       stockQuantity: 0.5,
       packQuantity: 1,
       areas: [{ name: 'Газон', areaM2: 200 }],
@@ -14,8 +15,24 @@ describe('расчёт закупок', () => {
       pastUsage: [],
     })
     expect(plan).toMatchObject({ source: 'rate', need: 4, used: 1, stock: 0.5, toBuy: 2.5, packs: 3 })
-    expect(plan.formula).toBe('200 м² × 20 г/м² = 4 кг')
-    expect(purchaseLine(plan, 'кг')).toBe('200 м² × 20 г/м² = 4 кг · израсходовано 1 кг · запас 0,5 кг · купить 2,5 кг (3 уп.)')
+    expect(plan.formula).toBe('200 м² × 20 г/м² × 1 = 4 кг')
+    expect(purchaseLine(plan, 'кг')).toBe('200 м² × 20 г/м² × 1 = 4 кг · израсходовано 1 кг · запас 0,5 кг · купить 2,5 кг (3 уп.)')
+  })
+
+  it('три внесения за сезон утраивают килограммы, не упаковки в норме', () => {
+    const plan = purchasePlan({
+      unit: 'кг',
+      ratePerM2: 20,
+      rateUnit: 'г',
+      applications: 3,
+      stockQuantity: 0,
+      packQuantity: 1,
+      areas: [{ name: 'Газон', areaM2: 200 }],
+      usedThisYear: 0,
+      pastUsage: [],
+    })
+    expect(plan).toMatchObject({ need: 12, toBuy: 12, packs: 12 })
+    expect(plan.formula).toBe('200 м² × 20 г/м² × 3 = 12 кг')
   })
 
   it('без нормы берёт «на сезон», без него — максимум прошлых лет', () => {
@@ -70,6 +87,11 @@ describe('расчёт закупок', () => {
     expect(suggestedRateUnit('кг')).toBe('г')
     expect(suggestedRateUnit('л')).toBe('мл')
     expect(suggestedRateUnit('шт.')).toBe('шт.')
+    expect(parseApplications('3')).toBe(3)
+    expect(parseApplications('1')).toBe(1)
+    expect(parseApplications('')).toBeUndefined()
+    expect(parseApplications('2,5')).toBeUndefined()
+    expect(parseApplications('0')).toBeUndefined()
     expect(purchasePlan({ unit: 'кг', seasonQuantity: 2, stockQuantity: 0, packQuantity: 2, areas: [], usedThisYear: 0, pastUsage: [] })).toMatchObject({
       toBuy: 2,
       packs: 1,
