@@ -5,9 +5,10 @@ import { repo, type AppSettings } from '../app/store'
 import { workTimes } from '../domain/applications'
 import { parseNonNegative } from '../domain/consumables'
 import { MONTH_NAMES, todayAtSite } from '../domain/dates'
-import { purchasePlan } from '../domain/purchases'
+import { buyPackages, packagesFromStore, packagesToStore, purchasePlan } from '../domain/purchases'
 import { normalizeText } from '../domain/diaryFilter'
 import { periodText, scheduleText } from '../domain/labels'
+import { errorText } from '../lib/format'
 import type { Consumable, DiaryEvent, DocInput, PlanPeriod, PlanWork, SeasonSchedule, WorkCondition } from '../domain/types'
 import { attachPlanWork, dismissPlanSuggestions, markDone, setSeason, skipOccurrence, undoMark } from '../plan/actions'
 import { useWorkContext } from '../plan/context'
@@ -351,42 +352,75 @@ function SeasonEditor({ schedule, rhythm, onSchedule, onRhythm }: { schedule: Se
 
 const num = (value: number | undefined) => (value === undefined ? '' : value.toLocaleString('ru-RU', { maximumFractionDigits: 3 }))
 
+/** Число в поле запаса: без разделителя тысяч, чтобы его можно было прочитать обратно. */
+const stockText = (value: number | undefined) =>
+  value === undefined ? '' : value.toLocaleString('ru-RU', { maximumFractionDigits: 3, useGrouping: false })
+
 function WorkMaterials({
   consumableIds,
   stocks,
   times,
   areas,
-  onToggle,
+  onAdd,
   onStock,
+  onSave,
+  onRemove,
+  onEdit,
 }: {
   consumableIds: string[]
   stocks: Record<string, string>
   times: number
   areas: { name: string; areaM2?: number }[]
-  onToggle: (id: string) => void
+  onAdd: (id: string) => Promise<void>
   onStock: (id: string, value: string) => void
+  onSave: (id: string) => Promise<void>
+  onRemove: (id: string) => Promise<void>
+  onEdit: (id: string) => Promise<void>
 }) {
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const visible = consumables.filter((item) => item.active || consumableIds.includes(item.id)).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  const selected = consumableIds
+    .map((id) => consumables.find((item) => item.id === id))
+    .filter((item): item is Consumable => !!item)
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  const available = consumables.filter((item) => item.active && !consumableIds.includes(item.id)).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
   return (
     <fieldset className="periods">
       <legend>Материалы</legend>
-      {visible.length === 0 && <p className="hint">В справочнике пока нет материалов.</p>}
-      {visible.length > 0 && (
-        <div className="chips">
-          {visible.map((item) => (
-            <label key={item.id} className={consumableIds.includes(item.id) ? 'chip active' : 'chip'}>
-              <input type="checkbox" checked={consumableIds.includes(item.id)} onChange={() => onToggle(item.id)} />
-              {item.name}
-            </label>
-          ))}
-        </div>
+      {selected.length === 0 && consumables.length > 0 && <p className="hint">К этой работе материалы не выбраны.</p>}
+      {selected.map((item) => (
+        <MaterialNeed
+          key={item.id}
+          item={item}
+          stock={stocks[item.id] ?? ''}
+          times={times}
+          areas={areas}
+          onStock={(value) => onStock(item.id, value)}
+          onSave={() => onSave(item.id)}
+          onRemove={() => onRemove(item.id)}
+          onEdit={() => onEdit(item.id)}
+        />
+      ))}
+      {available.length > 0 && (
+        <label className="field">
+          Добавить материал
+          <select
+            aria-label="Добавить материал"
+            value=""
+            onChange={(event) => {
+              const id = event.target.value
+              if (id) void onAdd(id)
+            }}
+          >
+            <option value="">Выберите из справочника</option>
+            {available.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
-      {consumableIds.map((id) => {
-        const item = consumables.find((consumable) => consumable.id === id)
-        if (!item) return null
-        return <MaterialNeed key={id} item={item} stock={stocks[id] ?? ''} times={times} areas={areas} onStock={(value) => onStock(id, value)} />
-      })}
+      {consumables.length === 0 && <p className="hint">В справочнике пока нет материалов.</p>}
     </fieldset>
   )
 }
@@ -397,12 +431,18 @@ function MaterialNeed({
   times,
   areas,
   onStock,
+  onSave,
+  onRemove,
+  onEdit,
 }: {
   item: Consumable
   stock: string
   times: number
   areas: { name: string; areaM2?: number }[]
   onStock: (value: string) => void
+  onSave: () => Promise<void>
+  onRemove: () => Promise<void>
+  onEdit: () => Promise<void>
 }) {
   const stockInvalid = !!stock.trim() && parseNonNegative(stock) === undefined
   const plan = purchasePlan({
@@ -410,62 +450,76 @@ function MaterialNeed({
     ratePerM2: item.ratePerM2,
     rateUnit: item.rateUnit,
     applications: times,
-    stockQuantity: parseNonNegative(stock),
     packQuantity: item.packQuantity,
     packUnit: item.packUnit,
     areas,
     usedThisYear: 0,
     pastUsage: [],
   })
-  const packsLabel = item.packUnit ? item.unit : 'уп.'
+  const packs = item.packQuantity ? plan.unitsNeed : undefined
+  const buy = buyPackages(packs, parseNonNegative(stock))
   return (
-    <div className="calc-grid">
-      <p className="span">
-        <a className="source-link" href={`#/consumables?id=${item.id}`}>
-          {item.name}
-        </a>
-      </p>
-      <label className="field">
-        Количество внесений за 1 сезон
-        <span className="result-line">
-          <input aria-label={`Количество внесений ${item.name}`} readOnly value={times > 0 ? String(times) : ''} placeholder="—" />
-          <span className="suffix">по расписанию</span>
-        </span>
-      </label>
-      <label className="field">
-        Требуется на 1 сезон
-        <span className="result-line">
-          <input aria-label={`Требуется на сезон ${item.name}`} readOnly value={num(plan.need)} placeholder="—" />
-          <span className="suffix">{plan.need === undefined ? '' : plan.measureUnit}</span>
-          {plan.unitsNeed !== undefined && (
-            <>
-              <input aria-label={`Требуется в единицах учёта ${item.name}`} readOnly value={num(plan.unitsNeed)} />
-              <span className="suffix">{packsLabel}</span>
-            </>
-          )}
-        </span>
-      </label>
-      <label className="field">
-        Запас сейчас
-        <span className="result-line">
-          <input aria-label={`Запас ${item.name}`} inputMode="decimal" placeholder="0" value={stock} onChange={(event) => onStock(event.target.value)} />
-          <span className="suffix">({item.unit})</span>
-        </span>
-      </label>
-      <label className="field">
-        Купить
-        <span className="result-line">
-          <input aria-label={`Купить ${item.name}`} readOnly value={num(plan.toBuy)} placeholder="—" />
-          <span className="suffix">({item.unit})</span>
-        </span>
-      </label>
-      {plan.formula && <p className="hint span">{plan.formula}</p>}
-      {plan.warnings.map((warning) => (
-        <p key={warning} className="hint span">
-          {warning}
+    <div className="material-block">
+      <div className="calc-grid">
+        <p className="span">
+          <button type="button" className="source-link button-link" onClick={() => void onEdit()}>
+            {item.name}
+          </button>
         </p>
-      ))}
-      {stockInvalid && <p className="error span">Запас — ноль или положительное число.</p>}
+        <label className="field">
+          Количество внесений за 1 сезон
+          <span className="result-line">
+            <input aria-label={`Количество внесений ${item.name}`} readOnly value={times > 0 ? String(times) : ''} placeholder="—" />
+            <span className="suffix">по расписанию</span>
+          </span>
+        </label>
+        <label className="field">
+          Требуется на 1 сезон
+          <span className="result-line">
+            <input aria-label={`Требуется на сезон ${item.name}`} readOnly value={num(plan.need)} placeholder="—" />
+            <span className="suffix">{plan.need === undefined ? '' : plan.measureUnit}</span>
+            {packs !== undefined && (
+              <>
+                <input aria-label={`Требуется упаковок ${item.name}`} readOnly value={num(packs)} />
+                <span className="suffix">уп.</span>
+              </>
+            )}
+          </span>
+        </label>
+        <label className="field">
+          Запас сейчас
+          <span className="result-line">
+            <input aria-label={`Запас ${item.name}`} inputMode="decimal" placeholder="—" value={stock} onChange={(event) => onStock(event.target.value)} />
+            <span className="suffix">уп.</span>
+          </span>
+        </label>
+        <label className="field">
+          Купить
+          <span className="result-line">
+            <input aria-label={`Купить ${item.name}`} readOnly value={num(buy)} placeholder="—" />
+            <span className="suffix">уп.</span>
+          </span>
+        </label>
+        {plan.formula && <p className="hint span">{plan.formula}</p>}
+        {!item.packQuantity && <p className="hint span">Укажите в карточке материала, сколько в одной упаковке, — иначе запас и покупка в упаковках не считаются.</p>}
+        {plan.warnings.map((warning) => (
+          <p key={warning} className="hint span">
+            {warning}
+          </p>
+        ))}
+        {stockInvalid && <p className="error span">Запас — ноль или положительное число упаковок.</p>}
+      </div>
+      <div className="actions">
+        <ActionButton disabled={stockInvalid} onRun={onSave}>
+          Сохранить
+        </ActionButton>
+        <button type="button" className="button secondary" onClick={() => void onEdit()}>
+          Изменить
+        </button>
+        <ActionButton secondary onRun={onRemove}>
+          Удалить
+        </ActionButton>
+      </div>
     </div>
   )
 }
@@ -482,12 +536,13 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
   const [leadDays, setLeadDays] = useState(String(work?.condition?.type === 'beforeAutumnFrost' ? work.condition.leadDays : 7))
   const [note, setNote] = useState(work?.note ?? '')
   const [consumableIds, setConsumableIds] = useState<string[]>(work?.consumableIds ?? [])
+  const [workId, setWorkId] = useState(work?.id)
+  const [revision, setRevision] = useState(work?.revision)
   const [stocks, setStocks] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
+  const [suggestionLinked, setSuggestionLinked] = useState(!suggestion || !!work)
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const toggle = (id: string) => setObjectIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]))
-  const toggleMaterial = (id: string) => setConsumableIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]))
-  const stockOf = (id: string) => stocks[id] ?? consumables.find((item) => item.id === id)?.stockQuantity?.toString() ?? ''
   const today = todayAtSite().date
   const previewSchedule: SeasonSchedule | undefined =
     recurrence === 'season'
@@ -503,16 +558,22 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
       : undefined
   const times = workTimes({ recurrence, periods: recurrence === 'season' ? [] : periods, seasonSchedule: previewSchedule }, today)
   const areas = objects.filter((object) => objectIds.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 }))
-  const stockInvalid = consumableIds.some((id) => {
-    const value = stockOf(id)
-    return !!value.trim() && parseNonNegative(value) === undefined
-  })
+  const stockOf = (id: string) => {
+    const typed = stocks[id]
+    if (typed !== undefined) return typed
+    const item = consumables.find((entry) => entry.id === id)
+    return item ? stockText(packagesFromStore(item.stockQuantity, item)) : ''
+  }
 
-  const save = async (active = work?.active ?? true) => {
+  const buildInput = (ids: string[], active: boolean): DocInput<PlanWork> | undefined => {
     const problem = recurrence === 'season' ? scheduleProblem(schedule, rhythm) : ''
     if (problem) {
       setError(problem)
-      return
+      return undefined
+    }
+    if (!title.trim()) {
+      setError('Сначала укажите, что сделать.')
+      return undefined
     }
     setError('')
     const condition: WorkCondition | undefined =
@@ -533,7 +594,7 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
             timeTo: schedule.timeTo || undefined,
           }
         : work?.seasonSchedule
-    const input: DocInput<PlanWork> = {
+    return {
       title: title.trim(),
       workKind: workKind || undefined,
       objectIds,
@@ -547,21 +608,71 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
       skippedDates: work?.skippedDates,
       historyWords: work?.historyWords,
       sourceDraftId: work?.sourceDraftId,
-      consumableIds,
+      consumableIds: ids,
       seasons: work?.seasons ?? {},
       active,
     }
-    const saved = work ? await repo.update('planWorks', work.id, input, work.revision) : await repo.create('planWorks', input)
-    for (const id of consumableIds) {
-      const current = await db.consumables.get(id)
-      if (!current || current.deletedAt) continue
-      const stockQuantity = parseNonNegative(stockOf(id))
-      if (stockQuantity === current.stockQuantity) continue
-      if (stockQuantity === undefined && current.stockQuantity === undefined) continue
+  }
+
+  /** Записывает работу и список её материалов. Запас материалов не трогает. */
+  const writeWork = async (ids: string[], active = work?.active ?? true): Promise<PlanWork | undefined> => {
+    const input = buildInput(ids, active)
+    if (!input) return undefined
+    const creating = !workId || !revision
+    const saved = creating ? await repo.create('planWorks', input) : await repo.update('planWorks', workId, input, revision)
+    setWorkId(saved.id)
+    setRevision(saved.revision)
+    setConsumableIds(ids)
+    if (suggestion && !suggestionLinked) {
+      await attachPlanWork(suggestion.eventIds, saved.id)
+      setSuggestionLinked(true)
+    }
+    return saved
+  }
+
+  const addMaterial = async (id: string) => {
+    if (consumableIds.includes(id)) return
+    try {
+      await writeWork([...consumableIds, id])
+    } catch (caught) {
+      setError(errorText(caught))
+    }
+  }
+
+  const removeMaterial = async (id: string) => {
+    if (!confirm('Убрать материал из этой работы? В справочнике он останется.')) return
+    const saved = await writeWork(consumableIds.filter((item) => item !== id))
+    if (!saved) return
+    setStocks((current) => {
+      if (current[id] === undefined) return current
+      const next = { ...current }
+      delete next[id]
+      return next
+    })
+  }
+
+  const saveStock = async (id: string) => {
+    const current = await db.consumables.get(id)
+    if (!current || current.deletedAt) return
+    const shown = stockOf(id)
+    const packs = parseNonNegative(shown)
+    if (shown.trim() && packs === undefined) return
+    const stockQuantity = packagesToStore(packs, current)
+    if (stockQuantity !== current.stockQuantity && !(stockQuantity === undefined && current.stockQuantity === undefined)) {
       await repo.update('consumables', id, { stockQuantity }, current.revision)
     }
-    if (!work && suggestion) await attachPlanWork(suggestion.eventIds, saved.id)
-    onClose()
+    setStocks((draft) => ({ ...draft, [id]: stockText(packagesFromStore(stockQuantity, current)) }))
+  }
+
+  const openMaterial = async (id: string) => {
+    const saved = await writeWork(consumableIds)
+    if (!saved) return
+    navigate(`/consumables?id=${id}&work=${saved.id}`)
+  }
+
+  const save = async (active = work?.active ?? true) => {
+    const saved = await writeWork(consumableIds, active)
+    if (saved) onClose()
   }
 
   return (
@@ -604,7 +715,17 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
       ) : (
         <PeriodsEditor periods={periods} onChange={setPeriods} />
       )}
-      <WorkMaterials consumableIds={consumableIds} stocks={Object.fromEntries(consumableIds.map((id) => [id, stockOf(id)]))} times={times} areas={areas} onToggle={toggleMaterial} onStock={(id, value) => setStocks((current) => ({ ...current, [id]: value }))} />
+      <WorkMaterials
+        consumableIds={consumableIds}
+        stocks={Object.fromEntries(consumableIds.map((id) => [id, stockOf(id)]))}
+        times={times}
+        areas={areas}
+        onAdd={addMaterial}
+        onStock={(id, value) => setStocks((current) => ({ ...current, [id]: value }))}
+        onSave={saveStock}
+        onRemove={removeMaterial}
+        onEdit={openMaterial}
+      />
       {recurrence === 'yearly' && (
       <label className="field">
         Условие
@@ -627,7 +748,7 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
       </label>
       {error && <p className="error">{error}</p>}
       <div className="actions">
-        <ActionButton disabled={!title.trim() || stockInvalid} onRun={() => save()}>
+        <ActionButton disabled={!title.trim()} onRun={() => save()}>
           Сохранить
         </ActionButton>
         {work && (

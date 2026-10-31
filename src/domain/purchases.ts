@@ -180,6 +180,30 @@ export function purchasePlan(input: {
   return { source, measureUnit, need, perUse, formula, used, stock, unitsNeed, toBuy, packs, warnings }
 }
 
+/**
+ * Запас в упаковках.
+ * Если единица учёта уже упаковка (задан packUnit) — число хранится как есть.
+ * Если единица — кг или л, а в упаковке задано количество, запас в хранилище делится на это количество.
+ */
+export function packagesFromStore(stored: number | undefined, item: { packQuantity?: number; packUnit?: string }): number | undefined {
+  if (stored === undefined) return undefined
+  if (item.packUnit || !item.packQuantity) return stored
+  return round3(stored / item.packQuantity)
+}
+
+/** Обратный перевод: введённые упаковки → число в единице учёта для хранения. */
+export function packagesToStore(packs: number | undefined, item: { packQuantity?: number; packUnit?: string }): number | undefined {
+  if (packs === undefined) return undefined
+  if (item.packUnit || !item.packQuantity) return packs
+  return round3(packs * item.packQuantity)
+}
+
+/** Сколько упаковок купить: потребность в упаковках минус запас в упаковках. */
+export function buyPackages(needPacks: number | undefined, stockPacks: number | undefined): number | undefined {
+  if (needPacks === undefined || stockPacks === undefined) return undefined
+  return round3(Math.max(0, needPacks - stockPacks))
+}
+
 /** Строка для списка материалов. */
 export function purchaseLine(plan: PurchasePlan, unit: string): string | undefined {
   if (!plan.formula) return undefined

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { convertQuantity, parseApplications, pastYearUsage, purchaseLine, purchasePlan, substanceUnit, suggestedRateUnit } from './purchases'
+import { buyPackages, convertQuantity, packagesFromStore, packagesToStore, parseApplications, pastYearUsage, purchaseLine, purchasePlan, substanceUnit, suggestedRateUnit } from './purchases'
 
 describe('расчёт закупок', () => {
   it('одно внесение: 200 м² × 20 г/м² × 1 = 4 кг; из потребности вычитаются расход и запас', () => {
@@ -133,6 +133,17 @@ describe('расчёт закупок', () => {
     expect(plan.need).toBeUndefined()
     expect(plan.toBuy).toBeUndefined()
     expect(plan.warnings.join(' ')).toContain('нет внесений')
+  })
+
+  it('запас и покупка считаются в упаковках', () => {
+    expect(packagesFromStore(20, { packQuantity: 10 })).toBe(2)
+    expect(packagesToStore(2, { packQuantity: 10 })).toBe(20)
+    expect(packagesFromStore(2, { packQuantity: 10, packUnit: 'кг' })).toBe(2)
+    expect(packagesToStore(2, { packQuantity: 10, packUnit: 'кг' })).toBe(2)
+    expect(packagesFromStore(0, { packQuantity: 10 })).toBe(0)
+    expect(buyPackages(4.2, 0)).toBe(4.2)
+    expect(buyPackages(4.2, 1)).toBe(3.2)
+    expect(buyPackages(4.2, undefined)).toBeUndefined()
   })
 
   it('прошлые годы не включают текущий и записи из корзины', () => {

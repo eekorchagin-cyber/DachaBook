@@ -13,6 +13,26 @@ import { ActionButton } from '../ui/Section'
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru')
 
+/** Отдельная ссылка в каждую работу, где выбран этот материал. */
+function UsedInWorks({ consumableId }: { consumableId: string }) {
+  const works = useLiveQuery(
+    () => db.planWorks.filter((work) => !work.deletedAt && (work.consumableIds ?? []).includes(consumableId)).toArray(),
+    [consumableId],
+  )
+  if (!works || works.length === 0) return null
+  const listed = [...works].sort((a, b) => a.title.localeCompare(b.title, 'ru'))
+  return (
+    <div className="material-works">
+      <p className="hint">Материал выбран в работах. В каждую можно вернуться отдельно.</p>
+      {listed.map((work) => (
+        <a key={work.id} className="source-link" href={`#/works?work=${work.id}`}>
+          Вернуться к работе «{work.title}»
+        </a>
+      ))}
+    </div>
+  )
+}
+
 const num = (value: number | undefined) => (value === undefined ? '' : value.toLocaleString('ru-RU', { maximumFractionDigits: 3 }))
 
 function ConsumableForm({
@@ -161,6 +181,7 @@ function ConsumableForm({
         Примечание
         <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
       </label>
+      {consumable && <UsedInWorks consumableId={consumable.id} />}
       <div className="actions">
         <ActionButton disabled={!name.trim() || nameTaken || rateInvalid || packInvalid || link === null} onRun={() => save()}>
           Сохранить
@@ -185,7 +206,9 @@ export function ConsumablesScreen() {
   const year = Number(todayAtSite().date.slice(0, 4))
   const loadedEvents = useLiveQuery(() => db.events.toArray(), [])
   const usage = useMemo(() => usageByConsumable(loadedEvents ?? [], year), [loadedEvents, year])
-  const requested = useRoute().query.get('id')
+  const route = useRoute()
+  const requested = route.query.get('id')
+  const fromWork = route.query.get('work')
   const [editing, setEditing] = useState<{ id?: string } | null>(requested ? { id: requested } : null)
 
   useEffect(() => {
@@ -194,7 +217,8 @@ export function ConsumablesScreen() {
 
   const close = () => {
     setEditing(null)
-    if (requested) navigate('/consumables')
+    if (fromWork) navigate(`/works?work=${fromWork}`)
+    else if (requested) navigate('/consumables')
   }
 
   if (editing) {

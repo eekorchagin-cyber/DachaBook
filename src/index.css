@@ -494,6 +494,7 @@ body {
 .result-line {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
 }
@@ -1217,6 +1218,27 @@ details.card[open] > summary::before {
 
 .source-link {
   color: var(--accent);
+}
+
+.button-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.material-block {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.material-works {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
 }
 
 .drop-overlay {
