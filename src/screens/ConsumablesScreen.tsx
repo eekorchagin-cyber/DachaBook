@@ -191,6 +191,18 @@ function ConsumableForm({
             {consumable.active ? 'В архив' : 'Вернуть из архива'}
           </ActionButton>
         )}
+        {consumable && (
+          <ActionButton
+            secondary
+            onRun={async () => {
+              if (!confirm(`Удалить «${consumable.name}»? Материал попадёт в «Ещё → Корзина»: оттуда его можно вернуть или убрать навсегда. Из плана работ он скроется. Расход в уже записанных днях дневника останется.`)) return
+              await repo.remove('consumables', consumable.id, consumable.revision)
+              onClose()
+            }}
+          >
+            Удалить
+          </ActionButton>
+        )}
         <button type="button" className="button secondary" onClick={onClose}>
           Отмена
         </button>
