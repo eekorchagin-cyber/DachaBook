@@ -145,12 +145,12 @@ function ConsumableForm({
         </label>
         <label className="field">
           {separate ? `В одной ${materialUnit}, ${substance}` : `В одной упаковке, ${materialUnit}`}
-          <input aria-label="В одной единице учёта" inputMode="decimal" placeholder={separate ? '10' : 'необязательно'} value={pack} onChange={(event) => setPack(event.target.value)} />
+          <input aria-label="В одной единице учёта" inputMode="decimal" placeholder={separate ? 'Например: 10' : 'необязательно'} value={pack} onChange={(event) => setPack(event.target.value)} />
         </label>
-        <label className="field">
+        <label className="field span">
           Норма внесения на 1 м²
           <span className="measure-line">
-            <input aria-label="Норма на 1 м²" inputMode="decimal" placeholder="50" value={rate} onChange={(event) => setRate(event.target.value)} />
+            <input aria-label="Норма на 1 м²" inputMode="decimal" placeholder="Например: 50" value={rate} onChange={(event) => setRate(event.target.value)} />
             <select aria-label="Единица нормы" value={rateUnit} onChange={(event) => setRateUnit(event.target.value)}>
               {units.map((item) => (
                 <option key={item} value={item}>
