@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { convertQuantity, parseApplications, pastYearUsage, purchaseLine, purchasePlan, suggestedRateUnit } from './purchases'
+import { convertQuantity, parseApplications, pastYearUsage, purchaseLine, purchasePlan, substanceUnit, suggestedRateUnit } from './purchases'
 
 describe('расчёт закупок', () => {
   it('одно внесение: 200 м² × 20 г/м² × 1 = 4 кг; из потребности вычитаются расход и запас', () => {
@@ -86,7 +86,10 @@ describe('расчёт закупок', () => {
     expect(convertQuantity(2, 'шт.', 'кг')).toBeNull()
     expect(suggestedRateUnit('кг')).toBe('г')
     expect(suggestedRateUnit('л')).toBe('мл')
+    expect(suggestedRateUnit('уп.')).toBe('г')
     expect(suggestedRateUnit('шт.')).toBe('шт.')
+    expect(substanceUnit('г', 'уп.')).toBe('кг')
+    expect(substanceUnit('мл', 'уп.')).toBe('л')
     expect(parseApplications('3')).toBe(3)
     expect(parseApplications('1')).toBe(1)
     expect(parseApplications('')).toBeUndefined()
@@ -96,6 +99,40 @@ describe('расчёт закупок', () => {
       toBuy: 2,
       packs: 1,
     })
+  })
+
+  it('упаковка: 210 м² × 50 г × 4 внесения = 42 кг, это 4,2 единицы при 10 кг в одной', () => {
+    const plan = purchasePlan({
+      unit: 'ун.',
+      packQuantity: 10,
+      packUnit: 'кг',
+      ratePerM2: 50,
+      rateUnit: 'г',
+      applications: 4,
+      stockQuantity: 0,
+      areas: [{ name: 'Газон', areaM2: 210 }],
+      usedThisYear: 0,
+      pastUsage: [],
+    })
+    expect(plan).toMatchObject({ source: 'rate', measureUnit: 'кг', perUse: 10.5, need: 42, unitsNeed: 4.2, toBuy: 4.2, packs: undefined })
+    expect(plan.formula).toBe('210 м² × 50 г/м² × 4 = 42 кг')
+  })
+
+  it('ноль внесений из плана не считается как одно', () => {
+    const plan = purchasePlan({
+      unit: 'кг',
+      ratePerM2: 20,
+      rateUnit: 'г',
+      applications: 0,
+      stockQuantity: 0,
+      areas: [{ name: 'Газон', areaM2: 200 }],
+      usedThisYear: 0,
+      pastUsage: [9],
+    })
+    expect(plan.perUse).toBe(4)
+    expect(plan.need).toBeUndefined()
+    expect(plan.toBuy).toBeUndefined()
+    expect(plan.warnings.join(' ')).toContain('нет внесений')
   })
 
   it('прошлые годы не включают текущий и записи из корзины', () => {

@@ -1,10 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
 import { repo, useSettings } from '../app/store'
+import { applicationHint, applicationWorks, plannedTimes } from '../domain/applications'
 import { findConsumable, normalizeUrl, parseNonNegative, parseQuantity, quantityText, UNITS, urlHost, usageByConsumable } from '../domain/consumables'
 import { todayAtSite } from '../domain/dates'
-import { parseApplications, pastYearUsage, purchaseLine, purchasePlan, suggestedRateUnit } from '../domain/purchases'
-import type { CareObject, Consumable, DiaryEvent, DocInput } from '../domain/types'
+import { convertQuantity, pastYearUsage, purchaseLine, purchasePlan, substanceUnit, suggestedRateUnit } from '../domain/purchases'
+import type { CareObject, Consumable, DiaryEvent, DocInput, PlanWork } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { SuggestInput } from '../ui/SuggestInput'
@@ -12,19 +13,25 @@ import { ActionButton } from '../ui/Section'
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru')
 
+const num = (value: number | undefined) => (value === undefined ? '' : value.toLocaleString('ru-RU', { maximumFractionDigits: 3 }))
+
 function ConsumableForm({
   consumable,
   consumables,
   objects,
   events,
+  works,
   year,
+  today,
   onClose,
 }: {
   consumable?: Consumable
   consumables: Consumable[]
   objects: CareObject[]
   events: DiaryEvent[]
+  works: PlanWork[]
   year: number
+  today: string
   onClose: () => void
 }) {
   const [name, setName] = useState(consumable?.name ?? '')
@@ -32,7 +39,6 @@ function ConsumableForm({
   const [season, setSeason] = useState(consumable?.seasonQuantity?.toString() ?? '')
   const [rate, setRate] = useState(consumable?.ratePerM2?.toString() ?? '')
   const [rateUnit, setRateUnit] = useState(consumable?.rateUnit ?? suggestedRateUnit(consumable?.unit ?? 'кг'))
-  const [times, setTimes] = useState(String(consumable?.applications ?? 1))
   const [stock, setStock] = useState(consumable?.stockQuantity?.toString() ?? '')
   const [pack, setPack] = useState(consumable?.packQuantity?.toString() ?? '')
   const [objectIds, setObjectIds] = useState<string[]>(consumable?.objectIds ?? [])
@@ -45,35 +51,43 @@ function ConsumableForm({
   const nameTaken = !!duplicate && duplicate.id !== consumable?.id
   const seasonInvalid = !!season.trim() && parseQuantity(season) === undefined
   const rateInvalid = !!rate.trim() && parseQuantity(rate) === undefined
-  const timesInvalid = parseApplications(times) === undefined
   const stockInvalid = !!stock.trim() && parseNonNegative(stock) === undefined
   const packInvalid = !!pack.trim() && parseQuantity(pack) === undefined
   const materialUnit = unit.trim() || 'шт.'
+  const substance = substanceUnit(rateUnit, materialUnit)
+  const separate = convertQuantity(1, materialUnit, substance) === null
+  const matched = applicationWorks(works, objectIds, today)
+  const times = plannedTimes(matched)
   const plan = purchasePlan({
     unit: materialUnit,
     seasonQuantity: parseQuantity(season),
     ratePerM2: parseQuantity(rate),
     rateUnit,
-    applications: parseApplications(times),
+    applications: times,
     stockQuantity: parseNonNegative(stock),
     packQuantity: parseQuantity(pack),
+    packUnit: separate ? substance : undefined,
     areas: objects.filter((object) => objectIds.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 })),
     usedThisYear: consumable ? (usageByConsumable(events, year).get(consumable.id) ?? 0) : 0,
     pastUsage: consumable ? pastYearUsage(events, consumable.id, year) : [],
   })
-  const preview = purchaseLine(plan, materialUnit)
   const toggle = (id: string) => setObjectIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]))
+  const changeUnit = (next: string) => {
+    setRateUnit((current) => (current === suggestedRateUnit(unit) ? suggestedRateUnit(next) : current))
+    setUnit(next)
+  }
 
   const save = async (active = consumable?.active ?? true) => {
     const input: DocInput<Consumable> = {
       name: name.trim().replace(/\s+/g, ' '),
       unit: materialUnit,
-      seasonQuantity: plan.source === 'rate' ? plan.need : parseQuantity(season),
+      seasonQuantity: plan.source === 'rate' ? (separate ? plan.unitsNeed : plan.need) : parseQuantity(season),
       ratePerM2: parseQuantity(rate),
       rateUnit: parseQuantity(rate) ? rateUnit.trim() || 'г' : undefined,
-      applications: parseApplications(times),
+      applications: times > 0 ? times : undefined,
       stockQuantity: parseNonNegative(stock),
       packQuantity: parseQuantity(pack),
+      packUnit: separate && parseQuantity(pack) ? substance : undefined,
       objectIds,
       description: description.trim() || undefined,
       url: link ?? undefined,
@@ -94,65 +108,6 @@ function ConsumableForm({
       </label>
       {nameTaken && <p className="error">Материал с таким названием уже есть.</p>}
       <label className="field">
-        Единица учёта
-        <SuggestInput value={unit} options={units} onChange={setUnit} ariaLabel="Единица учёта" />
-      </label>
-      <p className="hint">В чём ведётся материал: кг, л или шт. В этой же единице — расход в дневнике, запас и «нужно на сезон». Это не число упаковок.</p>
-      <label className="field">
-        Норма одного внесения на 1 м²
-        <span className="measure-line">
-          <input aria-label="Норма на 1 м²" inputMode="decimal" placeholder="20" value={rate} onChange={(event) => setRate(event.target.value)} />
-          <select aria-label="Единица нормы" value={rateUnit} onChange={(event) => setRateUnit(event.target.value)}>
-            {units.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-          <span className="suffix">/ м²</span>
-        </span>
-      </label>
-      <div className="row pair">
-        <label className="field">
-          Раз за сезон
-          <input aria-label="Раз за сезон" inputMode="numeric" value={times} onChange={(event) => setTimes(event.target.value)} />
-        </label>
-        <label className="field">
-          На один раз, {materialUnit}
-          <input aria-label="На один раз" readOnly value={plan.perUse === undefined ? '' : plan.perUse.toLocaleString('ru-RU', { maximumFractionDigits: 3 })} placeholder="—" />
-        </label>
-      </div>
-      {rateInvalid && <p className="error">Норма — положительное число, обычно в граммах.</p>}
-      {timesInvalid && <p className="error">Число внесений — целое, от 1.</p>}
-      <label className="field">
-        Нужно на сезон, {materialUnit}
-        <input
-          inputMode="decimal"
-          readOnly={plan.source === 'rate'}
-          placeholder="если нормы нет"
-          value={plan.source === 'rate' && plan.need !== undefined ? plan.need.toLocaleString('ru-RU', { maximumFractionDigits: 3 }) : season}
-          onChange={(event) => setSeason(event.target.value)}
-        />
-      </label>
-      {plan.source === 'rate' ? (
-        <p className="hint">«На один раз» — площадь × норма. «Нужно на сезон» — это число × сколько раз. И то и другое в {materialUnit}, не в упаковках.</p>
-      ) : (
-        <p className="hint">Нормы нет — впишите, сколько {materialUnit} нужно на весь сезон. Упаковки сюда не пишутся.</p>
-      )}
-      {seasonInvalid && plan.source !== 'rate' && <p className="error">Количество на сезон — положительное число.</p>}
-      <div className="row">
-        <label className="field">
-          Запас сейчас, {materialUnit}
-          <input inputMode="decimal" placeholder="0 — ничего нет" value={stock} onChange={(event) => setStock(event.target.value)} />
-        </label>
-        <label className="field">
-          В одной упаковке, {materialUnit}
-          <input inputMode="decimal" placeholder="необязательно" value={pack} onChange={(event) => setPack(event.target.value)} />
-        </label>
-      </div>
-      {stockInvalid && <p className="error">Запас — ноль или положительное число.</p>}
-      {packInvalid && <p className="error">Упаковка — положительное число.</p>}
-      <label className="field">
         Описание
         <textarea rows={3} placeholder="Что это и для чего: состав, действие, когда применять" value={description} onChange={(event) => setDescription(event.target.value)} />
       </label>
@@ -164,7 +119,7 @@ function ConsumableForm({
       {link && (
         <p className="small">
           <a className="source-link" href={link} target="_blank" rel="noopener noreferrer">
-            Открыть {urlHost(link)}
+            Открыть ссылку
           </a>
         </p>
       )}
@@ -182,18 +137,96 @@ function ConsumableForm({
             ))}
         </fieldset>
       )}
-      {preview && <p className="notice">{preview}</p>}
-      {plan.warnings.map((warning) => (
-        <p key={warning} className="hint">
-          {warning}
-        </p>
-      ))}
+      <div className="calc-grid">
+        <label className="field">
+          Единица учёта
+          <SuggestInput value={unit} options={units} onChange={changeUnit} ariaLabel="Единица учёта" />
+        </label>
+        <label className="field">
+          {separate ? `В одной ${materialUnit}, ${substance}` : `В одной упаковке, ${materialUnit}`}
+          <input aria-label="В одной единице учёта" inputMode="decimal" placeholder={separate ? '10' : 'необязательно'} value={pack} onChange={(event) => setPack(event.target.value)} />
+        </label>
+        <label className="field">
+          Норма внесения на 1 м²
+          <span className="measure-line">
+            <input aria-label="Норма на 1 м²" inputMode="decimal" placeholder="50" value={rate} onChange={(event) => setRate(event.target.value)} />
+            <select aria-label="Единица нормы" value={rateUnit} onChange={(event) => setRateUnit(event.target.value)}>
+              {units.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+            <span className="suffix">/ м²</span>
+          </span>
+        </label>
+        <label className="field">
+          На 1 раз
+          <span className="result-line">
+            <input aria-label="На 1 раз" readOnly value={num(plan.perUse)} placeholder="—" />
+            <span className="suffix">{plan.perUse === undefined ? '' : plan.measureUnit}</span>
+          </span>
+        </label>
+        <label className="field">
+          Количество внесений за 1 сезон
+          <span className="result-line">
+            <input aria-label="Количество внесений за 1 сезон" readOnly value={times > 0 ? String(times) : ''} placeholder="—" />
+            <span className="suffix">из плана работ</span>
+          </span>
+        </label>
+        <label className="field">
+          Требуется на 1 сезон
+          {plan.source === 'rate' || plan.perUse !== undefined ? (
+            <span className="result-line">
+              <input aria-label="Требуется на сезон" readOnly value={num(plan.need)} placeholder="—" />
+              <span className="suffix">{plan.need === undefined ? '' : plan.measureUnit}</span>
+              {plan.unitsNeed !== undefined && (
+                <>
+                  <input aria-label="Требуется в единицах учёта" readOnly value={num(plan.unitsNeed)} />
+                  <span className="suffix">{separate ? materialUnit : 'уп.'}</span>
+                </>
+              )}
+            </span>
+          ) : (
+            <span className="result-line">
+              <input aria-label="Требуется на сезон" inputMode="decimal" placeholder="если нормы нет" value={season} onChange={(event) => setSeason(event.target.value)} />
+              <span className="suffix">{materialUnit}</span>
+            </span>
+          )}
+        </label>
+        <p className="hint span">{applicationHint(matched)}</p>
+        {rateInvalid && <p className="error span">Норма — положительное число, обычно в граммах.</p>}
+        {seasonInvalid && plan.source !== 'rate' && <p className="error span">Количество на сезон — положительное число.</p>}
+        {packInvalid && <p className="error span">Содержимое одной единицы — положительное число.</p>}
+        {plan.warnings.map((warning) => (
+          <p key={warning} className="hint span">
+            {warning}
+          </p>
+        ))}
+      </div>
+      <div className="row pair">
+        <label className="field">
+          Запас сейчас
+          <span className="result-line">
+            <input aria-label="Запас сейчас" inputMode="decimal" placeholder="0" value={stock} onChange={(event) => setStock(event.target.value)} />
+            <span className="suffix">({materialUnit})</span>
+          </span>
+        </label>
+        <label className="field">
+          Купить
+          <span className="result-line">
+            <input aria-label="Купить" readOnly value={num(plan.toBuy)} placeholder="—" />
+            <span className="suffix">({materialUnit})</span>
+          </span>
+        </label>
+      </div>
+      {stockInvalid && <p className="error">Запас — ноль или положительное число.</p>}
       <label className="field">
-        Примечание (норма, фасовка, где купить)
+        Примечание
         <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
       </label>
       <div className="actions">
-        <ActionButton disabled={!name.trim() || nameTaken || (seasonInvalid && plan.source !== 'rate') || rateInvalid || timesInvalid || stockInvalid || packInvalid || link === null} onRun={() => save()}>
+        <ActionButton disabled={!name.trim() || nameTaken || (seasonInvalid && plan.source !== 'rate') || rateInvalid || stockInvalid || packInvalid || link === null} onRun={() => save()}>
           Сохранить
         </ActionButton>
         {consumable && (
@@ -212,7 +245,9 @@ function ConsumableForm({
 export function ConsumablesScreen() {
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const year = Number(todayAtSite().date.slice(0, 4))
+  const works = useLiveQuery(() => db.planWorks.filter((item) => !item.deletedAt).toArray(), []) ?? []
+  const today = todayAtSite().date
+  const year = Number(today.slice(0, 4))
   const loadedEvents = useLiveQuery(() => db.events.toArray(), [])
   const events = loadedEvents ?? []
   const usage = useMemo(() => usageByConsumable(loadedEvents ?? [], year), [loadedEvents, year])
@@ -231,7 +266,9 @@ export function ConsumablesScreen() {
           consumables={consumables}
           objects={[...objects].sort(byName)}
           events={events}
+          works={works}
           year={year}
+          today={today}
           onClose={() => setEditing(null)}
         />
       </Screen>
@@ -251,20 +288,22 @@ export function ConsumablesScreen() {
         </button>
       </div>
       <p className="hint">
-        Удобрения, средства защиты, семена, мульча. Норма одного внесения в граммах на м² умножается на площадь и на число раз за сезон. «Нужно на сезон» — килограммы, литры или штуки, не упаковки.
+        Удобрения, средства защиты, семена, мульча. Норма на м² умножается на площадь и на число внесений из плана работ. Запас и покупка — в единице учёта.
       </p>
       {active.length === 0 && <EmptyState>Материалов пока нет. Добавьте их здесь или прямо в записи работы в дневнике.</EmptyState>}
       <ul className="list">
         {active.map((item) => {
           const used = usage.get(item.id) ?? 0
+          const times = plannedTimes(applicationWorks(works, item.objectIds, today))
           const plan = purchasePlan({
             unit: item.unit,
             seasonQuantity: item.seasonQuantity,
             ratePerM2: item.ratePerM2,
             rateUnit: item.rateUnit,
-            applications: item.applications,
+            applications: times,
             stockQuantity: item.stockQuantity,
             packQuantity: item.packQuantity,
+            packUnit: item.packUnit,
             areas: linked(item.objectIds),
             usedThisYear: used,
             pastUsage: pastYearUsage(events, item.id, year),
