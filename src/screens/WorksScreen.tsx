@@ -6,7 +6,7 @@ import { workTimes } from '../domain/applications'
 import { parseNonNegative } from '../domain/consumables'
 import { MONTH_NAMES, todayAtSite } from '../domain/dates'
 import { buyPackages, packagesFromStore, packagesToStore, purchasePlan } from '../domain/purchases'
-import { normalizeText } from '../domain/diaryFilter'
+import { includesAllWords, normalizeText } from '../domain/diaryFilter'
 import { periodText, scheduleText } from '../domain/labels'
 import { errorText } from '../lib/format'
 import type { Consumable, DiaryEvent, DocInput, PlanPeriod, PlanWork, SeasonSchedule, WorkCondition } from '../domain/types'
@@ -792,8 +792,10 @@ function ClimateNote() {
 export function WorksScreen({ settings }: { settings: AppSettings }) {
   const { list, works, context } = useWorkStatuses()
   const objects = useLiveQuery(() => db.objects.toArray(), []) ?? []
+  const plantGroups = useLiveQuery(() => db.plantGroups.toArray(), []) ?? []
   const events = useLiveQuery(() => db.events.toArray(), []) ?? []
   const requested = useRoute().query.get('work')
+  const [query, setQuery] = useState('')
   const [editing, setEditing] = useState<{ id?: string; suggestion?: PlanSuggestion } | null>(requested ? { id: requested } : null)
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -828,10 +830,29 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
     )
   }
 
-  const names = (ids: string[]) => ids.map((id) => objects.find((object) => object.id === id)?.name).filter(Boolean).join(', ')
-  const archived = (works ?? []).filter((work) => !work.active)
-  const closed = list.filter((item) => item.status.closed)
-  const suggestions = planSuggestions(events, context.today.slice(0, 4))
+  const names = (ids: string[], source: { id: string; name: string }[]) => ids.map((id) => source.find((item) => item.id === id)?.name).filter(Boolean).join(', ')
+  const objectNames = (ids: string[]) => names(ids, objects)
+  const workText = (work: PlanWork, extra = '') =>
+    [work.title, work.note, work.workKind, objectNames(work.objectIds), names(work.plantGroupIds, plantGroups), whenText(work), conditionText(work.condition), extra]
+      .filter(Boolean)
+      .join(' ')
+  const archived = (works ?? []).filter((work) => !work.active && includesAllWords(query, workText(work)))
+  const closed = list.filter(
+    (item) => item.status.closed && includesAllWords(query, workText(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`)),
+  )
+  const allSuggestions = planSuggestions(events, context.today.slice(0, 4))
+  const suggestions = allSuggestions.filter((item) => includesAllWords(query, [item.title, item.workKind, objectNames(item.objectIds)].filter(Boolean).join(' ')))
+  const groups = GROUPS.map((group) => ({
+    ...group,
+    items: list.filter(
+      (item) =>
+        !item.status.closed &&
+        group.states.includes(item.status.state) &&
+        includesAllWords(query, workText(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`)),
+    ),
+  })).filter((group) => group.items.length > 0)
+  const hasWorks = (works?.length ?? 0) > 0 || allSuggestions.length > 0
+  const visible = groups.length + suggestions.length + closed.length + archived.length
 
   return (
     <Screen title="План работ" help="works" back="/more" tab="/more">
@@ -843,30 +864,36 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
           Из черновика Evernote
         </a>
       </div>
+      <div className="search-row">
+        <input
+          type="search"
+          placeholder="Поиск по названию, виду, объектам"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          aria-label="Поиск по плану работ"
+        />
+      </div>
       {!settings.plotLocation && (
         <p className="hint">
           Для работ, зависящих от заморозков, нужны координаты участка: <a href="#/settings">«Ещё → Настройки → Участок»</a>.
         </p>
       )}
       <ClimateNote />
-      {works && list.length === 0 && suggestions.length === 0 && <EmptyState>Работ пока нет. Добавьте свою или перенесите из черновика Evernote.</EmptyState>}
-      {GROUPS.map((group) => {
-        const items = list.filter((item) => !item.status.closed && group.states.includes(item.status.state))
-        if (items.length === 0) return null
-        return (
-          <section key={group.title}>
-            <h2 className="section-title">{group.title}</h2>
-            {group.title === 'Пропущено в этом году' && (
-              <p className="hint">Если пропустили по ошибке — «Вернуть в этот год». Сама работа из плана не удаляется.</p>
-            )}
-            <ul className="list">
-              {items.map((item) => (
-                <WorkItem key={item.work.id} {...item} today={context.today} objectNames={names(item.work.objectIds)} onEdit={() => setEditing({ id: item.work.id })} />
-              ))}
-            </ul>
-          </section>
-        )
-      })}
+      {works && !hasWorks && <EmptyState>Работ пока нет. Добавьте свою или перенесите из черновика Evernote.</EmptyState>}
+      {works && hasWorks && visible === 0 && <EmptyState>Ничего не найдено. Измените поиск.</EmptyState>}
+      {groups.map((group) => (
+        <section key={group.title}>
+          <h2 className="section-title">{group.title}</h2>
+          {group.title === 'Пропущено в этом году' && (
+            <p className="hint">Если пропустили по ошибке — «Вернуть в этот год». Сама работа из плана не удаляется.</p>
+          )}
+          <ul className="list">
+            {group.items.map((item) => (
+              <WorkItem key={item.work.id} {...item} today={context.today} objectNames={objectNames(item.work.objectIds)} onEdit={() => setEditing({ id: item.work.id })} />
+            ))}
+          </ul>
+        </section>
+      ))}
       {suggestions.length > 0 && (
         <section>
           <h2 className="section-title">Предложения из дневника этого года</h2>
