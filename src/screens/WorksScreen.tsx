@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { navigate, useRoute } from '../app/router'
 import { repo, type AppSettings } from '../app/store'
 import { workTimes } from '../domain/applications'
@@ -767,7 +768,7 @@ function WorkForm({
         </fieldset>
       )}
       {plantGroups.length > 0 && (
-        <p className="hint">Если группы выбраны, удобрения этой работы считаются по их площади, а не по площади объектов. Площадь задаётся в карточке группы.</p>
+        <p className="hint">Если группы выбраны, удобрения этой работы считаются по их площади, а не по площади объектов. Сколько нужно конкретной группе, видно в её карточке: там группа связана с видом работ и материалом.</p>
       )}
       {recurrence === 'season' ? (
         <SeasonEditor schedule={schedule} rhythm={rhythm} onSchedule={setSchedule} onRhythm={setRhythm} />
@@ -849,6 +850,51 @@ function ClimateNote() {
   )
 }
 
+function WorkSearchDialog({ initial, onFind, onClose }: { initial: string; onFind: (value: string) => void; onClose: () => void }) {
+  const [value, setValue] = useState(initial)
+  const field = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    field.current?.focus()
+  }, [])
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return createPortal(
+    <div className="sheet-backdrop" role="presentation" onClick={onClose}>
+      <form
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Поиск по плану работ"
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault()
+          onFind(value)
+        }}
+      >
+        <h2>Поиск</h2>
+        <label className="field">
+          Что найти
+          <input ref={field} type="search" placeholder="Например: гортензии" aria-label="Что найти в плане работ" value={value} onChange={(event) => setValue(event.target.value)} />
+        </label>
+        <div className="actions">
+          <button type="submit" className="button">
+            Найти
+          </button>
+          <button type="button" className="button secondary" onClick={onClose}>
+            Отмена
+          </button>
+        </div>
+      </form>
+    </div>,
+    document.body,
+  )
+}
+
 export function WorksScreen({ settings }: { settings: AppSettings }) {
   const { list, works, context } = useWorkStatuses()
   const objects = useLiveQuery(() => db.objects.toArray(), []) ?? []
@@ -856,6 +902,7 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
   const events = useLiveQuery(() => db.events.toArray(), []) ?? []
   const requested = useRoute().query.get('work')
   const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [editing, setEditing] = useState<{ id?: string; suggestion?: PlanSuggestion } | null>(requested ? { id: requested } : null)
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -925,23 +972,39 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
 
   return (
     <Screen title="План работ" help="works" back="/more" tab="/more">
-      <div className="actions">
+      <div className="actions plan-actions">
         <button type="button" className="button" onClick={() => setEditing({})}>
           + Работа
         </button>
         <a className="button secondary" href="#/plan">
           Из черновика Evernote
         </a>
+        <button type="button" className={query ? 'icon-button search-button active' : 'icon-button search-button'} aria-label="Поиск" aria-pressed={query !== ''} onClick={() => setSearchOpen(true)}>
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+        </button>
       </div>
-      <div className="search-row">
-        <input
-          type="search"
-          placeholder="Поиск по названию, виду, объектам"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          aria-label="Поиск по плану работ"
+      {query && (
+        <p className="search-query">
+          Нашли по запросу «{query}».{' '}
+          <button type="button" className="button-link source-link" onClick={() => setQuery('')}>
+            Сбросить
+          </button>
+        </p>
+      )}
+      {searchOpen && (
+        <WorkSearchDialog
+          initial={query}
+          onClose={() => setSearchOpen(false)}
+          onFind={(value) => {
+            setQuery(value.trim())
+            setSearchOpen(false)
+            window.scrollTo({ top: 0 })
+          }}
         />
-      </div>
+      )}
       {!settings.plotLocation && (
         <p className="hint">
           Для работ, зависящих от заморозков, нужны координаты участка: <a href="#/settings">«Ещё → Настройки → Участок»</a>.
@@ -949,7 +1012,7 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
       )}
       <ClimateNote />
       {works && !hasWorks && <EmptyState>Работ пока нет. Добавьте свою или перенесите из черновика Evernote.</EmptyState>}
-      {works && hasWorks && visible === 0 && <EmptyState>Ничего не найдено. Измените поиск.</EmptyState>}
+      {works && hasWorks && visible === 0 && <EmptyState>Ничего не найдено. Измените запрос или сбросьте поиск.</EmptyState>}
       {groups.map((group) => (
         <section key={group.title}>
           <h2 className="section-title">{group.title}</h2>

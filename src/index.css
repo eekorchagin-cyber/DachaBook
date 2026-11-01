@@ -164,6 +164,30 @@ body {
   margin-top: 12px;
 }
 
+.plan-actions {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.plan-actions > .button {
+  white-space: nowrap;
+}
+
+.plan-actions > .button.secondary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan-actions .search-button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.search-query {
+  margin: 8px 0 0;
+}
+
 .action {
   display: inline-flex;
   flex-direction: column;
@@ -361,6 +385,11 @@ textarea::placeholder {
 .tab.active {
   color: var(--accent);
   font-weight: 600;
+}
+
+.icon-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .icon-button {
@@ -1242,6 +1271,22 @@ details.card[open] > summary::before {
 .material-block {
   border-top: 1px solid var(--border);
   padding-top: 8px;
+}
+
+.care-links {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.care-link {
+  border-top: 1px solid var(--border);
+  padding: 8px 0 4px;
+}
+
+.care-amount {
+  font-weight: 600;
+  margin: 4px 0;
 }
 
 .material-works {

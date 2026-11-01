@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { navigate, useRoute } from './app/router'
+import { localPath, navigate, useRoute } from './app/router'
 import { inboxHasFiles } from './share/inbox'
 import { applyAppearance, useSettings } from './app/store'
 import type { EventType } from './domain/types'
@@ -27,12 +27,6 @@ import { WateringScreen } from './screens/WateringScreen'
 import { WorksScreen } from './screens/WorksScreen'
 import { SettingsScreen, WelcomeScreen } from './screens/SettingsScreen'
 import { SyncScreen } from './screens/SyncScreen'
-
-/** Обратная ссылка только внутри приложения: чужой адрес в адресе страницы не открываем. */
-function localPath(value: string | null): string | undefined {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return undefined
-  return value
-}
 
 export default function App() {
   const route = useRoute()
@@ -102,7 +96,7 @@ export default function App() {
         />
       )
     case 'dictionaries':
-      return param ? <DictionaryScreen kind={param} settings={settings} /> : <DictionariesScreen settings={settings} />
+      return param ? <DictionaryScreen kind={param} settings={settings} query={route.query} /> : <DictionariesScreen settings={settings} />
     case 'library':
       if (param === 'new') return <ReferenceEditor />
       if (param && route.path[2] === 'edit') return <ReferenceEditor id={param} />

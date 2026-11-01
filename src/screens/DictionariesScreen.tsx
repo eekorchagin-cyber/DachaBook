@@ -1,9 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { removeUnit, removeWorkKind, renameUnit, renameWorkKind } from '../app/dictionaries'
+import { localPath, navigate } from '../app/router'
 import { DEFAULT_SETTINGS, setSetting, type AppSettings } from '../app/store'
 import { db } from '../storage/db'
 import { ListEditor } from '../ui/ListEditor'
 import { EmptyState, Screen } from '../ui/Screen'
+import { CareLinks } from './CareLinks'
 
 /** Перечень справочников: каждый открывается своим экраном. */
 export function DictionariesScreen({ settings }: { settings: AppSettings }) {
@@ -41,13 +43,25 @@ export function DictionariesScreen({ settings }: { settings: AppSettings }) {
   )
 }
 
-export function DictionaryScreen({ kind, settings }: { kind: string; settings: AppSettings }) {
+function WorkKindScreen({ name, known, returnTo }: { name: string; known: boolean; returnTo?: string }) {
+  return (
+    <Screen title={name} help="dictionaries" onBack={() => navigate(returnTo ?? '/dictionaries/work-kinds')} tab="/more">
+      {!known && <p className="hint">Этого вида нет в списке справочника. Связки ниже всё ещё считаются, пока их не уберут.</p>}
+      <CareLinks workKind={name} returnPath={`/dictionaries/work-kinds?kind=${encodeURIComponent(name)}`} />
+    </Screen>
+  )
+}
+
+export function DictionaryScreen({ kind, settings, query }: { kind: string; settings: AppSettings; query: URLSearchParams }) {
   if (kind === 'work-kinds') {
+    const selected = query.get('kind')
+    if (selected) return <WorkKindScreen name={selected} known={settings.workKinds.includes(selected)} returnTo={localPath(query.get('back'))} />
     return (
       <Screen title="Виды работ" help="dictionaries" back="/dictionaries" tab="/more">
         <p className="hint">
-          Нажмите на пункт, чтобы переименовать его (Enter — сохранить, Esc — отменить): вид работы изменится и во всех записях дневника. Убранный вид
-          останется в старых записях. Порядок здесь — порядок в выпадающих списках.
+          Нажмите на пункт, чтобы переименовать его (Enter — сохранить, Esc — отменить): вид работы изменится и во всех записях дневника, в плане и в связках с
+          материалами. Убранный вид останется в старых записях. «Связи» открывает группы растений и расходные материалы этого вида. Порядок здесь — порядок в
+          выпадающих списках.
         </p>
         <ListEditor
           label="Виды работ"
@@ -57,6 +71,8 @@ export function DictionaryScreen({ kind, settings }: { kind: string; settings: A
           onSave={(items) => setSetting('workKinds', items)}
           onRename={renameWorkKind}
           onRemove={removeWorkKind}
+          hrefFor={(item) => `#/dictionaries/work-kinds?kind=${encodeURIComponent(item)}`}
+          hrefLabel="Связи"
         />
       </Screen>
     )

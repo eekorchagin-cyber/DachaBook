@@ -113,6 +113,12 @@ export interface ConsumableUse {
   quantity: number
 }
 
+/** Одна связка «группа растений + вид работ» для расходного материала. По ней считается, сколько материала нужно группе. */
+export interface PlantUse {
+  plantGroupId: string
+  workKind: string
+}
+
 /** Расходный материал для ухода за участком: удобрение, средство защиты, семена, мульча. */
 export interface Consumable extends DocMeta {
   name: string
@@ -135,6 +141,8 @@ export interface Consumable extends DocMeta {
   /** В чём измеряется содержимое одной единицы учёта, когда unit — упаковка, а не кг или л. */
   packUnit?: string
   objectIds: string[]
+  /** Группы и виды работ, для которых считается этот материал. Площадь берётся у группы, число внесений — из плана. */
+  plantUses?: PlantUse[]
   /** Что это за материал и для чего он. */
   description?: string
   /** Страница в интернете: инструкция производителя, магазин. */

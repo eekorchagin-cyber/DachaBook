@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
-import { navigate, useRoute } from '../app/router'
+import { localPath, navigate, useRoute } from '../app/router'
 import { repo, useSettings } from '../app/store'
 import { findConsumable, normalizeUrl, parseQuantity, quantityText, UNITS, urlHost, usageByConsumable } from '../domain/consumables'
 import { todayAtSite } from '../domain/dates'
@@ -10,6 +10,7 @@ import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { SuggestInput } from '../ui/SuggestInput'
 import { ActionButton } from '../ui/Section'
+import { CareLinks } from './CareLinks'
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru')
 
@@ -125,7 +126,11 @@ function ConsumableForm({
       note: note.trim() || undefined,
       active,
     }
-    if (consumable) await repo.update('consumables', consumable.id, input, consumable.revision)
+    if (consumable) {
+      const fresh = await db.consumables.get(consumable.id)
+      if (!fresh) return
+      await repo.update('consumables', consumable.id, input, fresh.revision)
+    }
     else await repo.create('consumables', input)
     onClose()
   }
@@ -205,8 +210,23 @@ function ConsumableForm({
             {warning}
           </p>
         ))}
-        <p className="hint span">Сколько раз вносить и сколько купить на сезон считается в карточке работы, где выбран этот материал.</p>
+        <p className="hint span">Сколько раз вносить и сколько купить на сезон считается в карточке работы, где выбран этот материал. Количество для группы растений — в связке ниже.</p>
       </div>
+      {consumable ? (
+        <CareLinks
+          consumableId={consumable.id}
+          returnPath={`/consumables?id=${consumable.id}`}
+          draftConsumable={{
+            unit: materialUnit,
+            ratePerM2: parseQuantity(rate),
+            rateUnit: parseQuantity(rate) ? rateUnit.trim() || 'г' : undefined,
+            packQuantity: parseQuantity(pack),
+            packUnit: separate && parseQuantity(pack) ? substance : undefined,
+          }}
+        />
+      ) : (
+        <p className="hint">Сохраните материал, затем свяжите его с группой растений и видом работ — так посчитается количество удобрения.</p>
+      )}
       <label className="field">
         Примечание
         <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
@@ -252,6 +272,7 @@ export function ConsumablesScreen() {
   const route = useRoute()
   const requested = route.query.get('id')
   const fromWork = route.query.get('work')
+  const returnTo = localPath(route.query.get('back'))
   const [editing, setEditing] = useState<{ id?: string } | null>(requested ? { id: requested } : null)
 
   useEffect(() => {
@@ -261,6 +282,7 @@ export function ConsumablesScreen() {
   const close = () => {
     setEditing(null)
     if (fromWork) navigate(`/works?work=${fromWork}`)
+    else if (returnTo) navigate(returnTo)
     else if (requested) navigate('/consumables')
   }
 

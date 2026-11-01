@@ -153,7 +153,11 @@ export function purchasePlan(input: {
         measureUnit = target
         perUse = round3(area * perM2)
         if (input.applications === 0) {
-          warnings.push('В плане работ нет внесений по выбранным объектам — на сезон не умножается.')
+          warnings.push(
+            input.areaKind === 'groups'
+              ? 'В плане нет работы этого вида для выбранных групп — на сезон не умножается.'
+              : 'В плане работ нет внесений по выбранным объектам — на сезон не умножается.',
+          )
         } else {
           const times = Math.max(1, Math.round(input.applications ?? 1))
           need = round3(perUse * times)

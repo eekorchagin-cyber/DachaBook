@@ -2,11 +2,14 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useState } from 'react'
 import { navigate } from '../app/router'
 import { repo } from '../app/store'
+import { fertilizerSummary } from '../domain/careLinks'
 import { OBJECT_TYPES } from '../domain/labels'
 import type { CareObject, DocInput, ObjectType, PlantGroup } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
+import { CareLinks } from './CareLinks'
+import { useFertilizerLines } from './useFertilizerLines'
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru')
 
@@ -125,7 +128,7 @@ function ObjectGroups({ objectId }: { objectId: string }) {
   )
 }
 
-function GroupForm({ group, objects, onClose }: { group?: PlantGroup; objects: CareObject[]; onClose: () => void }) {
+function GroupForm({ group, objects, fromDictionaries, onClose }: { group?: PlantGroup; objects: CareObject[]; fromDictionaries?: boolean; onClose: () => void }) {
   const [name, setName] = useState(group?.name ?? '')
   const [objectIds, setObjectIds] = useState<string[]>(group?.objectIds ?? [])
   const [area, setArea] = useState(group?.areaM2?.toString() ?? '')
@@ -165,11 +168,16 @@ function GroupForm({ group, objects, onClose }: { group?: PlantGroup; objects: C
         Площадь, м²
         <input inputMode="decimal" placeholder="Например: 40" aria-label="Площадь группы" value={area} onChange={(event) => setArea(event.target.value)} />
       </label>
-      <p className="hint">Для расчёта удобрений в плане работ. Это площадь самих растений, а не всего места, где они растут.</p>
+      <p className="hint">Это площадь самих растений, а не всего места, где они растут. По ней считается удобрение, когда группа связана с видом работ и материалом.</p>
       <label className="field">
         Описание, сорта
         <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
       </label>
+      {group ? (
+        <CareLinks plantGroupId={group.id} draftArea={area} returnPath={`/objects?view=groups&group=${group.id}${fromDictionaries ? '&from=dictionaries' : ''}`} />
+      ) : (
+        <p className="hint">Сохраните группу, затем свяжите её с видом работ и расходным материалом — так посчитается количество удобрения.</p>
+      )}
       <div className="actions">
         <ActionButton disabled={!name.trim()} onRun={() => save()}>
           Сохранить
@@ -202,6 +210,7 @@ export function ObjectsScreen({
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const loadedGroups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), [])
   const groups = loadedGroups ?? []
+  const fertilizer = useFertilizerLines() ?? []
   const [view, setView] = useState<'objects' | 'groups'>(initialGroupId ? 'groups' : initialView)
   const [editing, setEditing] = useState<{ kind: 'object' | 'group'; id?: string } | null>(initialGroupId ? { kind: 'group', id: initialGroupId } : null)
 
@@ -241,7 +250,7 @@ export function ObjectsScreen({
         {editing.kind === 'object' ? (
           <ObjectForm key={editing.id ?? 'new'} object={objects.find((item) => item.id === editing.id)} onClose={close} />
         ) : (
-          <GroupForm key={editing.id ?? 'new'} group={group} objects={active} onClose={close} />
+          <GroupForm key={editing.id ?? 'new'} group={group} objects={active} fromDictionaries={fromDictionaries} onClose={close} />
         )}
       </Screen>
     )
@@ -305,7 +314,7 @@ export function ObjectsScreen({
               + Добавить группу
             </button>
           </div>
-          <p className="hint">Группы растений («Хвойные», «Ягодные кусты», «Гортензии») привязываются к объектам. Площадь группы нужна для расчёта удобрений в плане работ.</p>
+          <p className="hint">Группы растений («Хвойные», «Ягодные кусты», «Гортензии») привязываются к объектам. Площадь и связка с видом работ и материалом дают количество удобрения.</p>
           {groups.length === 0 && <EmptyState>Групп растений пока нет.</EmptyState>}
           <ul className="list">
             {[...groups].sort(byName).map((group) => (
@@ -320,6 +329,9 @@ export function ObjectsScreen({
                       .filter(Boolean)
                       .join(' · ')}
                   </span>
+                  {fertilizer.some((line) => line.plantGroupId === group.id) && (
+                    <span className="small">{fertilizer.filter((line) => line.plantGroupId === group.id).map((line) => fertilizerSummary(line)).join('; ')}</span>
+                  )}
                 </button>
               </li>
             ))}
