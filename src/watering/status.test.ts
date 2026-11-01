@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DiaryEvent, WateringZone } from '../domain/types'
-import { inWateringSeason, isWateringUpcoming, nextWateringDay, rainMm, wateringHistory, wateringStatus } from './status'
+import { inWateringSeason, isWateringUpcoming, nextWateringDay, rainMm, wateringCardReturnDate, wateringHistory, wateringStatus } from './status'
 
 const zone = (extra: Partial<WateringZone> = {}): WateringZone =>
   ({
@@ -42,6 +42,20 @@ describe('полив зон', () => {
     expect(wateringStatus(lawn, ['2026-06-15'], { today: '2026-06-15', precipitation: {} }).state).toBe('done')
     expect(wateringStatus({ ...lawn, skippedDates: ['2026-06-15'] }, [], { today: '2026-06-15', precipitation: {} }).state).toBe('skipped')
     expect(wateringStatus({ ...lawn, skippedDates: ['2026-06-15'] }, [], { today: '2026-06-18', precipitation: {} }).state).toBe('ready')
+  })
+
+  it('скрытая плашка возвращается за две недели до сезона', () => {
+    const lawn = zone()
+    expect(wateringCardReturnDate([lawn], '2026-11-01')).toBe('2027-04-17')
+    expect(wateringCardReturnDate([lawn], '2026-04-01')).toBe('2026-04-17')
+    expect(wateringCardReturnDate([lawn], '2026-04-20')).toBe('2027-04-17')
+    expect(wateringCardReturnDate([lawn], '2026-06-15')).toBe('2027-04-17')
+    const early = zone({ id: 'beds', fromMonth: 4, fromDay: 1, toMonth: 9, toDay: 30 })
+    expect(wateringCardReturnDate([lawn, early], '2026-11-01')).toBe('2027-03-18')
+    const winter = zone({ fromMonth: 11, fromDay: 1, toMonth: 3, toDay: 31, weekdays: [6] })
+    expect(wateringCardReturnDate([winter], '2026-06-01')).toBe('2026-10-18')
+    expect(wateringCardReturnDate([winter], '2026-10-20')).toBe('2027-10-18')
+    expect(wateringCardReturnDate([], '2026-11-01')).toBeUndefined()
   })
 
   it('вне сезона октябрь — не поливаем, май уже скоро в апреле', () => {

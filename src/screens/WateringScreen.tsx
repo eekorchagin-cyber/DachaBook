@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
 import { navigate } from '../app/router'
-import { repo, type AppSettings } from '../app/store'
+import { repo, setSetting, useSettings, type AppSettings } from '../app/store'
 import { MONTH_NAMES, todayAtSite } from '../domain/dates'
 import type { CareObject, DocInput, WateringKind, WateringZone } from '../domain/types'
 import { dateText } from '../plan/frost'
@@ -12,6 +12,7 @@ import { useForecast } from '../weather/service'
 import { skipWateringToday, undoWateringSkip } from '../watering/actions'
 import {
   isWateringUpcoming,
+  wateringCardReturnDate,
   WATERING_KINDS,
   WATERING_STATES,
   wateringHistory,
@@ -327,11 +328,15 @@ export function WateringScreen({ settings }: { settings: AppSettings }) {
 
 /** Карточка на главном экране: что полить сегодня и в ближайшие дни, с учётом дождя. */
 export function UpcomingWateringCard() {
+  const settings = useSettings()
   const zones = useLiveQuery(() => db.wateringZones.filter((zone) => !zone.deletedAt && zone.active).toArray(), [])
   const events = useLiveQuery(() => db.events.toArray(), []) ?? []
   const { forecast } = useForecast()
   const today = todayAtSite().date
   const precipitation = useMemo(() => precipitationMap(forecast?.daily), [forecast])
+  const returnDate = zones ? wateringCardReturnDate(zones, today) : undefined
+  const hiddenUntil = settings?.wateringCardHiddenUntil ?? ''
+  if (hiddenUntil && today < hiddenUntil) return null
   const upcoming = (zones ?? [])
     .map((zone) => {
       const history = wateringHistory(zone, events)
@@ -345,9 +350,16 @@ export function UpcomingWateringCard() {
     <section className="card">
       <div className="card-header">
         <h2>Полив</h2>
-        <a className="small source-link" href="#/watering">
-          Все зоны
-        </a>
+        <span className="card-links">
+          {returnDate && (
+            <button type="button" className="button-link source-link" onClick={() => void setSetting('wateringCardHiddenUntil', returnDate)}>
+              Скрыть до сезона
+            </button>
+          )}
+          <a className="small source-link" href="#/watering">
+            Все зоны
+          </a>
+        </span>
       </div>
       {upcoming.length === 0 ? (
         <p className="hint">Сегодня поливать не нужно. Зоны — в «Ещё → Полив».</p>

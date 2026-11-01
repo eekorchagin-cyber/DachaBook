@@ -21,6 +21,10 @@ export interface AppSettings {
   /** Адрес и координаты участка: хранятся только на устройствах и в резервных копиях, не в коде. */
   plotAddress: string
   plotLocation: PlotLocation | null
+  /** Фото дачи на главной: id файла из хранилища. Пусто — фото не выбрано. */
+  plotPhotoId: string
+  /** Плашка «Полив» на главной скрыта, пока сегодня раньше этой даты (ГГГГ-ММ-ДД). */
+  wateringCardHiddenUntil: string
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -46,6 +50,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   consumableUnits: UNITS,
   plotAddress: '',
   plotLocation: null,
+  plotPhotoId: '',
+  wateringCardHiddenUntil: '',
 }
 
 let currentAuthor = ''
