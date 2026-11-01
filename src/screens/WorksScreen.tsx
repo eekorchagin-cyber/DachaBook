@@ -5,11 +5,11 @@ import { repo, type AppSettings } from '../app/store'
 import { workTimes } from '../domain/applications'
 import { parseNonNegative } from '../domain/consumables'
 import { MONTH_NAMES, todayAtSite } from '../domain/dates'
-import { buyPackages, packagesFromStore, packagesToStore, purchasePlan } from '../domain/purchases'
+import { buyPackages, packagesFromStore, packagesToStore, purchasePlan, rateAreas } from '../domain/purchases'
 import { includesAllWords, normalizeText } from '../domain/diaryFilter'
 import { periodText, scheduleText } from '../domain/labels'
 import { errorText } from '../lib/format'
-import type { Consumable, DiaryEvent, DocInput, PlanPeriod, PlanWork, SeasonSchedule, WorkCondition } from '../domain/types'
+import type { Consumable, DiaryEvent, DocInput, PlanPeriod, PlanWork, PlantGroup, SeasonSchedule, WorkCondition } from '../domain/types'
 import { attachPlanWork, dismissPlanSuggestions, markDone, setSeason, skipOccurrence, undoMark } from '../plan/actions'
 import { useWorkContext } from '../plan/context'
 import { useWorkStatuses } from '../plan/useWorkStatuses'
@@ -108,7 +108,7 @@ function historyText(dates: string[], year: string): string {
     .join('; ')
 }
 
-function WorkItem({ work, history, status, objectNames, today, onEdit }: { work: PlanWork; history: string[]; status: WorkStatus; objectNames: string; today: string; onEdit: () => void }) {
+function WorkItem({ work, history, status, objectNames, groupNames, today, onEdit }: { work: PlanWork; history: string[]; status: WorkStatus; objectNames: string; groupNames?: string; today: string; onEdit: () => void }) {
   const currentYear = work.recurrence === 'season' && work.seasonSchedule ? String(seasonStartYear(work.seasonSchedule, today)) : today.slice(0, 4)
   const [postpone, setPostpone] = useState<string | null>(null)
   const past = historyText(history, currentYear)
@@ -138,7 +138,7 @@ function WorkItem({ work, history, status, objectNames, today, onEdit }: { work:
         {status.message && ` — ${status.message}`}
       </p>
       <p className="small muted">
-        {[whenText(work), conditionText(work.condition), objectNames, work.workKind].filter(Boolean).join(' · ')}
+        {[whenText(work), conditionText(work.condition), objectNames, groupNames, work.workKind].filter(Boolean).join(' · ')}
       </p>
       {past && <p className="small muted">По дневнику в прошлые годы: {past}</p>}
       {postpone !== null ? (
@@ -361,6 +361,7 @@ function WorkMaterials({
   stocks,
   times,
   areas,
+  areaKind,
   onAdd,
   onStock,
   onSave,
@@ -371,6 +372,7 @@ function WorkMaterials({
   stocks: Record<string, string>
   times: number
   areas: { name: string; areaM2?: number }[]
+  areaKind: 'objects' | 'groups'
   onAdd: (id: string) => Promise<void>
   onStock: (id: string, value: string) => void
   onSave: (id: string) => Promise<void>
@@ -394,6 +396,7 @@ function WorkMaterials({
           stock={stocks[item.id] ?? ''}
           times={times}
           areas={areas}
+          areaKind={areaKind}
           onStock={(value) => onStock(item.id, value)}
           onSave={() => onSave(item.id)}
           onRemove={() => onRemove(item.id)}
@@ -430,6 +433,7 @@ function MaterialNeed({
   stock,
   times,
   areas,
+  areaKind,
   onStock,
   onSave,
   onRemove,
@@ -439,6 +443,7 @@ function MaterialNeed({
   stock: string
   times: number
   areas: { name: string; areaM2?: number }[]
+  areaKind: 'objects' | 'groups'
   onStock: (value: string) => void
   onSave: () => Promise<void>
   onRemove: () => Promise<void>
@@ -453,6 +458,7 @@ function MaterialNeed({
     packQuantity: item.packQuantity,
     packUnit: item.packUnit,
     areas,
+    areaKind,
     usedThisYear: 0,
     pastUsage: [],
   })
@@ -524,10 +530,25 @@ function MaterialNeed({
   )
 }
 
-function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: PlanWork; suggestion?: PlanSuggestion; settings: AppSettings; objects: { id: string; name: string; areaM2?: number }[]; onClose: () => void }) {
+function WorkForm({
+  work,
+  suggestion,
+  settings,
+  objects,
+  plantGroups,
+  onClose,
+}: {
+  work?: PlanWork
+  suggestion?: PlanSuggestion
+  settings: AppSettings
+  objects: { id: string; name: string; areaM2?: number }[]
+  plantGroups: PlantGroup[]
+  onClose: () => void
+}) {
   const [title, setTitle] = useState(work?.title ?? suggestion?.title ?? '')
   const [workKind, setWorkKind] = useState(work?.workKind ?? suggestion?.workKind ?? '')
   const [objectIds, setObjectIds] = useState(work?.objectIds ?? suggestion?.objectIds ?? [])
+  const [plantGroupIds, setPlantGroupIds] = useState<string[]>(work?.plantGroupIds ?? [])
   const [recurrence, setRecurrence] = useState<PlanWork['recurrence']>(work?.recurrence ?? 'yearly')
   const [periods, setPeriods] = useState<PlanPeriod[]>(work?.periods ?? (suggestion ? [{ month: Number(suggestion.lastDate.slice(5, 7)) }] : []))
   const [schedule, setSchedule] = useState<SeasonSchedule>(work?.seasonSchedule ?? defaultSchedule(suggestion?.lastDate))
@@ -543,6 +564,7 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
   const [suggestionLinked, setSuggestionLinked] = useState(!suggestion || !!work)
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const toggle = (id: string) => setObjectIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]))
+  const toggleGroup = (id: string) => setPlantGroupIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]))
   const today = todayAtSite().date
   const previewSchedule: SeasonSchedule | undefined =
     recurrence === 'season'
@@ -557,7 +579,10 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
         }
       : undefined
   const times = workTimes({ recurrence, periods: recurrence === 'season' ? [] : periods, seasonSchedule: previewSchedule }, today)
-  const areas = objects.filter((object) => objectIds.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 }))
+  const rated = rateAreas(
+    plantGroups.filter((group) => plantGroupIds.includes(group.id)).map((group) => ({ name: group.name, areaM2: group.areaM2 })),
+    objects.filter((object) => objectIds.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 })),
+  )
   const stockOf = (id: string) => {
     const typed = stocks[id]
     if (typed !== undefined) return typed
@@ -598,7 +623,7 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
       title: title.trim(),
       workKind: workKind || undefined,
       objectIds,
-      plantGroupIds: work?.plantGroupIds ?? [],
+      plantGroupIds,
       note: note.trim() || undefined,
       recurrence,
       periods: recurrence === 'season' ? [] : periods,
@@ -710,6 +735,21 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
           ))}
         </fieldset>
       )}
+      {plantGroups.length > 0 && (
+        <fieldset className="chips">
+          <legend>Группы растений</legend>
+          {plantGroups.map((group) => (
+            <label key={group.id} className={plantGroupIds.includes(group.id) ? 'chip active' : 'chip'}>
+              <input type="checkbox" checked={plantGroupIds.includes(group.id)} onChange={() => toggleGroup(group.id)} />
+              {group.name}
+              {group.areaM2 !== undefined ? ` · ${group.areaM2} м²` : ''}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {plantGroups.length > 0 && (
+        <p className="hint">Если группы выбраны, удобрения этой работы считаются по их площади, а не по площади объектов. Площадь задаётся в карточке группы.</p>
+      )}
       {recurrence === 'season' ? (
         <SeasonEditor schedule={schedule} rhythm={rhythm} onSchedule={setSchedule} onRhythm={setRhythm} />
       ) : (
@@ -719,7 +759,8 @@ function WorkForm({ work, suggestion, settings, objects, onClose }: { work?: Pla
         consumableIds={consumableIds}
         stocks={Object.fromEntries(consumableIds.map((id) => [id, stockOf(id)]))}
         times={times}
-        areas={areas}
+        areas={rated.areas}
+        areaKind={rated.areaKind}
         onAdd={addMaterial}
         onStock={(id, value) => setStocks((current) => ({ ...current, [id]: value }))}
         onSave={saveStock}
@@ -825,7 +866,15 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
     const formObjects = objects.filter((object) => !object.deletedAt && (object.active || work?.objectIds.includes(object.id)))
     return (
       <Screen title="План работ" help="works" onBack={close} tab="/more">
-        <WorkForm key={editing.id ?? editing.suggestion?.key ?? 'new'} work={work} suggestion={editing.suggestion} settings={settings} objects={formObjects} onClose={close} />
+        <WorkForm
+          key={editing.id ?? editing.suggestion?.key ?? 'new'}
+          work={work}
+          suggestion={editing.suggestion}
+          settings={settings}
+          objects={formObjects}
+          plantGroups={plantGroups.filter((group) => !group.deletedAt && (group.active || work?.plantGroupIds.includes(group.id))).sort((a, b) => a.name.localeCompare(b.name, 'ru'))}
+          onClose={close}
+        />
       </Screen>
     )
   }
@@ -889,7 +938,14 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
           )}
           <ul className="list">
             {group.items.map((item) => (
-              <WorkItem key={item.work.id} {...item} today={context.today} objectNames={objectNames(item.work.objectIds)} onEdit={() => setEditing({ id: item.work.id })} />
+              <WorkItem
+                key={item.work.id}
+                {...item}
+                today={context.today}
+                objectNames={objectNames(item.work.objectIds)}
+                groupNames={names(item.work.plantGroupIds, plantGroups)}
+                onEdit={() => setEditing({ id: item.work.id })}
+              />
             ))}
           </ul>
         </section>

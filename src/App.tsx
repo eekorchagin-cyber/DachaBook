@@ -28,6 +28,12 @@ import { WorksScreen } from './screens/WorksScreen'
 import { SettingsScreen, WelcomeScreen } from './screens/SettingsScreen'
 import { SyncScreen } from './screens/SyncScreen'
 
+/** Обратная ссылка только внутри приложения: чужой адрес в адресе страницы не открываем. */
+function localPath(value: string | null): string | undefined {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return undefined
+  return value
+}
+
 export default function App() {
   const route = useRoute()
   const settings = useSettings()
@@ -88,9 +94,11 @@ export default function App() {
     case 'objects':
       return (
         <ObjectsScreen
-          key={`${route.query.get('view') ?? 'objects'}-${route.query.get('from') ?? ''}`}
-          initialView={route.query.get('view') === 'groups' ? 'groups' : 'objects'}
+          key={`${route.query.get('view') ?? 'objects'}-${route.query.get('from') ?? ''}-${route.query.get('group') ?? ''}`}
+          initialView={route.query.get('view') === 'groups' || route.query.get('group') ? 'groups' : 'objects'}
           fromDictionaries={route.query.get('from') === 'dictionaries'}
+          initialGroupId={route.query.get('group') ?? undefined}
+          returnTo={localPath(route.query.get('back'))}
         />
       )
     case 'dictionaries':

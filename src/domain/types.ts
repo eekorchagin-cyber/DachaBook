@@ -35,6 +35,8 @@ export interface CareObject extends DocMeta {
 export interface PlantGroup extends DocMeta {
   name: string
   objectIds: string[]
+  /** Площадь самих растений, м². Её берут удобрения в работе плана, если группа там выбрана. */
+  areaM2?: number
   description?: string
   active: boolean
 }

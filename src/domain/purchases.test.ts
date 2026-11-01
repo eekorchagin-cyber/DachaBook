@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buyPackages, convertQuantity, packagesFromStore, packagesToStore, parseApplications, pastYearUsage, purchaseLine, purchasePlan, substanceUnit, suggestedRateUnit } from './purchases'
+import { buyPackages, convertQuantity, packagesFromStore, packagesToStore, parseApplications, pastYearUsage, purchaseLine, purchasePlan, rateAreas, substanceUnit, suggestedRateUnit } from './purchases'
 
 describe('расчёт закупок', () => {
   it('одно внесение: 200 м² × 20 г/м² × 1 = 4 кг; из потребности вычитаются расход и запас', () => {
@@ -116,6 +116,41 @@ describe('расчёт закупок', () => {
     })
     expect(plan).toMatchObject({ source: 'rate', measureUnit: 'кг', perUse: 10.5, need: 42, unitsNeed: 4.2, toBuy: 4.2, packs: undefined })
     expect(plan.formula).toBe('210 м² × 50 г/м² × 4 = 42 кг')
+  })
+
+  it('выбранные группы заменяют площадь объектов', () => {
+    expect(rateAreas([{ name: 'Хвойные', areaM2: 40 }], [{ name: 'Сад', areaM2: 500 }])).toEqual({
+      areas: [{ name: 'Хвойные', areaM2: 40 }],
+      areaKind: 'groups',
+    })
+    expect(rateAreas([], [{ name: 'Газон', areaM2: 210 }]).areaKind).toBe('objects')
+    const plan = purchasePlan({
+      unit: 'кг',
+      ratePerM2: 50,
+      rateUnit: 'г',
+      applications: 1,
+      areas: [
+        { name: 'Хвойные', areaM2: 40 },
+        { name: 'Гортензии' },
+      ],
+      areaKind: 'groups',
+      usedThisYear: 0,
+      pastUsage: [],
+    })
+    expect(plan.perUse).toBe(2)
+    expect(plan.formula).toBe('40 м² × 50 г/м² × 1 = 2 кг')
+    expect(plan.warnings.join(' ')).toContain('Гортензии')
+    const missing = purchasePlan({
+      unit: 'кг',
+      ratePerM2: 50,
+      rateUnit: 'г',
+      areas: [{ name: 'Гортензии' }],
+      areaKind: 'groups',
+      usedThisYear: 0,
+      pastUsage: [],
+    })
+    expect(missing.perUse).toBeUndefined()
+    expect(missing.warnings.join(' ')).toContain('групп')
   })
 
   it('ноль внесений из плана не считается как одно', () => {

@@ -11,6 +11,13 @@ export interface PurchaseArea {
   areaM2?: number
 }
 
+export type AreaKind = 'objects' | 'groups'
+
+/** Если у работы выбраны группы, норма считается по их площади. Иначе — по площади объектов. */
+export function rateAreas(groups: PurchaseArea[], objects: PurchaseArea[]): { areas: PurchaseArea[]; areaKind: AreaKind } {
+  return groups.length > 0 ? { areas: groups, areaKind: 'groups' } : { areas: objects, areaKind: 'objects' }
+}
+
 export interface PurchasePlan {
   source: PurchaseSource
   /** В чём посчитаны perUse и need: килограммы, литры или сама единица учёта. */
@@ -107,6 +114,8 @@ export function purchasePlan(input: {
   /** В чём содержимое одной единицы учёта, если unit сам не кг и не л. */
   packUnit?: string
   areas: PurchaseArea[]
+  /** Чьи имена в areas: от этого зависит текст, если площади нет. */
+  areaKind?: AreaKind
   usedThisYear: number
   pastUsage: number[]
 }): PurchasePlan {
@@ -124,7 +133,14 @@ export function purchasePlan(input: {
     const rated = input.areas.filter((area) => (area.areaM2 ?? 0) > 0)
     const missing = input.areas.filter((area) => !((area.areaM2 ?? 0) > 0))
     if (rated.length === 0) {
-      warnings.push(input.areas.length ? 'У выбранных объектов не указана площадь — норма на м² не считается.' : 'Выберите объекты с площадью — иначе норма на м² не считается.')
+      const groups = input.areaKind === 'groups'
+      warnings.push(
+        input.areas.length
+          ? `У выбранных ${groups ? 'групп' : 'объектов'} не указана площадь — норма на м² не считается.`
+          : groups
+            ? 'Выберите группы с площадью — иначе норма на м² не считается.'
+            : 'Выберите объекты с площадью — иначе норма на м² не считается.',
+      )
     } else if (!same && !input.packQuantity) {
       warnings.push(`Укажите, сколько ${substance} в одной ${input.unit}.`)
     } else {

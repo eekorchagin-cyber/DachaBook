@@ -5,13 +5,41 @@ import { repo, useSettings } from '../app/store'
 import { findConsumable, normalizeUrl, parseQuantity, quantityText, UNITS, urlHost, usageByConsumable } from '../domain/consumables'
 import { todayAtSite } from '../domain/dates'
 import { convertQuantity, purchasePlan, substanceUnit, suggestedRateUnit } from '../domain/purchases'
-import type { CareObject, Consumable, DocInput } from '../domain/types'
+import type { CareObject, Consumable, DocInput, PlantGroup } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { SuggestInput } from '../ui/SuggestInput'
 import { ActionButton } from '../ui/Section'
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru')
+
+/** Группы растений из работ, где выбран материал: площадь для удобрений живёт у группы. */
+function UsedInGroups({ consumableId, fromWork }: { consumableId: string; fromWork?: string }) {
+  const works = useLiveQuery(
+    () => db.planWorks.filter((work) => !work.deletedAt && (work.consumableIds ?? []).includes(consumableId)).toArray(),
+    [consumableId],
+  )
+  const groups = useLiveQuery(() => db.plantGroups.filter((group) => !group.deletedAt).toArray(), []) ?? []
+  if (!works || works.length === 0) return null
+  const ids = [...new Set(works.flatMap((work) => work.plantGroupIds))]
+  const listed = ids
+    .map((id) => groups.find((group) => group.id === id))
+    .filter((group): group is PlantGroup => !!group)
+    .sort(byName)
+  if (listed.length === 0) return null
+  const back = encodeURIComponent(`/consumables?id=${consumableId}${fromWork ? `&work=${fromWork}` : ''}`)
+  return (
+    <div className="material-works">
+      <p className="hint">Группы растений в работах с этим материалом. Площадь для удобрений задаётся у группы.</p>
+      {listed.map((group) => (
+        <a key={group.id} className="source-link" href={`#/objects?view=groups&group=${group.id}&back=${back}`}>
+          Группа «{group.name}»
+          {group.areaM2 !== undefined ? ` · ${group.areaM2} м²` : ' · площадь не указана'}
+        </a>
+      ))}
+    </div>
+  )
+}
 
 /** Отдельная ссылка в каждую работу, где выбран этот материал. */
 function UsedInWorks({ consumableId }: { consumableId: string }) {
@@ -39,11 +67,13 @@ function ConsumableForm({
   consumable,
   consumables,
   objects,
+  fromWork,
   onClose,
 }: {
   consumable?: Consumable
   consumables: Consumable[]
   objects: CareObject[]
+  fromWork?: string
   onClose: () => void
 }) {
   const [name, setName] = useState(consumable?.name ?? '')
@@ -182,6 +212,7 @@ function ConsumableForm({
         <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
       </label>
       {consumable && <UsedInWorks consumableId={consumable.id} />}
+      {consumable && <UsedInGroups consumableId={consumable.id} fromWork={fromWork} />}
       <div className="actions">
         <ActionButton disabled={!name.trim() || nameTaken || rateInvalid || packInvalid || link === null} onRun={() => save()}>
           Сохранить
@@ -251,7 +282,7 @@ export function ConsumablesScreen() {
     }
     return (
       <Screen title="Расходные материалы" help="consumables" onBack={close} tab="/more">
-        <ConsumableForm key={editing.id ?? 'new'} consumable={consumable} consumables={consumables} objects={[...objects].sort(byName)} onClose={close} />
+        <ConsumableForm key={editing.id ?? 'new'} consumable={consumable} consumables={consumables} objects={[...objects].sort(byName)} fromWork={fromWork ?? undefined} onClose={close} />
       </Screen>
     )
   }
