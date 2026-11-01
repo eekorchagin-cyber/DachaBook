@@ -23,6 +23,19 @@ export function includesAllWords(query: string, text: string): boolean {
   return words.every((word) => haystack.includes(word))
 }
 
+/** Кусок текста вокруг первого найденного слова. Индексы совпадают: «ё» заменяется на «е» той же длины. */
+export function excerptAround(query: string, text: string, radius = 48): string | undefined {
+  const words = normalizeText(query).split(/\s+/).filter(Boolean)
+  const haystack = normalizeText(text)
+  const at = words.map((word) => haystack.indexOf(word)).find((index) => index >= 0)
+  if (at === undefined || at < 0) return undefined
+  const longest = Math.max(...words.map((word) => word.length))
+  const start = Math.max(0, at - radius)
+  const end = Math.min(text.length, at + radius + longest)
+  const slice = text.slice(start, end).replace(/\s+/g, ' ').trim()
+  return `${start > 0 ? '…' : ''}${slice}${end < text.length ? '…' : ''}`
+}
+
 /** От последней записи к более ранним: дата события, время, затем порядок внесения (у импорта — порядок строк таблицы). */
 export function compareEvents(a: DiaryEvent, b: DiaryEvent): number {
   return b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? '') || b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)

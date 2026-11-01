@@ -6,7 +6,7 @@ import { workTimes } from '../domain/applications'
 import { parseNonNegative } from '../domain/consumables'
 import { MONTH_NAMES, todayAtSite } from '../domain/dates'
 import { buyPackages, packagesFromStore, packagesToStore, purchasePlan, rateAreas } from '../domain/purchases'
-import { includesAllWords, normalizeText } from '../domain/diaryFilter'
+import { excerptAround, includesAllWords, normalizeText } from '../domain/diaryFilter'
 import { periodText, scheduleText } from '../domain/labels'
 import { errorText } from '../lib/format'
 import type { Consumable, DiaryEvent, DocInput, PlanPeriod, PlanWork, PlantGroup, SeasonSchedule, WorkCondition } from '../domain/types'
@@ -108,7 +108,25 @@ function historyText(dates: string[], year: string): string {
     .join('; ')
 }
 
-function WorkItem({ work, history, status, objectNames, groupNames, today, onEdit }: { work: PlanWork; history: string[]; status: WorkStatus; objectNames: string; groupNames?: string; today: string; onEdit: () => void }) {
+function WorkItem({
+  work,
+  history,
+  status,
+  objectNames,
+  groupNames,
+  noteSnippet,
+  today,
+  onEdit,
+}: {
+  work: PlanWork
+  history: string[]
+  status: WorkStatus
+  objectNames: string
+  groupNames?: string
+  noteSnippet?: string
+  today: string
+  onEdit: () => void
+}) {
   const currentYear = work.recurrence === 'season' && work.seasonSchedule ? String(seasonStartYear(work.seasonSchedule, today)) : today.slice(0, 4)
   const [postpone, setPostpone] = useState<string | null>(null)
   const past = historyText(history, currentYear)
@@ -138,8 +156,9 @@ function WorkItem({ work, history, status, objectNames, groupNames, today, onEdi
         {status.message && ` — ${status.message}`}
       </p>
       <p className="small muted">
-        {[whenText(work), conditionText(work.condition), objectNames, groupNames, work.workKind].filter(Boolean).join(' · ')}
+        {[whenText(work), conditionText(work.condition), objectNames, groupNames ? `растения: ${groupNames}` : '', work.workKind].filter(Boolean).join(' · ')}
       </p>
+      {noteSnippet && <p className="small muted">В примечании: {noteSnippet}</p>}
       {past && <p className="small muted">По дневнику в прошлые годы: {past}</p>}
       {postpone !== null ? (
         <div className="actions">
@@ -881,24 +900,25 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
 
   const names = (ids: string[], source: { id: string; name: string }[]) => ids.map((id) => source.find((item) => item.id === id)?.name).filter(Boolean).join(', ')
   const objectNames = (ids: string[]) => names(ids, objects)
-  const workText = (work: PlanWork, extra = '') =>
-    [work.title, work.note, work.workKind, objectNames(work.objectIds), names(work.plantGroupIds, plantGroups), whenText(work), conditionText(work.condition), extra]
-      .filter(Boolean)
-      .join(' ')
-  const archived = (works ?? []).filter((work) => !work.active && includesAllWords(query, workText(work)))
-  const closed = list.filter(
-    (item) => item.status.closed && includesAllWords(query, workText(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`)),
-  )
+  const groupLabel = (ids: string[]) => {
+    const label = names(ids, plantGroups)
+    return label ? `растения: ${label}` : ''
+  }
+  /** Текст, который и так виден на карточке. Примечание сюда не входит: его показываем отдельно, только если слово нашлось там. */
+  const visibleText = (work: PlanWork, extra = '') =>
+    [work.title, work.workKind, objectNames(work.objectIds), groupLabel(work.plantGroupIds), whenText(work), conditionText(work.condition), extra].filter(Boolean).join(' ')
+  const noteOnly = (work: PlanWork, visible: string) => {
+    if (!work.note || includesAllWords(query, visible) || !includesAllWords(query, `${visible} ${work.note}`)) return undefined
+    return excerptAround(query, work.note)
+  }
+  const matchesWork = (work: PlanWork, extra = '') => includesAllWords(query, `${visibleText(work, extra)} ${work.note ?? ''}`)
+  const archived = (works ?? []).filter((work) => !work.active && matchesWork(work))
+  const closed = list.filter((item) => item.status.closed && matchesWork(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`))
   const allSuggestions = planSuggestions(events, context.today.slice(0, 4))
-  const suggestions = allSuggestions.filter((item) => includesAllWords(query, [item.title, item.workKind, objectNames(item.objectIds)].filter(Boolean).join(' ')))
+  const suggestions = allSuggestions.filter((item) => includesAllWords(query, [item.title, item.workKind].filter(Boolean).join(' ')))
   const groups = GROUPS.map((group) => ({
     ...group,
-    items: list.filter(
-      (item) =>
-        !item.status.closed &&
-        group.states.includes(item.status.state) &&
-        includesAllWords(query, workText(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`)),
-    ),
+    items: list.filter((item) => !item.status.closed && group.states.includes(item.status.state) && matchesWork(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`)),
   })).filter((group) => group.items.length > 0)
   const hasWorks = (works?.length ?? 0) > 0 || allSuggestions.length > 0
   const visible = groups.length + suggestions.length + closed.length + archived.length
@@ -944,6 +964,7 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
                 today={context.today}
                 objectNames={objectNames(item.work.objectIds)}
                 groupNames={names(item.work.plantGroupIds, plantGroups)}
+                noteSnippet={noteOnly(item.work, visibleText(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`))}
                 onEdit={() => setEditing({ id: item.work.id })}
               />
             ))}
@@ -985,14 +1006,18 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
         <section>
           <h2 className="section-title">Больше не повторяются</h2>
           <ul className="list">
-            {closed.map((item) => (
-              <li key={item.work.id}>
-                <button type="button" className="list-item" onClick={() => setEditing({ id: item.work.id })}>
-                  <strong>{item.work.title}</strong>
-                  <span className="muted">сделано и не повторяется</span>
-                </button>
-              </li>
-            ))}
+            {closed.map((item) => {
+              const snippet = noteOnly(item.work, visibleText(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`))
+              return (
+                <li key={item.work.id}>
+                  <button type="button" className="list-item" onClick={() => setEditing({ id: item.work.id })}>
+                    <strong>{item.work.title}</strong>
+                    <span className="muted">сделано и не повторяется</span>
+                    {snippet && <span className="small">В примечании: {snippet}</span>}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
@@ -1000,14 +1025,18 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
         <section>
           <h2 className="section-title">Архив</h2>
           <ul className="list">
-            {archived.map((work) => (
-              <li key={work.id}>
-                <button type="button" className="list-item" onClick={() => setEditing({ id: work.id })}>
-                  <strong>{work.title}</strong>
-                  <span className="muted">в архиве, история сохранена</span>
-                </button>
-              </li>
-            ))}
+            {archived.map((work) => {
+              const snippet = noteOnly(work, visibleText(work))
+              return (
+                <li key={work.id}>
+                  <button type="button" className="list-item" onClick={() => setEditing({ id: work.id })}>
+                    <strong>{work.title}</strong>
+                    <span className="muted">в архиве, история сохранена</span>
+                    {snippet && <span className="small">В примечании: {snippet}</span>}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
