@@ -36,6 +36,12 @@ export function parseQuantity(value: string): number | undefined {
   return value.trim() && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
+/** Пустая строка — не задано; «0» — ноль. Отрицательное и нечисло — не задано. */
+export function parseNonNegative(value: string): number | undefined {
+  const parsed = Number(value.replace(',', '.').trim())
+  return value.trim() && Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
+}
+
 /** Расход каждого материала за год по записям дневника (без записей в корзине). */
 export function usageByConsumable(events: Pick<DiaryEvent, 'date' | 'deletedAt' | 'consumables'>[], year: number): Map<string, number> {
   const usage = new Map<string, number>()

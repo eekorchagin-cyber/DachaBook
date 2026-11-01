@@ -4,7 +4,7 @@ import { navigate } from '../../app/router'
 import { repo, type AppSettings } from '../../app/store'
 import { todayAtSite } from '../../domain/dates'
 import { findConsumable, resolveUses, rowProblems, type ConsumableRow } from '../../domain/consumables'
-import type { Consumable, ConsumableUse, DiaryEvent, DocInput, EventType, PlanWork } from '../../domain/types'
+import type { Consumable, ConsumableUse, DiaryEvent, DocInput, EventType, PlanWork, WateringZone } from '../../domain/types'
 import { setSeason } from '../../plan/actions'
 import { addAttachment, addPhoto, isImageFile } from '../../files/files'
 import { moonPhase } from '../../domain/moon'
@@ -49,19 +49,21 @@ function toDraft(
   type: EventType,
   consumables: Consumable[],
   plan?: PlanWork,
+  zone?: WateringZone,
   incoming?: { photoIds?: string[]; comment?: string; date?: string },
 ): Draft {
   const now = todayAtSite()
   // Выполнение плановой работы: запись заполняется по работе, дату и подробности пользователь подтверждает.
   const fromPlan = !event && plan
+  const fromWater = !event && zone
   return {
-    type: event?.type ?? (fromPlan ? 'work' : type),
+    type: event?.type ?? (fromPlan || fromWater ? 'work' : type),
     date: event?.date ?? incoming?.date ?? now.date,
-    time: event?.time ?? (type === 'measurement' ? now.time : ''),
-    objectIds: event?.objectIds ?? (fromPlan ? plan.objectIds : []),
-    plantGroupIds: event?.plantGroupIds ?? (fromPlan ? plan.plantGroupIds : []),
-    workKind: event?.workKind ?? (fromPlan ? (plan.workKind ?? '') : ''),
-    comment: event?.comment ?? (fromPlan ? plan.title : (incoming?.comment ?? '')),
+    time: event?.time ?? (fromWater ? (zone.timeFrom ?? '') : type === 'measurement' ? now.time : ''),
+    objectIds: event?.objectIds ?? (fromWater ? zone.objectIds : fromPlan ? plan.objectIds : []),
+    plantGroupIds: event?.plantGroupIds ?? (fromWater ? zone.plantGroupIds : fromPlan ? plan.plantGroupIds : []),
+    workKind: event?.workKind ?? (fromWater ? 'Полив' : fromPlan ? (plan.workKind ?? '') : ''),
+    comment: event?.comment ?? (fromWater ? `Полив: ${zone.name}` : fromPlan ? plan.title : (incoming?.comment ?? '')),
     photoIds: event?.photoIds ?? incoming?.photoIds ?? [],
     attachmentIds: event?.attachmentIds ?? [],
     temperature: event?.measurement?.temperature?.value.toString() ?? '',
@@ -137,6 +139,7 @@ export function EventEditor({
   initialPhotoIds,
   initialComment,
   initialDate,
+  waterId,
 }: {
   id?: string
   initialType: EventType
@@ -145,11 +148,13 @@ export function EventEditor({
   initialPhotoIds?: string[]
   initialComment?: string
   initialDate?: string
+  waterId?: string
 }) {
   const event = useLiveQuery(async () => (id ? ((await db.events.get(id)) ?? null) : null), [id])
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), [])
   const plan = useLiveQuery(async () => (planId ? ((await db.planWorks.get(planId)) ?? null) : null), [planId])
-  if (event === undefined || consumables === undefined || plan === undefined) return null
+  const zone = useLiveQuery(async () => (waterId ? ((await db.wateringZones.get(waterId)) ?? null) : null), [waterId])
+  if (event === undefined || consumables === undefined || plan === undefined || zone === undefined) return null
   if (id && !event) {
     return (
       <Screen title="Запись дневника" tab="/diary" back="/diary">
@@ -165,6 +170,7 @@ export function EventEditor({
       settings={settings}
       consumables={consumables}
       plan={plan ?? undefined}
+      zone={zone ?? undefined}
       incoming={{ photoIds: initialPhotoIds, comment: initialComment, date: initialDate }}
     />
   )
@@ -176,6 +182,7 @@ function EventForm({
   settings,
   consumables,
   plan,
+  zone,
   incoming,
 }: {
   event?: DiaryEvent
@@ -183,13 +190,14 @@ function EventForm({
   settings: AppSettings
   consumables: Consumable[]
   plan?: PlanWork
+  zone?: WateringZone
   incoming?: { photoIds?: string[]; comment?: string; date?: string }
 }) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const [draft, setDraft] = useState<Draft>(() => toDraft(event, initialType, consumables, plan, incoming))
+  const [draft, setDraft] = useState<Draft>(() => toDraft(event, initialType, consumables, plan, zone, incoming))
   // Запись по плановой работе уже заполнена — её можно сохранить сразу, без правок.
-  const [initial, setInitial] = useState(() => (plan && !event ? '' : JSON.stringify(toDraft(event, initialType, consumables, undefined, incoming))))
+  const [initial, setInitial] = useState(() => ((plan || zone) && !event ? '' : JSON.stringify(toDraft(event, initialType, consumables, undefined, undefined, incoming))))
   const [error, setError] = useState<string | null>(null)
   const [splitParts, setSplitParts] = useState<PartDraft[] | null>(null)
   const [viewer, setViewer] = useState<number | null>(null)
@@ -229,7 +237,7 @@ function EventForm({
         void processWeatherQueue()
       }
       setInitial(JSON.stringify(draft))
-      navigate(plan && !event ? '/works' : '/diary')
+      navigate(plan && !event ? '/works' : zone && !event ? '/watering' : '/diary')
     } catch (caught) {
       setError(caught instanceof ConflictError ? 'Запись изменили в другом месте. Откройте её заново, чтобы не потерять чужую правку.' : errorText(caught))
     }
@@ -332,7 +340,17 @@ function EventForm({
   const activeGroups = groups.filter((item) => item.active || draft.plantGroupIds.includes(item.id)).sort(byName)
 
   return (
-    <Screen title={event ? 'Запись дневника' : plan ? 'Выполнение работы' : 'Новая запись'} help="event" tab="/diary" back={plan && !event ? '/works' : '/diary'}>
+    <Screen
+      title={event ? 'Запись дневника' : plan ? 'Выполнение работы' : zone ? 'Полив' : 'Новая запись'}
+      help="event"
+      tab="/diary"
+      back={plan && !event ? '/works' : zone && !event ? '/watering' : '/diary'}
+    >
+      {zone && !event && (
+        <p className="notice">
+          Полив зоны «{zone.name}»{zone.durationMin ? `, около ${zone.durationMin} мин` : ''}. После сохранения этот день считается политым.
+        </p>
+      )}
       {plan && !event && (
         <p className="notice">
           {plan.recurrence === 'season'

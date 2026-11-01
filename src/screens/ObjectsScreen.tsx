@@ -1,11 +1,15 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useState } from 'react'
+import { navigate } from '../app/router'
 import { repo } from '../app/store'
+import { fertilizerSummary } from '../domain/careLinks'
 import { OBJECT_TYPES } from '../domain/labels'
 import type { CareObject, DocInput, ObjectType, PlantGroup } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
+import { CareLinks } from './CareLinks'
+import { useFertilizerLines } from './useFertilizerLines'
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru')
 
@@ -72,6 +76,7 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
         Описание
         <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
       </label>
+      {object && <ObjectWorks objectId={object.id} />}
       {object && <ObjectGroups objectId={object.id} />}
       <div className="actions">
         <ActionButton disabled={!name.trim()} onRun={() => save()}>
@@ -90,6 +95,30 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
   )
 }
 
+function ObjectWorks({ objectId }: { objectId: string }) {
+  const works = useLiveQuery(() => db.planWorks.filter((work) => !work.deletedAt && work.objectIds.includes(objectId)).toArray(), [objectId]) ?? []
+  const sorted = [...works].sort((a, b) => Number(b.active) - Number(a.active) || a.title.localeCompare(b.title, 'ru'))
+  return (
+    <>
+      <h3 className="section-title">Работы</h3>
+      {sorted.length === 0 ? (
+        <p className="hint">Работ по этому объекту пока нет. Они появятся, когда в плане у работы будет выбран этот объект.</p>
+      ) : (
+        <ul className="list">
+          {sorted.map((work) => (
+            <li key={work.id}>
+              <a className="list-item" href={`#/works?work=${work.id}`}>
+                <strong>{work.title}</strong>
+                {!work.active && <span className="muted">в архиве плана</span>}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  )
+}
+
 function ObjectGroups({ objectId }: { objectId: string }) {
   const groups = useLiveQuery(() => db.plantGroups.filter((group) => !group.deletedAt && group.objectIds.includes(objectId)).toArray(), [objectId]) ?? []
   return (
@@ -99,14 +128,21 @@ function ObjectGroups({ objectId }: { objectId: string }) {
   )
 }
 
-function GroupForm({ group, objects, onClose }: { group?: PlantGroup; objects: CareObject[]; onClose: () => void }) {
+function GroupForm({ group, objects, fromDictionaries, onClose }: { group?: PlantGroup; objects: CareObject[]; fromDictionaries?: boolean; onClose: () => void }) {
   const [name, setName] = useState(group?.name ?? '')
   const [objectIds, setObjectIds] = useState<string[]>(group?.objectIds ?? [])
+  const [area, setArea] = useState(group?.areaM2?.toString() ?? '')
   const [description, setDescription] = useState(group?.description ?? '')
   const toggle = (id: string) => setObjectIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]))
 
   const save = async (active = group?.active ?? true) => {
-    const input: DocInput<PlantGroup> = { name: name.trim(), objectIds, description: description.trim() || undefined, active }
+    const input: DocInput<PlantGroup> = {
+      name: name.trim(),
+      objectIds,
+      areaM2: numberOrUndefined(area),
+      description: description.trim() || undefined,
+      active,
+    }
     if (group) await repo.update('plantGroups', group.id, input, group.revision)
     else await repo.create('plantGroups', input)
     onClose()
@@ -129,9 +165,19 @@ function GroupForm({ group, objects, onClose }: { group?: PlantGroup; objects: C
         ))}
       </fieldset>
       <label className="field">
+        Площадь, м²
+        <input inputMode="decimal" placeholder="Например: 40" aria-label="Площадь группы" value={area} onChange={(event) => setArea(event.target.value)} />
+      </label>
+      <p className="hint">Это площадь самих растений, а не всего места, где они растут. По ней считается удобрение, когда группа связана с видом работ и материалом.</p>
+      <label className="field">
         Описание, сорта
         <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
       </label>
+      {group ? (
+        <CareLinks plantGroupId={group.id} draftArea={area} returnPath={`/objects?view=groups&group=${group.id}${fromDictionaries ? '&from=dictionaries' : ''}`} />
+      ) : (
+        <p className="hint">Сохраните группу, затем свяжите её с видом работ и расходным материалом — так посчитается количество удобрения.</p>
+      )}
       <div className="actions">
         <ActionButton disabled={!name.trim()} onRun={() => save()}>
           Сохранить
@@ -149,12 +195,24 @@ function GroupForm({ group, objects, onClose }: { group?: PlantGroup; objects: C
   )
 }
 
-/** fromDictionaries — открыт из «Ещё → Справочники»: стрелка назад ведёт туда. */
-export function ObjectsScreen({ initialView = 'objects', fromDictionaries = false }: { initialView?: 'objects' | 'groups'; fromDictionaries?: boolean }) {
+/** fromDictionaries — открыт из «Ещё → Справочники»: стрелка назад ведёт туда. returnTo — вернуться в карточку материала. */
+export function ObjectsScreen({
+  initialView = 'objects',
+  fromDictionaries = false,
+  initialGroupId,
+  returnTo,
+}: {
+  initialView?: 'objects' | 'groups'
+  fromDictionaries?: boolean
+  initialGroupId?: string
+  returnTo?: string
+}) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), []) ?? []
-  const [view, setView] = useState<'objects' | 'groups'>(initialView)
-  const [editing, setEditing] = useState<{ kind: 'object' | 'group'; id?: string } | null>(null)
+  const loadedGroups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt).toArray(), [])
+  const groups = loadedGroups ?? []
+  const fertilizer = useFertilizerLines() ?? []
+  const [view, setView] = useState<'objects' | 'groups'>(initialGroupId ? 'groups' : initialView)
+  const [editing, setEditing] = useState<{ kind: 'object' | 'group'; id?: string } | null>(initialGroupId ? { kind: 'group', id: initialGroupId } : null)
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -163,15 +221,36 @@ export function ObjectsScreen({ initialView = 'objects', fromDictionaries = fals
   const active = objects.filter((item) => item.active).sort(byName)
   const groupsOf = (objectId: string) => groups.filter((group) => group.objectIds.includes(objectId)).sort(byName).map((group) => (group.active ? group.name : `${group.name} (архив)`))
   const archived = objects.filter((item) => !item.active).sort(byName)
-  const close = () => setEditing(null)
+  const close = () => {
+    if (returnTo && editing?.kind === 'group' && editing.id === initialGroupId) {
+      navigate(returnTo)
+      return
+    }
+    setEditing(null)
+  }
 
   if (editing) {
+    if (editing.kind === 'group' && editing.id && !loadedGroups) {
+      return (
+        <Screen title="Объекты и растения" help="objects" onBack={close} tab={fromDictionaries ? '/more' : '/objects'}>
+          <p className="hint">Загрузка…</p>
+        </Screen>
+      )
+    }
+    const group = editing.kind === 'group' ? groups.find((item) => item.id === editing.id) : undefined
+    if (editing.kind === 'group' && editing.id && loadedGroups && !group) {
+      return (
+        <Screen title="Объекты и растения" help="objects" onBack={close} tab={fromDictionaries ? '/more' : '/objects'}>
+          <p className="hint">Такой группы нет.</p>
+        </Screen>
+      )
+    }
     return (
       <Screen title="Объекты и растения" help="objects" onBack={close} tab={fromDictionaries ? '/more' : '/objects'}>
         {editing.kind === 'object' ? (
           <ObjectForm key={editing.id ?? 'new'} object={objects.find((item) => item.id === editing.id)} onClose={close} />
         ) : (
-          <GroupForm key={editing.id ?? 'new'} group={groups.find((item) => item.id === editing.id)} objects={active} onClose={close} />
+          <GroupForm key={editing.id ?? 'new'} group={group} objects={active} fromDictionaries={fromDictionaries} onClose={close} />
         )}
       </Screen>
     )
@@ -235,7 +314,7 @@ export function ObjectsScreen({ initialView = 'objects', fromDictionaries = fals
               + Добавить группу
             </button>
           </div>
-          <p className="hint">Группы растений («Хвойные», «Ягодные кусты», «Гортензии») привязываются к объектам и отмечаются в записях дневника.</p>
+          <p className="hint">Группы растений («Хвойные», «Ягодные кусты», «Гортензии») привязываются к объектам. Площадь и связка с видом работ и материалом дают количество удобрения.</p>
           {groups.length === 0 && <EmptyState>Групп растений пока нет.</EmptyState>}
           <ul className="list">
             {[...groups].sort(byName).map((group) => (
@@ -245,7 +324,14 @@ export function ObjectsScreen({ initialView = 'objects', fromDictionaries = fals
                     {group.name}
                     {!group.active && ' (архив)'}
                   </strong>
-                  <span className="muted">{group.objectIds.map((id) => objects.find((item) => item.id === id)?.name).filter(Boolean).join(', ') || 'без привязки к объекту'}</span>
+                  <span className="muted">
+                    {[group.objectIds.map((id) => objects.find((item) => item.id === id)?.name).filter(Boolean).join(', ') || 'без привязки к объекту', group.areaM2 !== undefined ? `${group.areaM2} м²` : '']
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                  {fertilizer.some((line) => line.plantGroupId === group.id) && (
+                    <span className="small">{fertilizer.filter((line) => line.plantGroupId === group.id).map((line) => fertilizerSummary(line)).join('; ')}</span>
+                  )}
                 </button>
               </li>
             ))}

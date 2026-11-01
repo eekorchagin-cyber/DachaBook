@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterEvents } from './diaryFilter'
+import { excerptAround, filterEvents, includesAllWords } from './diaryFilter'
 import type { DiaryEvent } from './types'
 
 function event(partial: Partial<DiaryEvent>): DiaryEvent {
@@ -49,6 +49,12 @@ describe('filterEvents', () => {
     expect(filterEvents(events, { text: 'елки' })).toHaveLength(1)
     expect(filterEvents(events, { text: 'газон фертика' })).toHaveLength(1)
     expect(filterEvents(events, { text: 'газон клещей' })).toHaveLength(0)
+    expect(includesAllWords('', 'Смонтировать водопровод')).toBe(true)
+    expect(includesAllWords('  Водопровод  субботу ', 'Смонтировать дачный водопровод в субботу')).toBe(true)
+    expect(includesAllWords('слить насос', 'Слить воду, убрать насос')).toBe(true)
+    expect(includesAllWords('слить газон', 'Слить воду, убрать насос')).toBe(false)
+    expect(excerptAround('гортензии', 'На вертикальных грядках установили систему полива. Обрезали гортензии.')).toContain('гортензии')
+    expect(excerptAround('гортензии', 'На вертикальных грядках установили систему полива.')).toBeUndefined()
   })
 
   it('сочетает период, объект, группу растений, вид работы и тип', () => {

@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { repo } from '../app/store'
 import { formatDate } from '../domain/dates'
-import type { DiaryEvent, FolkSign, ReferenceMaterial } from '../domain/types'
+import type { Consumable, DiaryEvent, FolkSign, ReferenceMaterial } from '../domain/types'
 import { folkSignDate } from '../import/folkSigns'
 import { db } from '../storage/db'
 import { purgeDoc } from '../sync/engine'
@@ -14,6 +14,7 @@ const LINKS = [
   { href: '#/sync', title: 'Облако', text: 'Синхронизация через Яндекс Диск между iPhone, Mac и Windows' },
   { href: '#/dictionaries', title: 'Справочники', text: 'Виды работ, единицы, объекты, растения, расходные материалы, народные приметы' },
   { href: '#/works', title: 'План работ', text: 'Сезонные работы, сроки, заморозки и водопровод, отметки о выполнении' },
+  { href: '#/watering', title: 'Полив', text: 'Три зоны: газон, сад и грядки; расписание и рекомендация с учётом дождя' },
   { href: '#/diary/book', title: 'Дневник в PDF', text: 'Вся история книгой: главы по годам, параграфы по месяцам' },
   { href: '#/share', title: 'Фото в дневник', text: 'Выбрать снимки в Медиатеке и прикрепить к записи' },
   { href: '#/plan', title: 'Черновик плана из Evernote', text: 'Предложения работ и типичные наблюдения по месяцам — перенос в план работ' },
@@ -44,8 +45,8 @@ export function MoreScreen() {
 const TRASH_DAYS = 30
 
 interface TrashItem {
-  collection: 'events' | 'references' | 'folkSigns'
-  doc: DiaryEvent | ReferenceMaterial | FolkSign
+  collection: 'events' | 'references' | 'folkSigns' | 'consumables'
+  doc: DiaryEvent | ReferenceMaterial | FolkSign | Consumable
   title: string
   subtitle: string
 }
@@ -71,10 +72,12 @@ export function TrashScreen() {
   const events = useLiveQuery(() => db.events.filter((item) => !!item.deletedAt).toArray(), []) ?? []
   const references = useLiveQuery(() => db.references.filter((item) => !!item.deletedAt).toArray(), []) ?? []
   const signs = useLiveQuery(() => db.folkSigns.filter((item) => !!item.deletedAt).toArray(), []) ?? []
+  const consumables = useLiveQuery(() => db.consumables.filter((item) => !!item.deletedAt).toArray(), []) ?? []
   const items: TrashItem[] = [
     ...events.map((doc) => ({ collection: 'events' as const, doc, title: formatDate(doc.date), subtitle: doc.comment.slice(0, 80) })),
     ...references.map((doc) => ({ collection: 'references' as const, doc, title: doc.title, subtitle: 'статья' })),
     ...signs.map((doc) => ({ collection: 'folkSigns' as const, doc, title: folkSignDate(doc), subtitle: `народная примета: ${doc.title || doc.text.slice(0, 60)}` })),
+    ...consumables.map((doc) => ({ collection: 'consumables' as const, doc, title: doc.name, subtitle: 'расходный материал' })),
   ].sort((a, b) => (b.doc.deletedAt ?? '').localeCompare(a.doc.deletedAt ?? ''))
   const [limit] = useState(() => Date.now() - TRASH_DAYS * 86_400_000)
   const old = items.filter((item) => Date.parse(item.doc.deletedAt ?? '') < limit)

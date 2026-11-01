@@ -23,3 +23,9 @@ export function useRoute(): Route {
 export function navigate(path: string): void {
   location.hash = path.startsWith('#') ? path : `#${path}`
 }
+
+/** Обратная ссылка только внутри приложения: чужой адрес в адресе страницы не открываем. */
+export function localPath(value: string | null): string | undefined {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return undefined
+  return value
+}

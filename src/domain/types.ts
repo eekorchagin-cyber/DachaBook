@@ -35,6 +35,8 @@ export interface CareObject extends DocMeta {
 export interface PlantGroup extends DocMeta {
   name: string
   objectIds: string[]
+  /** Площадь самих растений, м². Её берут удобрения в работе плана, если группа там выбрана. */
+  areaM2?: number
   description?: string
   active: boolean
 }
@@ -111,14 +113,36 @@ export interface ConsumableUse {
   quantity: number
 }
 
+/** Одна связка «группа растений + вид работ» для расходного материала. По ней считается, сколько материала нужно группе. */
+export interface PlantUse {
+  plantGroupId: string
+  workKind: string
+}
+
 /** Расходный материал для ухода за участком: удобрение, средство защиты, семена, мульча. */
 export interface Consumable extends DocMeta {
   name: string
   /** Единица учёта: кг, л, шт. Расход в записях дневника указывается в ней же. */
   unit: string
-  /** Сколько нужно на сезон; основа для планирования закупок. */
+  /** Сколько материала нужно на сезон, в unit: килограммы, литры или штуки. Не число упаковок. Если задана норма — считается само. */
   seasonQuantity?: number
+  /** Норма одного внесения на 1 м². Единица — rateUnit, иначе unit. Пример: 20 г/м² при учёте в кг. */
+  ratePerM2?: number
+  rateUnit?: string
+  /** Прежнее поле кратности. Сейчас число внесений считается по расписанию работы, где выбран этот материал. */
+  applications?: number
+  /** Сколько есть сейчас, в unit. Ноль — запас пуст. */
+  stockQuantity?: number
+  /**
+   * Если packUnit задан — сколько этого вещества в одной единице учёта (10 кг в одной уп.).
+   * Иначе — сколько unit в одной магазинной упаковке.
+   */
+  packQuantity?: number
+  /** В чём измеряется содержимое одной единицы учёта, когда unit — упаковка, а не кг или л. */
+  packUnit?: string
   objectIds: string[]
+  /** Группы и виды работ, для которых считается этот материал. Площадь берётся у группы, число внесений — из плана. */
+  plantUses?: PlantUse[]
   /** Что это за материал и для чего он. */
   description?: string
   /** Страница в интернете: инструкция производителя, магазин. */
@@ -236,6 +260,8 @@ export interface PlanWork extends DocMeta {
   /** Слова для поиска таких работ в дневнике прошлых лет (например, «водопровод» и «слил»). */
   historyWords?: string[][]
   sourceDraftId?: string
+  /** Материалы, которые расходуются на эту работу. Сколько нужно на сезон считается здесь, по расписанию работы. */
+  consumableIds?: string[]
   seasons: Record<string, WorkSeason>
   active: boolean
 }
@@ -254,6 +280,38 @@ export interface ImportArchiveItem extends DocMeta {
   createdRecordIds: string[]
 }
 
+/**
+ * Зона полива (раздел 6 ТЗ): газон, сад и грядки независимы.
+ * Если окончание сезона раньше начала, окно переходит на следующий календарный год.
+ */
+export type WateringKind = 'sprinkler' | 'drip' | 'hose' | 'other'
+
+export interface WateringZone extends DocMeta {
+  name: string
+  kind: WateringKind
+  objectIds: string[]
+  plantGroupIds: string[]
+  areaM2?: number
+  dripLineM?: number
+  emitters?: number
+  soil?: string
+  /** Производительность системы, л/мин. */
+  flowLpm?: number
+  /** 1 — понедельник … 7 — воскресенье. */
+  weekdays: number[]
+  durationMin: number
+  timeFrom?: string
+  fromMonth: number
+  fromDay: number
+  toMonth: number
+  toDay: number
+  /** Не поливать, если осадки вчера+сегодня или прогноз на сегодня не меньше этого (мм). */
+  skipRainMm: number
+  skippedDates?: string[]
+  note?: string
+  active: boolean
+}
+
 export interface Collections {
   objects: CareObject
   plantGroups: PlantGroup
@@ -265,6 +323,7 @@ export interface Collections {
   consumables: Consumable
   folkSigns: FolkSign
   planWorks: PlanWork
+  wateringZones: WateringZone
 }
 
 export type CollectionName = keyof Collections

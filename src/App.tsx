@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { navigate, useRoute } from './app/router'
+import { localPath, navigate, useRoute } from './app/router'
 import { inboxHasFiles } from './share/inbox'
 import { applyAppearance, useSettings } from './app/store'
 import type { EventType } from './domain/types'
@@ -23,6 +23,7 @@ import { DictionariesScreen, DictionaryScreen } from './screens/DictionariesScre
 import { FolkSignsScreen } from './screens/FolkSignsScreen'
 import { MoreScreen, TrashScreen } from './screens/MoreScreen'
 import { ObjectsScreen } from './screens/ObjectsScreen'
+import { WateringScreen } from './screens/WateringScreen'
 import { WorksScreen } from './screens/WorksScreen'
 import { SettingsScreen, WelcomeScreen } from './screens/SettingsScreen'
 import { SyncScreen } from './screens/SyncScreen'
@@ -65,11 +66,12 @@ export default function App() {
       if (param) {
         return (
           <EventEditor
-            key={`${param}-${route.query.get('type') ?? ''}-${route.query.get('plan') ?? ''}-${route.query.get('photos') ?? ''}-${route.query.get('date') ?? ''}`}
+            key={`${param}-${route.query.get('type') ?? ''}-${route.query.get('plan') ?? ''}-${route.query.get('water') ?? ''}-${route.query.get('photos') ?? ''}-${route.query.get('date') ?? ''}`}
             id={param === 'new' ? undefined : param}
             initialType={(route.query.get('type') as EventType | null) ?? 'work'}
             settings={settings}
             planId={route.query.get('plan') ?? undefined}
+            waterId={route.query.get('water') ?? undefined}
             initialPhotoIds={route.query.get('photos')?.split(',').filter(Boolean)}
             initialComment={route.query.get('comment') ?? undefined}
             initialDate={route.query.get('date') ?? undefined}
@@ -86,13 +88,15 @@ export default function App() {
     case 'objects':
       return (
         <ObjectsScreen
-          key={`${route.query.get('view') ?? 'objects'}-${route.query.get('from') ?? ''}`}
-          initialView={route.query.get('view') === 'groups' ? 'groups' : 'objects'}
+          key={`${route.query.get('view') ?? 'objects'}-${route.query.get('from') ?? ''}-${route.query.get('group') ?? ''}`}
+          initialView={route.query.get('view') === 'groups' || route.query.get('group') ? 'groups' : 'objects'}
           fromDictionaries={route.query.get('from') === 'dictionaries'}
+          initialGroupId={route.query.get('group') ?? undefined}
+          returnTo={localPath(route.query.get('back'))}
         />
       )
     case 'dictionaries':
-      return param ? <DictionaryScreen kind={param} settings={settings} /> : <DictionariesScreen settings={settings} />
+      return param ? <DictionaryScreen kind={param} settings={settings} query={route.query} /> : <DictionariesScreen settings={settings} />
     case 'library':
       if (param === 'new') return <ReferenceEditor />
       if (param && route.path[2] === 'edit') return <ReferenceEditor id={param} />
@@ -102,6 +106,8 @@ export default function App() {
       return <PlanScreen />
     case 'works':
       return <WorksScreen settings={settings} />
+    case 'watering':
+      return <WateringScreen settings={settings} />
     case 'import':
       return <ImportScreen settings={settings} />
     case 'archive':

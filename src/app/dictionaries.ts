@@ -1,3 +1,4 @@
+import { renamePlantUses } from '../domain/careLinks'
 import { addRename } from '../domain/dictionaries'
 import { db } from '../storage/db'
 import { getSetting, repo, setSetting } from './store'
@@ -7,6 +8,10 @@ export async function renameWorkKind(from: string, to: string): Promise<boolean>
   const events = await db.events.where('workKind').equals(from).toArray()
   if (events.length > 0 && !confirm(`Переименовать «${from}» в «${to}»? Вид работы изменится и в записях дневника: ${events.length}.`)) return false
   for (const event of events) await repo.update('events', event.id, { workKind: to }, event.revision)
+  const works = (await db.planWorks.toArray()).filter((work) => !work.deletedAt && work.workKind === from)
+  for (const work of works) await repo.update('planWorks', work.id, { workKind: to }, work.revision)
+  const consumables = (await db.consumables.toArray()).filter((item) => (item.plantUses ?? []).some((use) => use.workKind === from))
+  for (const item of consumables) await repo.update('consumables', item.id, { plantUses: renamePlantUses(item.plantUses, from, to) }, item.revision)
   await setSetting('workKinds', (await getSetting('workKinds')).map((kind) => (kind === from ? to : kind)))
   await setSetting('workKindRenames', addRename(await getSetting('workKindRenames'), from, to))
   return true

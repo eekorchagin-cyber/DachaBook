@@ -1,11 +1,16 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect, useState } from 'react'
-import { navigate } from '../app/router'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { navigate, useRoute } from '../app/router'
 import { repo, type AppSettings } from '../app/store'
-import { MONTH_NAMES } from '../domain/dates'
-import { normalizeText } from '../domain/diaryFilter'
+import { workTimes } from '../domain/applications'
+import { parseNonNegative } from '../domain/consumables'
+import { MONTH_NAMES, todayAtSite } from '../domain/dates'
+import { buyPackages, packagesFromStore, packagesToStore, purchasePlan, rateAreas } from '../domain/purchases'
+import { excerptAround, includesAllWords, normalizeText } from '../domain/diaryFilter'
 import { periodText, scheduleText } from '../domain/labels'
-import type { DiaryEvent, DocInput, PlanPeriod, PlanWork, SeasonSchedule, WorkCondition } from '../domain/types'
+import { errorText } from '../lib/format'
+import type { Consumable, DiaryEvent, DocInput, PlanPeriod, PlanWork, PlantGroup, SeasonSchedule, WorkCondition } from '../domain/types'
 import { attachPlanWork, dismissPlanSuggestions, markDone, setSeason, skipOccurrence, undoMark } from '../plan/actions'
 import { useWorkContext } from '../plan/context'
 import { useWorkStatuses } from '../plan/useWorkStatuses'
@@ -104,7 +109,25 @@ function historyText(dates: string[], year: string): string {
     .join('; ')
 }
 
-function WorkItem({ work, history, status, objectNames, today, onEdit }: { work: PlanWork; history: string[]; status: WorkStatus; objectNames: string; today: string; onEdit: () => void }) {
+function WorkItem({
+  work,
+  history,
+  status,
+  objectNames,
+  groupNames,
+  noteSnippet,
+  today,
+  onEdit,
+}: {
+  work: PlanWork
+  history: string[]
+  status: WorkStatus
+  objectNames: string
+  groupNames?: string
+  noteSnippet?: string
+  today: string
+  onEdit: () => void
+}) {
   const currentYear = work.recurrence === 'season' && work.seasonSchedule ? String(seasonStartYear(work.seasonSchedule, today)) : today.slice(0, 4)
   const [postpone, setPostpone] = useState<string | null>(null)
   const past = historyText(history, currentYear)
@@ -134,8 +157,9 @@ function WorkItem({ work, history, status, objectNames, today, onEdit }: { work:
         {status.message && ` — ${status.message}`}
       </p>
       <p className="small muted">
-        {[whenText(work), conditionText(work.condition), objectNames, work.workKind].filter(Boolean).join(' · ')}
+        {[whenText(work), conditionText(work.condition), objectNames, groupNames ? `растения: ${groupNames}` : '', work.workKind].filter(Boolean).join(' · ')}
       </p>
+      {noteSnippet && <p className="small muted">В примечании: {noteSnippet}</p>}
       {past && <p className="small muted">По дневнику в прошлые годы: {past}</p>}
       {postpone !== null ? (
         <div className="actions">
@@ -346,11 +370,205 @@ function SeasonEditor({ schedule, rhythm, onSchedule, onRhythm }: { schedule: Se
   )
 }
 
-function WorkForm({ work, suggestion, settings, onClose }: { work?: PlanWork; suggestion?: PlanSuggestion; settings: AppSettings; onClose: () => void }) {
-  const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt && item.active).toArray(), []) ?? []
+const num = (value: number | undefined) => (value === undefined ? '' : value.toLocaleString('ru-RU', { maximumFractionDigits: 3 }))
+
+/** Число в поле запаса: без разделителя тысяч, чтобы его можно было прочитать обратно. */
+const stockText = (value: number | undefined) =>
+  value === undefined ? '' : value.toLocaleString('ru-RU', { maximumFractionDigits: 3, useGrouping: false })
+
+function WorkMaterials({
+  consumableIds,
+  stocks,
+  times,
+  areas,
+  areaKind,
+  onAdd,
+  onStock,
+  onSave,
+  onRemove,
+  onEdit,
+}: {
+  consumableIds: string[]
+  stocks: Record<string, string>
+  times: number
+  areas: { name: string; areaM2?: number }[]
+  areaKind: 'objects' | 'groups'
+  onAdd: (id: string) => Promise<void>
+  onStock: (id: string, value: string) => void
+  onSave: (id: string) => Promise<void>
+  onRemove: (id: string) => Promise<void>
+  onEdit: (id: string) => Promise<void>
+}) {
+  const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), []) ?? []
+  const selected = consumableIds
+    .map((id) => consumables.find((item) => item.id === id))
+    .filter((item): item is Consumable => !!item)
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  const available = consumables.filter((item) => item.active && !consumableIds.includes(item.id)).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  return (
+    <fieldset className="periods">
+      <legend>Материалы</legend>
+      {selected.length === 0 && consumables.length > 0 && <p className="hint">К этой работе материалы не выбраны.</p>}
+      {selected.map((item) => (
+        <MaterialNeed
+          key={item.id}
+          item={item}
+          stock={stocks[item.id] ?? ''}
+          times={times}
+          areas={areas}
+          areaKind={areaKind}
+          onStock={(value) => onStock(item.id, value)}
+          onSave={() => onSave(item.id)}
+          onRemove={() => onRemove(item.id)}
+          onEdit={() => onEdit(item.id)}
+        />
+      ))}
+      {available.length > 0 && (
+        <label className="field">
+          Добавить материал
+          <select
+            aria-label="Добавить материал"
+            value=""
+            onChange={(event) => {
+              const id = event.target.value
+              if (id) void onAdd(id)
+            }}
+          >
+            <option value="">Выберите из справочника</option>
+            {available.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {consumables.length === 0 && <p className="hint">В справочнике пока нет материалов.</p>}
+    </fieldset>
+  )
+}
+
+function MaterialNeed({
+  item,
+  stock,
+  times,
+  areas,
+  areaKind,
+  onStock,
+  onSave,
+  onRemove,
+  onEdit,
+}: {
+  item: Consumable
+  stock: string
+  times: number
+  areas: { name: string; areaM2?: number }[]
+  areaKind: 'objects' | 'groups'
+  onStock: (value: string) => void
+  onSave: () => Promise<void>
+  onRemove: () => Promise<void>
+  onEdit: () => Promise<void>
+}) {
+  const stockInvalid = !!stock.trim() && parseNonNegative(stock) === undefined
+  const plan = purchasePlan({
+    unit: item.unit,
+    ratePerM2: item.ratePerM2,
+    rateUnit: item.rateUnit,
+    applications: times,
+    packQuantity: item.packQuantity,
+    packUnit: item.packUnit,
+    areas,
+    areaKind,
+    usedThisYear: 0,
+    pastUsage: [],
+  })
+  const packs = item.packQuantity ? plan.unitsNeed : undefined
+  const buy = buyPackages(packs, parseNonNegative(stock))
+  return (
+    <div className="material-block">
+      <div className="calc-grid">
+        <p className="span">
+          <button type="button" className="source-link button-link" onClick={() => void onEdit()}>
+            {item.name}
+          </button>
+        </p>
+        <label className="field">
+          Количество внесений за 1 сезон
+          <span className="result-line">
+            <input aria-label={`Количество внесений ${item.name}`} readOnly value={times > 0 ? String(times) : ''} placeholder="—" />
+            <span className="suffix">по расписанию</span>
+          </span>
+        </label>
+        <label className="field">
+          Требуется на 1 сезон
+          <span className="result-line">
+            <input aria-label={`Требуется на сезон ${item.name}`} readOnly value={num(plan.need)} placeholder="—" />
+            <span className="suffix">{plan.need === undefined ? '' : plan.measureUnit}</span>
+            {packs !== undefined && (
+              <>
+                <input aria-label={`Требуется упаковок ${item.name}`} readOnly value={num(packs)} />
+                <span className="suffix">уп.</span>
+              </>
+            )}
+          </span>
+        </label>
+        <label className="field">
+          Запас сейчас
+          <span className="result-line">
+            <input aria-label={`Запас ${item.name}`} inputMode="decimal" placeholder="—" value={stock} onChange={(event) => onStock(event.target.value)} />
+            <span className="suffix">уп.</span>
+          </span>
+        </label>
+        <label className="field">
+          Купить
+          <span className="result-line">
+            <input aria-label={`Купить ${item.name}`} readOnly value={num(buy)} placeholder="—" />
+            <span className="suffix">уп.</span>
+          </span>
+        </label>
+        {plan.formula && <p className="hint span">{plan.formula}</p>}
+        {!item.packQuantity && <p className="hint span">Укажите в карточке материала, сколько в одной упаковке, — иначе запас и покупка в упаковках не считаются.</p>}
+        {plan.warnings.map((warning) => (
+          <p key={warning} className="hint span">
+            {warning}
+          </p>
+        ))}
+        {stockInvalid && <p className="error span">Запас — ноль или положительное число упаковок.</p>}
+      </div>
+      <div className="actions">
+        <ActionButton disabled={stockInvalid} onRun={onSave}>
+          Сохранить
+        </ActionButton>
+        <button type="button" className="button secondary" onClick={() => void onEdit()}>
+          Изменить
+        </button>
+        <ActionButton secondary onRun={onRemove}>
+          Удалить
+        </ActionButton>
+      </div>
+    </div>
+  )
+}
+
+function WorkForm({
+  work,
+  suggestion,
+  settings,
+  objects,
+  plantGroups,
+  onClose,
+}: {
+  work?: PlanWork
+  suggestion?: PlanSuggestion
+  settings: AppSettings
+  objects: { id: string; name: string; areaM2?: number }[]
+  plantGroups: PlantGroup[]
+  onClose: () => void
+}) {
   const [title, setTitle] = useState(work?.title ?? suggestion?.title ?? '')
   const [workKind, setWorkKind] = useState(work?.workKind ?? suggestion?.workKind ?? '')
   const [objectIds, setObjectIds] = useState(work?.objectIds ?? suggestion?.objectIds ?? [])
+  const [plantGroupIds, setPlantGroupIds] = useState<string[]>(work?.plantGroupIds ?? [])
   const [recurrence, setRecurrence] = useState<PlanWork['recurrence']>(work?.recurrence ?? 'yearly')
   const [periods, setPeriods] = useState<PlanPeriod[]>(work?.periods ?? (suggestion ? [{ month: Number(suggestion.lastDate.slice(5, 7)) }] : []))
   const [schedule, setSchedule] = useState<SeasonSchedule>(work?.seasonSchedule ?? defaultSchedule(suggestion?.lastDate))
@@ -358,14 +576,49 @@ function WorkForm({ work, suggestion, settings, onClose }: { work?: PlanWork; su
   const [conditionType, setConditionType] = useState<'' | WorkCondition['type']>(work?.condition?.type ?? '')
   const [leadDays, setLeadDays] = useState(String(work?.condition?.type === 'beforeAutumnFrost' ? work.condition.leadDays : 7))
   const [note, setNote] = useState(work?.note ?? '')
+  const [consumableIds, setConsumableIds] = useState<string[]>(work?.consumableIds ?? [])
+  const [workId, setWorkId] = useState(work?.id)
+  const [revision, setRevision] = useState(work?.revision)
+  const [stocks, setStocks] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
+  const [suggestionLinked, setSuggestionLinked] = useState(!suggestion || !!work)
+  const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const toggle = (id: string) => setObjectIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]))
+  const toggleGroup = (id: string) => setPlantGroupIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]))
+  const today = todayAtSite().date
+  const previewSchedule: SeasonSchedule | undefined =
+    recurrence === 'season'
+      ? {
+          fromMonth: schedule.fromMonth,
+          fromDay: schedule.fromDay,
+          toMonth: schedule.toMonth,
+          toDay: schedule.toDay,
+          ...(rhythm === 'days' ? { weekdays: [...(schedule.weekdays ?? [])].sort((a, b) => a - b) } : { everyWeeks: schedule.everyWeeks ?? 2 }),
+          timeFrom: schedule.timeFrom || undefined,
+          timeTo: schedule.timeTo || undefined,
+        }
+      : undefined
+  const times = workTimes({ recurrence, periods: recurrence === 'season' ? [] : periods, seasonSchedule: previewSchedule }, today)
+  const rated = rateAreas(
+    plantGroups.filter((group) => plantGroupIds.includes(group.id)).map((group) => ({ name: group.name, areaM2: group.areaM2 })),
+    objects.filter((object) => objectIds.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 })),
+  )
+  const stockOf = (id: string) => {
+    const typed = stocks[id]
+    if (typed !== undefined) return typed
+    const item = consumables.find((entry) => entry.id === id)
+    return item ? stockText(packagesFromStore(item.stockQuantity, item)) : ''
+  }
 
-  const save = async (active = work?.active ?? true) => {
+  const buildInput = (ids: string[], active: boolean): DocInput<PlanWork> | undefined => {
     const problem = recurrence === 'season' ? scheduleProblem(schedule, rhythm) : ''
     if (problem) {
       setError(problem)
-      return
+      return undefined
+    }
+    if (!title.trim()) {
+      setError('Сначала укажите, что сделать.')
+      return undefined
     }
     setError('')
     const condition: WorkCondition | undefined =
@@ -386,11 +639,11 @@ function WorkForm({ work, suggestion, settings, onClose }: { work?: PlanWork; su
             timeTo: schedule.timeTo || undefined,
           }
         : work?.seasonSchedule
-    const input: DocInput<PlanWork> = {
+    return {
       title: title.trim(),
       workKind: workKind || undefined,
       objectIds,
-      plantGroupIds: work?.plantGroupIds ?? [],
+      plantGroupIds,
       note: note.trim() || undefined,
       recurrence,
       periods: recurrence === 'season' ? [] : periods,
@@ -400,12 +653,71 @@ function WorkForm({ work, suggestion, settings, onClose }: { work?: PlanWork; su
       skippedDates: work?.skippedDates,
       historyWords: work?.historyWords,
       sourceDraftId: work?.sourceDraftId,
+      consumableIds: ids,
       seasons: work?.seasons ?? {},
       active,
     }
-    const saved = work ? await repo.update('planWorks', work.id, input, work.revision) : await repo.create('planWorks', input)
-    if (!work && suggestion) await attachPlanWork(suggestion.eventIds, saved.id)
-    onClose()
+  }
+
+  /** Записывает работу и список её материалов. Запас материалов не трогает. */
+  const writeWork = async (ids: string[], active = work?.active ?? true): Promise<PlanWork | undefined> => {
+    const input = buildInput(ids, active)
+    if (!input) return undefined
+    const creating = !workId || !revision
+    const saved = creating ? await repo.create('planWorks', input) : await repo.update('planWorks', workId, input, revision)
+    setWorkId(saved.id)
+    setRevision(saved.revision)
+    setConsumableIds(ids)
+    if (suggestion && !suggestionLinked) {
+      await attachPlanWork(suggestion.eventIds, saved.id)
+      setSuggestionLinked(true)
+    }
+    return saved
+  }
+
+  const addMaterial = async (id: string) => {
+    if (consumableIds.includes(id)) return
+    try {
+      await writeWork([...consumableIds, id])
+    } catch (caught) {
+      setError(errorText(caught))
+    }
+  }
+
+  const removeMaterial = async (id: string) => {
+    if (!confirm('Убрать материал из этой работы? В справочнике он останется.')) return
+    const saved = await writeWork(consumableIds.filter((item) => item !== id))
+    if (!saved) return
+    setStocks((current) => {
+      if (current[id] === undefined) return current
+      const next = { ...current }
+      delete next[id]
+      return next
+    })
+  }
+
+  const saveStock = async (id: string) => {
+    const current = await db.consumables.get(id)
+    if (!current || current.deletedAt) return
+    const shown = stockOf(id)
+    const packs = parseNonNegative(shown)
+    if (shown.trim() && packs === undefined) return
+    const stockQuantity = packagesToStore(packs, current)
+    if (stockQuantity !== current.stockQuantity && !(stockQuantity === undefined && current.stockQuantity === undefined)) {
+      await repo.update('consumables', id, { stockQuantity }, current.revision)
+    }
+    setStocks((draft) => ({ ...draft, [id]: stockText(packagesFromStore(stockQuantity, current)) }))
+  }
+
+  const openMaterial = async (id: string) => {
+    const saved = await writeWork(consumableIds)
+    if (!saved) return
+    navigate(`/consumables?id=${id}&work=${saved.id}`)
+  }
+
+  const save = async (active = work?.active ?? true) => {
+    const saved = await writeWork(consumableIds, active)
+    if (saved) onClose()
   }
 
   return (
@@ -443,11 +755,38 @@ function WorkForm({ work, suggestion, settings, onClose }: { work?: PlanWork; su
           ))}
         </fieldset>
       )}
+      {plantGroups.length > 0 && (
+        <fieldset className="chips">
+          <legend>Группы растений</legend>
+          {plantGroups.map((group) => (
+            <label key={group.id} className={plantGroupIds.includes(group.id) ? 'chip active' : 'chip'}>
+              <input type="checkbox" checked={plantGroupIds.includes(group.id)} onChange={() => toggleGroup(group.id)} />
+              {group.name}
+              {group.areaM2 !== undefined ? ` · ${group.areaM2} м²` : ''}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {plantGroups.length > 0 && (
+        <p className="hint">Если группы выбраны, удобрения этой работы считаются по их площади, а не по площади объектов. Сколько нужно конкретной группе, видно в её карточке: там группа связана с видом работ и материалом.</p>
+      )}
       {recurrence === 'season' ? (
         <SeasonEditor schedule={schedule} rhythm={rhythm} onSchedule={setSchedule} onRhythm={setRhythm} />
       ) : (
         <PeriodsEditor periods={periods} onChange={setPeriods} />
       )}
+      <WorkMaterials
+        consumableIds={consumableIds}
+        stocks={Object.fromEntries(consumableIds.map((id) => [id, stockOf(id)]))}
+        times={times}
+        areas={rated.areas}
+        areaKind={rated.areaKind}
+        onAdd={addMaterial}
+        onStock={(id, value) => setStocks((current) => ({ ...current, [id]: value }))}
+        onSave={saveStock}
+        onRemove={removeMaterial}
+        onEdit={openMaterial}
+      />
       {recurrence === 'yearly' && (
       <label className="field">
         Условие
@@ -511,62 +850,190 @@ function ClimateNote() {
   )
 }
 
+function WorkSearchDialog({ initial, onFind, onClose }: { initial: string; onFind: (value: string) => void; onClose: () => void }) {
+  const [value, setValue] = useState(initial)
+  const field = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    field.current?.focus()
+  }, [])
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return createPortal(
+    <div className="sheet-backdrop" role="presentation" onClick={onClose}>
+      <form
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Поиск по плану работ"
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault()
+          onFind(value)
+        }}
+      >
+        <h2>Поиск</h2>
+        <label className="field">
+          Что найти
+          <input ref={field} type="search" placeholder="Например: гортензии" aria-label="Что найти в плане работ" value={value} onChange={(event) => setValue(event.target.value)} />
+        </label>
+        <div className="actions">
+          <button type="submit" className="button">
+            Найти
+          </button>
+          <button type="button" className="button secondary" onClick={onClose}>
+            Отмена
+          </button>
+        </div>
+      </form>
+    </div>,
+    document.body,
+  )
+}
+
 export function WorksScreen({ settings }: { settings: AppSettings }) {
   const { list, works, context } = useWorkStatuses()
   const objects = useLiveQuery(() => db.objects.toArray(), []) ?? []
+  const plantGroups = useLiveQuery(() => db.plantGroups.toArray(), []) ?? []
   const events = useLiveQuery(() => db.events.toArray(), []) ?? []
-  const [editing, setEditing] = useState<{ id?: string; suggestion?: PlanSuggestion } | null>(null)
+  const requested = useRoute().query.get('work')
+  const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [editing, setEditing] = useState<{ id?: string; suggestion?: PlanSuggestion } | null>(requested ? { id: requested } : null)
   useEffect(() => {
     window.scrollTo({ top: 0 })
   }, [editing])
 
+  const close = () => {
+    setEditing(null)
+    if (requested) navigate('/works')
+  }
+
   if (editing) {
+    if (editing.id && works === undefined) {
+      return (
+        <Screen title="План работ" help="works" onBack={close} tab="/more">
+          <p className="hint">Загрузка…</p>
+        </Screen>
+      )
+    }
+    const work = works?.find((item) => item.id === editing.id)
+    if (editing.id && works && !work) {
+      return (
+        <Screen title="План работ" help="works" onBack={close} tab="/more">
+          <p className="hint">Такой работы нет.</p>
+        </Screen>
+      )
+    }
+    const formObjects = objects.filter((object) => !object.deletedAt && (object.active || work?.objectIds.includes(object.id)))
     return (
-      <Screen title="План работ" help="works" onBack={() => setEditing(null)} tab="/more">
-        <WorkForm key={editing.id ?? editing.suggestion?.key ?? 'new'} work={works?.find((work) => work.id === editing.id)} suggestion={editing.suggestion} settings={settings} onClose={() => setEditing(null)} />
+      <Screen title="План работ" help="works" onBack={close} tab="/more">
+        <WorkForm
+          key={editing.id ?? editing.suggestion?.key ?? 'new'}
+          work={work}
+          suggestion={editing.suggestion}
+          settings={settings}
+          objects={formObjects}
+          plantGroups={plantGroups.filter((group) => !group.deletedAt && (group.active || work?.plantGroupIds.includes(group.id))).sort((a, b) => a.name.localeCompare(b.name, 'ru'))}
+          onClose={close}
+        />
       </Screen>
     )
   }
 
-  const names = (ids: string[]) => ids.map((id) => objects.find((object) => object.id === id)?.name).filter(Boolean).join(', ')
-  const archived = (works ?? []).filter((work) => !work.active)
-  const closed = list.filter((item) => item.status.closed)
-  const suggestions = planSuggestions(events, context.today.slice(0, 4))
+  const names = (ids: string[], source: { id: string; name: string }[]) => ids.map((id) => source.find((item) => item.id === id)?.name).filter(Boolean).join(', ')
+  const objectNames = (ids: string[]) => names(ids, objects)
+  const groupLabel = (ids: string[]) => {
+    const label = names(ids, plantGroups)
+    return label ? `растения: ${label}` : ''
+  }
+  /** Текст, который и так виден на карточке. Примечание сюда не входит: его показываем отдельно, только если слово нашлось там. */
+  const visibleText = (work: PlanWork, extra = '') =>
+    [work.title, work.workKind, objectNames(work.objectIds), groupLabel(work.plantGroupIds), whenText(work), conditionText(work.condition), extra].filter(Boolean).join(' ')
+  const noteOnly = (work: PlanWork, visible: string) => {
+    if (!work.note || includesAllWords(query, visible) || !includesAllWords(query, `${visible} ${work.note}`)) return undefined
+    return excerptAround(query, work.note)
+  }
+  const matchesWork = (work: PlanWork, extra = '') => includesAllWords(query, `${visibleText(work, extra)} ${work.note ?? ''}`)
+  const archived = (works ?? []).filter((work) => !work.active && matchesWork(work))
+  const closed = list.filter((item) => item.status.closed && matchesWork(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`))
+  const allSuggestions = planSuggestions(events, context.today.slice(0, 4))
+  const suggestions = allSuggestions.filter((item) => includesAllWords(query, [item.title, item.workKind].filter(Boolean).join(' ')))
+  const groups = GROUPS.map((group) => ({
+    ...group,
+    items: list.filter((item) => !item.status.closed && group.states.includes(item.status.state) && matchesWork(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`)),
+  })).filter((group) => group.items.length > 0)
+  const hasWorks = (works?.length ?? 0) > 0 || allSuggestions.length > 0
+  const visible = groups.length + suggestions.length + closed.length + archived.length
 
   return (
     <Screen title="План работ" help="works" back="/more" tab="/more">
-      <div className="actions">
+      <div className="actions plan-actions">
         <button type="button" className="button" onClick={() => setEditing({})}>
           + Работа
         </button>
         <a className="button secondary" href="#/plan">
           Из черновика Evernote
         </a>
+        <button type="button" className={query ? 'icon-button search-button active' : 'icon-button search-button'} aria-label="Поиск" aria-pressed={query !== ''} onClick={() => setSearchOpen(true)}>
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+        </button>
       </div>
+      {query && (
+        <p className="search-query">
+          Нашли по запросу «{query}».{' '}
+          <button type="button" className="button-link source-link" onClick={() => setQuery('')}>
+            Сбросить
+          </button>
+        </p>
+      )}
+      {searchOpen && (
+        <WorkSearchDialog
+          initial={query}
+          onClose={() => setSearchOpen(false)}
+          onFind={(value) => {
+            setQuery(value.trim())
+            setSearchOpen(false)
+            window.scrollTo({ top: 0 })
+          }}
+        />
+      )}
       {!settings.plotLocation && (
         <p className="hint">
           Для работ, зависящих от заморозков, нужны координаты участка: <a href="#/settings">«Ещё → Настройки → Участок»</a>.
         </p>
       )}
       <ClimateNote />
-      {works && list.length === 0 && suggestions.length === 0 && <EmptyState>Работ пока нет. Добавьте свою или перенесите из черновика Evernote.</EmptyState>}
-      {GROUPS.map((group) => {
-        const items = list.filter((item) => !item.status.closed && group.states.includes(item.status.state))
-        if (items.length === 0) return null
-        return (
-          <section key={group.title}>
-            <h2 className="section-title">{group.title}</h2>
-            {group.title === 'Пропущено в этом году' && (
-              <p className="hint">Если пропустили по ошибке — «Вернуть в этот год». Сама работа из плана не удаляется.</p>
-            )}
-            <ul className="list">
-              {items.map((item) => (
-                <WorkItem key={item.work.id} {...item} today={context.today} objectNames={names(item.work.objectIds)} onEdit={() => setEditing({ id: item.work.id })} />
-              ))}
-            </ul>
-          </section>
-        )
-      })}
+      {works && !hasWorks && <EmptyState>Работ пока нет. Добавьте свою или перенесите из черновика Evernote.</EmptyState>}
+      {works && hasWorks && visible === 0 && <EmptyState>Ничего не найдено. Измените запрос или сбросьте поиск.</EmptyState>}
+      {groups.map((group) => (
+        <section key={group.title}>
+          <h2 className="section-title">{group.title}</h2>
+          {group.title === 'Пропущено в этом году' && (
+            <p className="hint">Если пропустили по ошибке — «Вернуть в этот год». Сама работа из плана не удаляется.</p>
+          )}
+          <ul className="list">
+            {group.items.map((item) => (
+              <WorkItem
+                key={item.work.id}
+                {...item}
+                today={context.today}
+                objectNames={objectNames(item.work.objectIds)}
+                groupNames={names(item.work.plantGroupIds, plantGroups)}
+                noteSnippet={noteOnly(item.work, visibleText(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`))}
+                onEdit={() => setEditing({ id: item.work.id })}
+              />
+            ))}
+          </ul>
+        </section>
+      ))}
       {suggestions.length > 0 && (
         <section>
           <h2 className="section-title">Предложения из дневника этого года</h2>
@@ -602,14 +1069,18 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
         <section>
           <h2 className="section-title">Больше не повторяются</h2>
           <ul className="list">
-            {closed.map((item) => (
-              <li key={item.work.id}>
-                <button type="button" className="list-item" onClick={() => setEditing({ id: item.work.id })}>
-                  <strong>{item.work.title}</strong>
-                  <span className="muted">сделано и не повторяется</span>
-                </button>
-              </li>
-            ))}
+            {closed.map((item) => {
+              const snippet = noteOnly(item.work, visibleText(item.work, `${WORK_STATES[item.status.state]} ${item.status.message ?? ''}`))
+              return (
+                <li key={item.work.id}>
+                  <button type="button" className="list-item" onClick={() => setEditing({ id: item.work.id })}>
+                    <strong>{item.work.title}</strong>
+                    <span className="muted">сделано и не повторяется</span>
+                    {snippet && <span className="small">В примечании: {snippet}</span>}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
@@ -617,14 +1088,18 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
         <section>
           <h2 className="section-title">Архив</h2>
           <ul className="list">
-            {archived.map((work) => (
-              <li key={work.id}>
-                <button type="button" className="list-item" onClick={() => setEditing({ id: work.id })}>
-                  <strong>{work.title}</strong>
-                  <span className="muted">в архиве, история сохранена</span>
-                </button>
-              </li>
-            ))}
+            {archived.map((work) => {
+              const snippet = noteOnly(work, visibleText(work))
+              return (
+                <li key={work.id}>
+                  <button type="button" className="list-item" onClick={() => setEditing({ id: work.id })}>
+                    <strong>{work.title}</strong>
+                    <span className="muted">в архиве, история сохранена</span>
+                    {snippet && <span className="small">В примечании: {snippet}</span>}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}

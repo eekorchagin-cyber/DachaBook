@@ -36,7 +36,7 @@ export function measurementText(event: DiaryEvent): string {
   return parts.join(', ')
 }
 
-const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+export const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 
 export function periodText(periods: PlanPeriod[]): string {
   return periods.map((period) => `${MONTHS_SHORT[period.month - 1]}${period.week ? `, нед. ${period.week}` : ''}`).join('; ')

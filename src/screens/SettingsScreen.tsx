@@ -1,14 +1,15 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import { seedDefaultObjects } from '../app/seed'
+import { ensureSeeded } from '../app/seed'
 import { restoreBackup, type RestoreResult } from '../backup/backup'
 import { setSetting, type AppSettings, type PhotoPosition, type ThemeSetting } from '../app/store'
 import { versionLabel } from '../app/version'
 import { locationText, parseLocation, roundLocation, type PlotLocation } from '../domain/location'
-import { errorText } from '../lib/format'
 import { db } from '../storage/db'
 import { Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
+import { errorText } from '../lib/format'
+import { updateApp } from '../sw/register'
 import { fillMissingWeather, missingWeatherCount } from '../weather/service'
 
 const THEMES: { value: ThemeSetting; label: string }[] = [
@@ -81,11 +82,45 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
       <section className="card">
         <h2>Дополнительно</h2>
         <p>{versionLabel()}</p>
+        <UpdateCheck />
         <a className="button secondary" href="#/lab">
           Лаборатория проверок
         </a>
       </section>
     </Screen>
+  )
+}
+
+function UpdateCheck() {
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [failed, setFailed] = useState(false)
+
+  const check = async () => {
+    setBusy(true)
+    setFailed(false)
+    setMessage('')
+    try {
+      const result = await updateApp()
+      if (result === 'latest') setMessage('Установлена последняя версия.')
+      else setMessage('Найдена новая версия. Обновляю…')
+    } catch (caught) {
+      setFailed(true)
+      setMessage(errorText(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="actions">
+        <button type="button" className="button secondary" disabled={busy} onClick={() => void check()}>
+          {busy ? 'Проверяю…' : 'Проверить обновление'}
+        </button>
+      </div>
+      {message && <p className={failed ? 'error' : 'hint'}>{message}</p>}
+    </>
   )
 }
 
@@ -199,7 +234,7 @@ export function WelcomeScreen() {
         className="card"
         onSubmit={(event) => {
           event.preventDefault()
-          if (name.trim()) void setSetting('authorName', name.trim()).then(seedDefaultObjects)
+          if (name.trim()) void setSetting('authorName', name.trim()).then(() => ensureSeeded())
         }}
       >
         <h2>Как вас зовут?</h2>

@@ -1,4 +1,4 @@
-import type { CareObject, DocInput, PlanWork } from '../domain/types'
+import type { CareObject, DocInput, PlanWork, WateringZone } from '../domain/types'
 import { folkSignKey, parseFolkSigns } from '../import/folkSigns'
 import { stableId } from '../lib/hash'
 import folkSignsMarkdown from '../seed/folk-signs.md?raw'
@@ -19,7 +19,10 @@ export async function ensureSeeded(): Promise<void> {
   if (navigator.storage?.persist) void navigator.storage.persist()
   await seedFolkSigns(db)
   await seedPlanWorks(db)
-  if ((await db.settings.get('authorName'))?.value) await seedDefaultObjects()
+  if ((await db.settings.get('authorName'))?.value) {
+    await seedDefaultObjects()
+    await seedWateringZones(db)
+  }
 }
 
 /**
@@ -91,5 +94,79 @@ export async function seedPlanWorks(database: DiaryDatabase): Promise<number> {
     added++
   }
   await database.settings.put({ key: 'planWorksSeeded', value: new Date().toISOString() })
+  return added
+}
+
+const WATERING_ZONES: (DocInput<WateringZone> & { key: string; objectName: string })[] = [
+  {
+    key: 'lawn',
+    objectName: 'Газон',
+    name: 'Газон',
+    kind: 'sprinkler',
+    objectIds: [],
+    plantGroupIds: [],
+    weekdays: [2, 5],
+    durationMin: 20,
+    timeFrom: '20:00',
+    fromMonth: 5,
+    fromDay: 15,
+    toMonth: 9,
+    toDay: 15,
+    skipRainMm: 5,
+    note: 'Дождевание. Если вчера и сегодня уже прошло 5 мм дождя — можно пропустить.',
+    active: true,
+  },
+  {
+    key: 'garden',
+    objectName: 'Сад',
+    name: 'Сад',
+    kind: 'drip',
+    objectIds: [],
+    plantGroupIds: [],
+    weekdays: [1, 4],
+    durationMin: 40,
+    timeFrom: '21:00',
+    fromMonth: 5,
+    fromDay: 1,
+    toMonth: 9,
+    toDay: 20,
+    skipRainMm: 8,
+    note: 'Капельный полив деревьев и кустов.',
+    active: true,
+  },
+  {
+    key: 'beds',
+    objectName: 'Грядки',
+    name: 'Грядки',
+    kind: 'drip',
+    objectIds: [],
+    plantGroupIds: [],
+    weekdays: [1, 3, 5],
+    durationMin: 25,
+    timeFrom: '19:30',
+    fromMonth: 5,
+    fromDay: 10,
+    toMonth: 9,
+    toDay: 10,
+    skipRainMm: 4,
+    note: 'Капля или шланг по грядкам.',
+    active: true,
+  },
+]
+
+/** Стартовые зоны полива привязываются к объектам Газон / Сад / Грядки, если они есть. */
+export async function seedWateringZones(database: DiaryDatabase): Promise<number> {
+  if (await database.settings.get('wateringZonesSeeded')) return 0
+  const seeder = new Repository(database, () => 'DachaBook')
+  const objects = await database.objects.toArray()
+  let added = 0
+  for (const { key, objectName, ...zone } of WATERING_ZONES) {
+    const id = await stableId(`watering-zone:${key}`)
+    if (await database.wateringZones.get(id)) continue
+    const object = objects.find((item) => !item.deletedAt && item.name === objectName)
+    await seeder.create('wateringZones', { ...zone, id, objectIds: object ? [object.id] : [] })
+    added++
+  }
+  await database.settings.put({ key: 'wateringZonesSeeded', value: new Date().toISOString() })
   return added
 }
