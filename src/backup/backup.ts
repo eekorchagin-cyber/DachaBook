@@ -36,14 +36,14 @@ folkSigns/ — народные приметы по дням года.
 planWorks/ — плановые работы: сроки, условия, отметки о выполнении по сезонам.
 wateringZones/ — зоны полива: расписание, длительность, порог дождя.
 files/ — описания фото и вложений; files/originals/ — оригиналы без изменений; files/thumbs/ — уменьшенные копии.
-settings/shared.json — общие настройки дневника (справочники видов работ и единиц, адрес и координаты участка).
+settings/shared.json — общие настройки дневника (справочники видов работ и единиц, адрес, координаты и фото участка).
 
 У каждой записи: id (UUID), schemaVersion, revision (UUID редакции), baseRevision, createdAt/updatedAt, createdBy/updatedBy,
 deletedAt (если в корзине) и checksum — SHA-256 содержимого без служебных полей.
 Пароли, токены и личные настройки устройства в копию не входят.
 `
 
-const SHARED_SETTINGS = ['workKinds', 'workKindRenames', 'consumableUnits', 'plotAddress', 'plotLocation']
+const SHARED_SETTINGS = ['workKinds', 'workKindRenames', 'consumableUnits', 'plotAddress', 'plotLocation', 'plotPhotoId']
 
 function extension(fileName: string): string {
   const match = fileName.match(/\.[A-Za-z0-9]{1,8}$/)
@@ -206,10 +206,11 @@ export async function restoreBackup(database: DiaryDatabase, data: ArrayBuffer):
 
   const shared = entries['settings/shared.json']
   if (shared) {
-    const incoming = JSON.parse(strFromU8(shared)) as Partial<Pick<AppSettings, 'workKinds' | 'workKindRenames' | 'consumableUnits' | 'plotAddress' | 'plotLocation'>>
+    const incoming = JSON.parse(strFromU8(shared)) as Partial<Pick<AppSettings, 'workKinds' | 'workKindRenames' | 'consumableUnits' | 'plotAddress' | 'plotLocation' | 'plotPhotoId'>>
     const local = async <K extends keyof AppSettings>(key: K) => ((await database.settings.get(key))?.value as AppSettings[K] | undefined) ?? DEFAULT_SETTINGS[key]
     if (incoming.plotAddress && !(await database.settings.get('plotAddress'))?.value) await database.settings.put({ key: 'plotAddress', value: incoming.plotAddress })
     if (incoming.plotLocation && !(await database.settings.get('plotLocation'))?.value) await database.settings.put({ key: 'plotLocation', value: incoming.plotLocation })
+    if (incoming.plotPhotoId && !(await database.settings.get('plotPhotoId'))?.value) await database.settings.put({ key: 'plotPhotoId', value: incoming.plotPhotoId })
     for (const key of ['workKinds', 'consumableUnits'] as const) {
       const current = await local(key)
       const merged = mergeItems(current, incoming[key] ?? [])

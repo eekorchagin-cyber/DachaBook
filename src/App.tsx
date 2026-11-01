@@ -131,6 +131,6 @@ export default function App() {
     case 'settings':
       return <SettingsScreen settings={settings} />
     default:
-      return <HomeScreen authorName={settings.authorName} plotAddress={settings.plotAddress} photoPosition={settings.photoPosition} />
+      return <HomeScreen authorName={settings.authorName} plotAddress={settings.plotAddress} photoPosition={settings.photoPosition} plotPhotoId={settings.plotPhotoId} />
   }
 }

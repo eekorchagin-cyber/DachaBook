@@ -5,6 +5,8 @@ import { restoreBackup, type RestoreResult } from '../backup/backup'
 import { setSetting, type AppSettings, type PhotoPosition, type ThemeSetting } from '../app/store'
 import { versionLabel } from '../app/version'
 import { locationText, parseLocation, roundLocation, type PlotLocation } from '../domain/location'
+import { addPhoto, isImageFile } from '../files/files'
+import { PlotPhoto } from '../ui/PlotPhoto'
 import { db } from '../storage/db'
 import { Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
@@ -162,6 +164,33 @@ function PlotSection({ settings }: { settings: AppSettings }) {
   return (
     <section className="card">
       <h2>Участок</h2>
+      {settings.plotPhotoId && (
+        <div className="plot-hero">
+          <PlotPhoto id={settings.plotPhotoId} />
+        </div>
+      )}
+      <div className="actions">
+        <label className="button secondary">
+          {settings.plotPhotoId ? 'Заменить фото дачи' : 'Добавить фото дачи'}
+          <input
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (!file || !isImageFile(file)) return
+              void addPhoto(file, file.name || 'dacha.jpg').then((stored) => setSetting('plotPhotoId', stored.id))
+            }}
+          />
+        </label>
+        {settings.plotPhotoId && (
+          <button type="button" className="button secondary" onClick={() => void setSetting('plotPhotoId', '')}>
+            Убрать фото
+          </button>
+        )}
+      </div>
+      <p className="hint">Фото показывается вверху главной. Нажмите на него там — откроются эти настройки.</p>
       <label className="field">
         Адрес дачи
         <textarea

@@ -7,6 +7,7 @@ import { db } from '../storage/db'
 import { syncSummary, useSyncStatus } from '../sync/runner'
 import { AutoBackupWarning } from '../ui/AutoBackup'
 import { DateJump } from '../ui/DateJump'
+import { PlotPhoto } from '../ui/PlotPhoto'
 import { WeatherCard } from '../ui/WeatherCard'
 import { EmptyState, Screen } from '../ui/Screen'
 import { EventCard } from './diary/EventCard'
@@ -14,7 +15,17 @@ import { TodaySignCard } from './FolkSignsScreen'
 import { UpcomingWateringCard } from './WateringScreen'
 import { UpcomingWorksCard } from './WorksScreen'
 
-export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorName: string; plotAddress: string; photoPosition: PhotoPosition }) {
+export function HomeScreen({
+  authorName,
+  plotAddress,
+  photoPosition,
+  plotPhotoId,
+}: {
+  authorName: string
+  plotAddress: string
+  photoPosition: PhotoPosition
+  plotPhotoId: string
+}) {
   const events = useLiveQuery(() => db.events.filter((item) => !item.deletedAt).toArray(), [])
   const objects = useLiveQuery(() => db.objects.toArray(), [])
   const objectMap = useMemo(() => new Map((objects ?? []).map((item) => [item.id, item])), [objects])
@@ -25,6 +36,11 @@ export function HomeScreen({ authorName, plotAddress, photoPosition }: { authorN
 
   return (
     <Screen title="DachaBook" help="home" tab="/">
+      {plotPhotoId && (
+        <a className="plot-hero" href="#/settings">
+          <PlotPhoto id={plotPhotoId} />
+        </a>
+      )}
       <p className="muted">Здравствуйте, {authorName}!</p>
       {plotAddress ? (
         <p className="plot-address">📍 {plotAddress}</p>

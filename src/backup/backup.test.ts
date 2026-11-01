@@ -39,6 +39,7 @@ async function filled() {
   await database.settings.put({ key: 'authorName', value: 'Егор' })
   await database.settings.put({ key: 'plotAddress', value: 'СНТ «Пример», участок 1' })
   await database.settings.put({ key: 'plotLocation', value: { latitude: 55.75, longitude: 37.62 } })
+  await database.settings.put({ key: 'plotPhotoId', value: photo.id })
   return { database, repo, event, photo }
 }
 
@@ -75,6 +76,7 @@ describe('резервная копия', () => {
     expect(await target.snapshots.count()).toBe(2)
     expect((await target.settings.get('plotAddress'))?.value).toBe('СНТ «Пример», участок 1')
     expect((await target.settings.get('plotLocation'))?.value).toEqual({ latitude: 55.75, longitude: 37.62 })
+    expect((await target.settings.get('plotPhotoId'))?.value).toBe(source.photo.id)
   })
 
   it('правка в копии применяется, правка здесь не затирается, расхождение попадает в отчёт', async () => {

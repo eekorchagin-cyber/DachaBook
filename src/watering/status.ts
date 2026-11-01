@@ -23,6 +23,8 @@ export const WATERING_KINDS: Record<WateringKind, string> = {
 
 const WEEKDAYS_SHORT = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
 const SOON_DAYS = 14
+/** За столько дней до начала сезона скрытая плашка «Полив» снова появляется на главной. */
+export const WATERING_CARD_LEAD_DAYS = SOON_DAYS
 
 export interface WateringStatus {
   state: WateringState
@@ -140,6 +142,26 @@ export function wateringStatus(zone: WateringZone, history: string[], context: W
 
 export function isWateringUpcoming(status: WateringStatus): boolean {
   return status.state === 'ready' || status.state === 'rain' || status.state === 'soon'
+}
+
+/**
+ * Дата, когда скрытую плашку снова пора показать: за две недели до ближайшего
+ * будущего начала сезона. Если до сезона уже меньше двух недель, берётся следующий сезон.
+ */
+export function wateringCardReturnDate(zones: WateringZone[], today: string): string | undefined {
+  const dates: string[] = []
+  for (const zone of zones) {
+    if (!zone.active) continue
+    const year = wateringStartYear(zone, today)
+    for (let offset = 0; offset <= 2; offset += 1) {
+      const preview = addDays(wateringWindow(zone, year + offset).start, -WATERING_CARD_LEAD_DAYS)
+      if (preview > today) {
+        dates.push(preview)
+        break
+      }
+    }
+  }
+  return dates.sort()[0]
 }
 
 export function zoneScheduleText(zone: WateringZone): string {
