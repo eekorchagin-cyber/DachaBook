@@ -29,6 +29,9 @@ export interface CareObject extends DocMeta {
   areaM2?: number
   plantCount?: number
   description?: string
+  photoIds?: string[]
+  /** Пояснения к фото: идентификатор файла → текст. */
+  fileNotes?: Record<string, string>
   active: boolean
 }
 
@@ -38,6 +41,8 @@ export interface PlantGroup extends DocMeta {
   /** Площадь самих растений, м². Её берут удобрения в работе плана, если группа там выбрана. */
   areaM2?: number
   description?: string
+  photoIds?: string[]
+  fileNotes?: Record<string, string>
   active: boolean
 }
 
@@ -141,6 +146,8 @@ export interface Consumable extends DocMeta {
   /** В чём измеряется содержимое одной единицы учёта, когда unit — упаковка, а не кг или л. */
   packUnit?: string
   objectIds: string[]
+  /** Пункт справочника «Виды расходных материалов»: удобрение, горюче-смазочные… */
+  kind?: string
   /** Группы и виды работ, для которых считается этот материал. Площадь берётся у группы, число внесений — из плана. */
   plantUses?: PlantUse[]
   /** Что это за материал и для чего он. */
@@ -212,6 +219,8 @@ export interface PlanDraftItem extends DocMeta {
 export type WorkCondition =
   | { type: 'beforeAutumnFrost'; leadDays: number; thresholdC?: number }
   | { type: 'afterSpringFrost'; weekday?: number; calmDays?: number; thresholdC?: number }
+  /** Подпись из справочника условий. День сама не назначает: в прогнозе нет правила для этого текста. */
+  | { type: 'label'; text: string }
 
 /** Состояние работы в одном сезоне (год): выполнена, перенесена или пропущена. Нет записи — работа ещё не отмечена. */
 export interface WorkSeason {
@@ -262,6 +271,10 @@ export interface PlanWork extends DocMeta {
   sourceDraftId?: string
   /** Материалы, которые расходуются на эту работу. Сколько нужно на сезон считается здесь, по расписанию работы. */
   consumableIds?: string[]
+  /** Сколько материала уходит на один раз именно этой работы. Если нет — для группы считается по норме на м². */
+  consumableRates?: Record<string, { quantity: number; unit?: string }>
+  photoIds?: string[]
+  fileNotes?: Record<string, string>
   seasons: Record<string, WorkSeason>
   active: boolean
 }

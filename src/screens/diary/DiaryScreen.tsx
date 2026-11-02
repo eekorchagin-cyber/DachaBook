@@ -5,6 +5,7 @@ import { rangeText } from '../../domain/dates'
 import { filterEvents, type DiaryFilter } from '../../domain/diaryFilter'
 import { db } from '../../storage/db'
 import { EmptyState, Screen } from '../../ui/Screen'
+import { SearchButton, SearchQuery } from '../../ui/SearchDialog'
 import { EventCard } from './EventCard'
 
 const PAGE = 50
@@ -46,17 +47,12 @@ export function DiaryScreen({ settings, initialFilter }: { settings: AppSettings
       }
     >
       <div className="search-row">
-        <input
-          type="search"
-          placeholder="Поиск по тексту"
-          value={filter.text ?? ''}
-          onChange={(event) => set({ text: event.target.value })}
-          aria-label="Поиск по тексту"
-        />
+        <SearchButton query={filter.text ?? ''} label="Поиск по дневнику" placeholder="Например: редис" onFind={(value) => set({ text: value || undefined })} />
         <button type="button" className="button secondary small" onClick={() => setShowFilters((value) => !value)}>
           Фильтры{activeFilters > 0 && ` (${activeFilters})`}
         </button>
       </div>
+      <SearchQuery query={filter.text ?? ''} onClear={() => set({ text: undefined })} />
       {showFilters && (
         <section className="card filters">
           <div className="row">

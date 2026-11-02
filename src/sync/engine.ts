@@ -7,6 +7,7 @@ import type { DocMeta, StoredFile } from '../domain/types'
 import { DOC_TABLES, type ConflictRecord, type DiaryDatabase, type SyncRecord } from '../storage/db'
 import { verifyChecksum } from '../storage/repository'
 import type { CloudAdapter, RemoteEntry } from './cloud'
+import { syncDictionaries } from './dictionaries'
 
 export type Collection = (typeof DOC_TABLES)[number]
 type Doc = DocMeta & Record<string, unknown>
@@ -428,6 +429,13 @@ export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, 
   report('Отправка изменений…')
   await push(database, cloud, listed, result, report)
   await pushTombstones(database, cloud, options.author, result)
+  try {
+    report('Справочники…')
+    await syncDictionaries(database, cloud, now())
+  } catch (caught) {
+    result.failed++
+    result.errors.push(`Справочники: ${errorText(caught)}`)
+  }
   report('Фото и файлы…')
   await syncFiles(database, cloud, result, report)
 

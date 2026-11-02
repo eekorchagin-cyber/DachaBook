@@ -1,27 +1,42 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { removeUnit, removeWorkKind, renameUnit, renameWorkKind } from '../app/dictionaries'
 import { localPath, navigate } from '../app/router'
-import { DEFAULT_SETTINGS, setSetting, type AppSettings } from '../app/store'
+import { DEFAULT_SETTINGS, getSetting, repo, setSetting, type AppSettings } from '../app/store'
 import { db } from '../storage/db'
 import { ListEditor } from '../ui/ListEditor'
 import { EmptyState, Screen } from '../ui/Screen'
 import { CareLinks } from './CareLinks'
 
+async function removeDictionaryItem(key: 'consumableKinds' | 'workConditions', item: string): Promise<boolean> {
+  await setSetting(key, (await getSetting(key)).filter((entry) => entry !== item))
+  return true
+}
+
+async function renameConsumableKind(from: string, to: string): Promise<boolean> {
+  const items = await db.consumables.filter((item) => item.kind === from).toArray()
+  for (const item of items) await repo.update('consumables', item.id, { kind: to }, item.revision)
+  await setSetting('consumableKinds', (await getSetting('consumableKinds')).map((item) => (item === from ? to : item)))
+  return true
+}
+
+async function renameWorkCondition(from: string, to: string): Promise<boolean> {
+  const works = await db.planWorks.filter((work) => work.condition?.type === 'label' && work.condition.text === from).toArray()
+  for (const work of works) await repo.update('planWorks', work.id, { condition: { type: 'label', text: to } }, work.revision)
+  await setSetting('workConditions', (await getSetting('workConditions')).map((item) => (item === from ? to : item)))
+  return true
+}
+
 /** Перечень справочников: каждый открывается своим экраном. */
 export function DictionariesScreen({ settings }: { settings: AppSettings }) {
   const counts = useLiveQuery(async () => ({
-    objects: await db.objects.filter((item) => !item.deletedAt && item.active).count(),
-    groups: await db.plantGroups.filter((item) => !item.deletedAt && item.active).count(),
     consumables: await db.consumables.filter((item) => !item.deletedAt && item.active).count(),
-    signs: await db.folkSigns.filter((item) => !item.deletedAt).count(),
   }))
   const items = [
-    { href: '#/dictionaries/work-kinds', title: 'Виды работ', text: 'Стрижка газона, полив, подкормка… — выбор в записях работ', count: settings.workKinds.length },
+    { href: '#/dictionaries/work-kinds', title: 'Виды работ', text: 'Стрижка газона, полив, внесение удобрений… — выбор в записях работ', count: settings.workKinds.length },
     { href: '#/dictionaries/units', title: 'Единицы расходных материалов', text: 'кг, л, шт. — для норм и расхода материалов', count: settings.consumableUnits.length },
-    { href: '#/objects?from=dictionaries', title: 'Объекты и места', text: 'Газон, сад, грядки, места на участке', count: counts?.objects },
-    { href: '#/objects?view=groups&from=dictionaries', title: 'Группы растений', text: 'Хвойные, ягодные кусты, гортензии…', count: counts?.groups },
-    { href: '#/consumables', title: 'Расходные материалы', text: 'Удобрения, средства, семена: нормы, описания, ссылки', count: counts?.consumables },
-    { href: '#/signs', title: 'Народные приметы', text: 'Приметы и советы по дням года', count: counts?.signs },
+    { href: '#/dictionaries/consumable-kinds', title: 'Виды расходных материалов', text: 'Удобрение, горюче-смазочные, бытовая химия — без остатков и норм', count: settings.consumableKinds.length },
+    { href: '#/dictionaries/work-conditions', title: 'Условия для проведения работ', text: 'Подпись к работе. День сама не назначает', count: settings.workConditions.length },
+    { href: '#/consumables', title: 'Расходные материалы', text: 'Удобрения, средства, масло, уксус: нормы и описания', count: counts?.consumables },
   ]
   return (
     <Screen title="Справочники" help="dictionaries" back="/more" tab="/more">
@@ -73,6 +88,41 @@ export function DictionaryScreen({ kind, settings, query }: { kind: string; sett
           onRemove={removeWorkKind}
           hrefFor={(item) => `#/dictionaries/work-kinds?kind=${encodeURIComponent(item)}`}
           hrefLabel="Связи"
+        />
+      </Screen>
+    )
+  }
+  if (kind === 'consumable-kinds') {
+    return (
+      <Screen title="Виды расходных материалов" help="dictionaries" back="/dictionaries" tab="/more">
+        <p className="hint">Короткий список видов: удобрение, масло, уксус. Остатки и нормы здесь не считаются — они в карточке материала и в работе.</p>
+        <ListEditor
+          label="Виды расходных материалов"
+          items={settings.consumableKinds}
+          defaults={DEFAULT_SETTINGS.consumableKinds}
+          placeholder="Новый вид, например «Мульча»"
+          onSave={(items) => setSetting('consumableKinds', items)}
+          onRename={(from, to) => renameConsumableKind(from, to)}
+          onRemove={(item) => removeDictionaryItem('consumableKinds', item)}
+        />
+      </Screen>
+    )
+  }
+  if (kind === 'work-conditions') {
+    return (
+      <Screen title="Условия для проведения работ" help="dictionaries" back="/dictionaries" tab="/more">
+        <p className="hint">
+          Текст, который можно выбрать в годовой работе. «Как только просохнет почва после таяния снега» остаётся подписью: программа не назначает день, пока для такого условия нет правила погоды.
+          Заморозки по-прежнему считаются отдельно, в карточке работы.
+        </p>
+        <ListEditor
+          label="Условия для проведения работ"
+          items={settings.workConditions}
+          defaults={DEFAULT_SETTINGS.workConditions}
+          placeholder="Новое условие"
+          onSave={(items) => setSetting('workConditions', items)}
+          onRename={(from, to) => renameWorkCondition(from, to)}
+          onRemove={(item) => removeDictionaryItem('workConditions', item)}
         />
       </Screen>
     )

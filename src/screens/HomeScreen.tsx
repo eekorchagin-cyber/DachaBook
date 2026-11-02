@@ -61,6 +61,20 @@ export function HomeScreen({
           🌡 Измерения почвы
         </a>
       </div>
+      <nav className="home-menu" aria-label="Главное меню">
+        <h2 className="section-title">Объекты</h2>
+        <a className="list-item" href="#/objects">
+          <strong>Объекты и места</strong>
+          <span className="muted">Газон, сад, грядки, дом и хозяйство</span>
+        </a>
+        <a className="list-item" href="#/objects?view=groups">
+          <strong>Группы растений</strong>
+          <span className="muted">Хвойные, ягодные кусты, гортензии</span>
+        </a>
+        <a className="button home-signs" href="#/signs">
+          Народные приметы
+        </a>
+      </nav>
       <WeatherCard />
       {signs && <TodaySignCard signs={signs} />}
       <UpcomingWorksCard />

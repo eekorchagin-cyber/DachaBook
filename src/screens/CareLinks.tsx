@@ -10,6 +10,16 @@ import { useFertilizerLines } from './useFertilizerLines'
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'ru')
 
+function groupLines(lines: FertilizerLine[]): FertilizerLine[][] {
+  const groups = new Map<string, FertilizerLine[]>()
+  for (const line of lines) {
+    const list = groups.get(line.plantGroupId) ?? []
+    list.push(line)
+    groups.set(line.plantGroupId, list)
+  }
+  return [...groups.values()]
+}
+
 function groupHref(id: string, returnPath: string): string {
   return `#/objects?view=groups&group=${encodeURIComponent(id)}&back=${encodeURIComponent(returnPath)}`
 }
@@ -22,10 +32,9 @@ function materialHref(id: string, returnPath: string): string {
   return `#/consumables?id=${encodeURIComponent(id)}&back=${encodeURIComponent(returnPath)}`
 }
 
-function amountText(line: FertilizerLine): string {
-  if (line.need !== undefined) return `${quantityText(line.need, line.measureUnit)} за сезон`
-  if (line.perUse !== undefined) return `на один раз ${quantityText(line.perUse, line.measureUnit)}`
-  return 'Количество не посчитано'
+function perUseText(line: FertilizerLine): string {
+  if (line.perUse !== undefined) return `${quantityText(line.perUse, line.measureUnit)} на 1 раз`
+  return ''
 }
 
 /** Связка «группа растений — вид работ — расходный материал» и расчёт количества по площади группы. */
@@ -49,7 +58,7 @@ export function CareLinks({
   const groups = useLiveQuery(() => db.plantGroups.filter((group) => !group.deletedAt).toArray(), []) ?? []
   const materials = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const kinds = useSettings()?.workKinds ?? []
-  const title = plantGroupId ? 'Виды работ и материалы' : workKind ? 'Группы растений и материалы' : 'Группы растений и виды работ'
+  const title = plantGroupId ? 'Работы и материалы' : workKind ? workKind : 'Группы растений и виды работ'
   const here = { plantGroupId, workKind, consumableId }
 
   return (
@@ -61,8 +70,19 @@ export function CareLinks({
       </p>
       {lines === undefined && <p className="hint">Загрузка…</p>}
       {lines?.length === 0 && <p className="hint">Связки пока нет, поэтому количество для группы не считается.</p>}
-      {lines?.map((line) => (
-        <CareLine key={`${line.plantGroupId}:${line.workKind}:${line.consumableId}`} line={line} here={here} returnPath={returnPath} />
+      {groupLines(lines ?? []).map((group) => (
+        <div key={group[0].plantGroupId} className="care-link">
+          {!plantGroupId && (
+            <h3 className="section-title">
+              <a className="source-link" href={groupHref(group[0].plantGroupId, returnPath)}>
+                {group[0].groupName}
+              </a>
+            </h3>
+          )}
+          {group.map((line) => (
+            <CareLine key={`${line.plantGroupId}:${line.workKind}:${line.consumableId}`} line={line} here={here} returnPath={returnPath} />
+          ))}
+        </div>
       ))}
       <LinkForm plantGroupId={plantGroupId} workKind={workKind} consumableId={consumableId} groups={[...groups].sort(byName)} materials={[...materials].sort(byName)} kinds={kinds} />
     </section>
@@ -79,10 +99,10 @@ function CareLine({
   returnPath: string
 }) {
   const materialName = line.active ? line.name : `${line.name} (архив)`
+  const amount = perUseText(line)
   const bits: { key: string; href: string; label: string }[] = []
-  if (!here.plantGroupId) bits.push({ key: 'group', href: groupHref(line.plantGroupId, returnPath), label: `Группа «${line.groupName}»` })
   if (!here.workKind) bits.push({ key: 'kind', href: kindHref(line.workKind, returnPath), label: `Вид работ «${line.workKind}»` })
-  if (!here.consumableId) bits.push({ key: 'material', href: materialHref(line.consumableId, returnPath), label: `Материал «${materialName}»` })
+  if (!here.consumableId) bits.push({ key: 'material', href: materialHref(line.consumableId, returnPath), label: amount ? `${materialName}, ${amount}` : materialName })
   const remove = async () => {
     if (!confirm(`Убрать связку «${line.groupName} — ${line.workKind} — ${line.name}»? Для этой группы материал больше не посчитается.`)) return
     const item = await db.consumables.get(line.consumableId)
@@ -90,8 +110,8 @@ function CareLine({
     await repo.update('consumables', item.id, { plantUses: withoutUse(item.plantUses ?? [], { plantGroupId: line.plantGroupId, workKind: line.workKind }) }, item.revision)
   }
   return (
-    <div className="care-link">
-      <p className="care-amount">{amountText(line)}</p>
+    <div>
+      {here.consumableId && <p>{amount || 'Количество на 1 раз не посчитано'}</p>}
       <p>
         {bits.map((bit, index) => (
           <span key={bit.key}>

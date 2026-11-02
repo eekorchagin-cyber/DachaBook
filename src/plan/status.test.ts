@@ -58,6 +58,24 @@ describe('статусы плановых работ', () => {
     expect(workStatus({ ...feeding, doneDates: ['2026-06-12'] }, [], { today: '2027-06-10' }).state).toBe('ready')
   })
 
+  it('суббота в окне до 30 сентября — последняя суббота месяца, а не само 30-е', () => {
+    const schedule = { fromMonth: 5, fromDay: 1, toMonth: 9, toDay: 30, weekdays: [6] }
+    const dates = seasonOccurrences(schedule, 2026)
+    expect(dates[0]).toBe('2026-05-02')
+    expect(dates.at(-1)).toBe('2026-09-26')
+    expect(dates.every((date) => new Date(`${date}T12:00:00Z`).getUTCDay() === 6)).toBe(true)
+    const feeding = work({ recurrence: 'season', seasonSchedule: schedule })
+    expect(workStatus(feeding, [], { today: '2026-10-01' })).toMatchObject({ state: 'overdue', date: '2026-09-26' })
+  })
+
+  it('шаг в неделях не выходит за дату окончания окна', () => {
+    const schedule = { fromMonth: 5, fromDay: 1, toMonth: 9, toDay: 30, everyWeeks: 2 }
+    const dates = seasonOccurrences(schedule, 2026)
+    expect(dates[0]).toBe('2026-05-01')
+    expect(dates.at(-1)! <= '2026-09-30').toBe(true)
+    expect(dates.at(-1)! > '2026-09-30').toBe(false)
+  })
+
   it('дни недели: сегодня закрывается отметкой, следующий день недели остаётся', () => {
     const watering = work({
       recurrence: 'season',

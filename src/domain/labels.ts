@@ -56,7 +56,8 @@ export function scheduleText(schedule: SeasonSchedule): string {
       ? 'каждую неделю'
       : `каждые ${schedule.everyWeeks ?? 1} нед.`
   const time = schedule.timeFrom && schedule.timeTo ? `, ${schedule.timeFrom}–${schedule.timeTo}` : schedule.timeFrom ? `, ${schedule.timeFrom}` : ''
-  return `${rhythm}${time}, ${span}`
+  const bound = schedule.weekdays?.length ? `${span} (последний раз — в последний такой день окна, не обязательно в дату окончания)` : span
+  return `${rhythm}${time}, ${bound}`
 }
 
 export const WEATHER_CONDITIONS: Record<WeatherCondition, { icon: string; label: string }> = {

@@ -5,6 +5,7 @@ import type { ReferenceMaterial } from '../../domain/types'
 import { htmlToText } from '../../lib/sanitize'
 import { db } from '../../storage/db'
 import { EmptyState, Screen } from '../../ui/Screen'
+import { SearchButton, SearchQuery } from '../../ui/SearchDialog'
 
 interface Indexed {
   material: ReferenceMaterial
@@ -42,9 +43,10 @@ export function LibraryScreen() {
         </a>
       }
     >
-      <div className="search-row">
-        <input type="search" placeholder="Поиск по заголовку, тексту и меткам" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Поиск" />
+      <div className="actions">
+        <SearchButton query={query} label="Поиск по статьям" placeholder="Например: мульча" onFind={setQuery} />
       </div>
+      <SearchQuery query={query} onClear={() => setQuery('')} />
       {tags.length > 0 && (
         <div className="chips">
           {tags.map((item) => (

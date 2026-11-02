@@ -88,10 +88,11 @@ export default function App() {
     case 'objects':
       return (
         <ObjectsScreen
-          key={`${route.query.get('view') ?? 'objects'}-${route.query.get('from') ?? ''}-${route.query.get('group') ?? ''}`}
+          key={`${route.query.get('view') ?? 'objects'}-${route.query.get('from') ?? ''}-${route.query.get('group') ?? ''}-${route.query.get('object') ?? ''}`}
           initialView={route.query.get('view') === 'groups' || route.query.get('group') ? 'groups' : 'objects'}
           fromDictionaries={route.query.get('from') === 'dictionaries'}
           initialGroupId={route.query.get('group') ?? undefined}
+          initialObjectId={route.query.get('object') ?? undefined}
           returnTo={localPath(route.query.get('back'))}
         />
       )

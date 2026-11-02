@@ -65,6 +65,9 @@ describe('заморозки', () => {
   })
 
   it('без прогноза и многолетних данных — требуется проверка, а не «условия выполнены»', () => {
+    expect(evaluateCondition({ type: 'label', text: 'Как только просохнет почва после таяния снега' }, { today: '2026-04-01' })).toMatchObject({
+      state: 'planned',
+    })
     expect(evaluateCondition({ type: 'afterSpringFrost' }, { today: '2026-05-06' }).state).toBe('check')
     expect(evaluateCondition({ type: 'beforeAutumnFrost', leadDays: 7 }, { today: '2026-09-06' }).state).toBe('check')
   })

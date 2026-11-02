@@ -109,6 +109,7 @@ const inYear = (today: string, monthDay: string) => `${today.slice(0, 4)}-${mont
 
 /** Сезоны, в которых условие имеет смысл: весенние работы — март — июнь, осенние — август — декабрь. */
 export function conditionSeason(condition: WorkCondition, year: number): { start: string; end: string } {
+  if (condition.type === 'label') return { start: `${year}-01-01`, end: `${year}-12-31` }
   return condition.type === 'afterSpringFrost' ? { start: `${year}-03-01`, end: `${year}-06-30` } : { start: `${year}-08-01`, end: `${year}-12-31` }
 }
 
@@ -118,6 +119,9 @@ export function conditionSeason(condition: WorkCondition, year: number): { start
  */
 export function evaluateCondition(condition: WorkCondition, context: { today: string; forecast?: DailyMinimums; climate?: FrostStats }): ConditionResult {
   const { today, forecast, climate } = context
+  if (condition.type === 'label') {
+    return { state: 'planned', message: `${condition.text} Дата сама не назначается — отметьте работу, когда условие на участке выполнено.` }
+  }
   const threshold = condition.thresholdC ?? FROST_THRESHOLD_C
   const season = conditionSeason(condition, Number(today.slice(0, 4)))
 

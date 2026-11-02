@@ -6,6 +6,8 @@ import type { DocInput, FolkSign } from '../domain/types'
 import { dayOfYear, folkSignDate, folkSignKey, parseFolkSigns, upcomingSigns } from '../import/folkSigns'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
+import { SearchButton, SearchQuery } from '../ui/SearchDialog'
+import { includesAllWords } from '../domain/diaryFilter'
 import { ActionButton } from '../ui/Section'
 
 const byDate = (a: FolkSign, b: FolkSign) => dayOfYear(a.month, a.day) - dayOfYear(b.month, b.day) || a.title.localeCompare(b.title, 'ru')
@@ -142,6 +144,7 @@ export function FolkSignsScreen() {
   const signs = useFolkSigns()
   const [editing, setEditing] = useState<{ id?: string } | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   const today = todayMonthDay()
 
   useEffect(() => {
@@ -163,27 +166,33 @@ export function FolkSignsScreen() {
 
   if (editing) {
     return (
-      <Screen title="Народные приметы" help="signs" onBack={() => setEditing(null)} tab="/more">
+      <Screen title="Народные приметы" help="signs" onBack={() => setEditing(null)} tab="/">
         <SignForm key={editing.id ?? 'new'} sign={signs?.find((sign) => sign.id === editing.id)} onClose={() => setEditing(null)} />
       </Screen>
     )
   }
 
-  const months = MONTH_NAMES.map((name, index) => ({ name, month: index + 1, signs: (signs ?? []).filter((sign) => sign.month === index + 1) })).filter((group) => group.signs.length > 0)
+  const months = MONTH_NAMES.map((name, index) => ({
+    name,
+    month: index + 1,
+    signs: (signs ?? []).filter((sign) => sign.month === index + 1 && includesAllWords(query, `${sign.title} ${sign.text}`)),
+  })).filter((group) => group.signs.length > 0)
 
   return (
-    <Screen title="Народные приметы" help="signs" back="/dictionaries" tab="/more">
+    <Screen title="Народные приметы" help="signs" back="/" tab="/">
       {signs && <TodaySignCard signs={signs} />}
       <div className="actions">
         <button type="button" className="button" onClick={() => setEditing({})}>
           + Добавить примету
         </button>
+        <SearchButton query={query} label="Поиск по приметам" placeholder="Например: дождь" onFind={setQuery} />
         <label className="button secondary">
           Загрузить из файла .md
           <input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden onChange={(event) => void importFile(event.target.files?.[0])} />
         </label>
       </div>
       {message && <p className="notice">{message}</p>}
+      <SearchQuery query={query} onClear={() => setQuery('')} />
       <p className="hint">Фольклорный календарь по новому стилю. Сверяйте сроки работ с погодой, прогревом почвы и риском заморозков на участке.</p>
       {signs && signs.length === 0 && <EmptyState>Примет пока нет.</EmptyState>}
       {months.map((group) => (

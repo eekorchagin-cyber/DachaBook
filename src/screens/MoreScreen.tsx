@@ -9,35 +9,67 @@ import { purgeDoc } from '../sync/engine'
 import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
 
-const LINKS = [
-  { href: '#/guide', title: 'Как пользоваться DachaBook', text: 'Руководство: чтобы дача была в порядке и доставляла минимум хлопот' },
-  { href: '#/sync', title: 'Облако', text: 'Синхронизация через Яндекс Диск между iPhone, Mac и Windows' },
-  { href: '#/dictionaries', title: 'Справочники', text: 'Виды работ, единицы, объекты, растения, расходные материалы, народные приметы' },
-  { href: '#/works', title: 'План работ', text: 'Сезонные работы, сроки, заморозки и водопровод, отметки о выполнении' },
-  { href: '#/watering', title: 'Полив', text: 'Три зоны: газон, сад и грядки; расписание и рекомендация с учётом дождя' },
-  { href: '#/diary/book', title: 'Дневник в PDF', text: 'Вся история книгой: главы по годам, параграфы по месяцам' },
-  { href: '#/share', title: 'Фото в дневник', text: 'Выбрать снимки в Медиатеке и прикрепить к записи' },
-  { href: '#/plan', title: 'Черновик плана из Evernote', text: 'Предложения работ и типичные наблюдения по месяцам — перенос в план работ' },
-  { href: '#/import', title: 'Импорт из Evernote', text: 'Перенос дневников и заметок из файлов ENEX' },
-  { href: '#/archive', title: 'Архив импорта', text: 'Исходные строки и заметки Evernote, в том числе неиспользованные' },
-  { href: '#/trash', title: 'Корзина', text: 'Удалённые записи и материалы, восстановление' },
-  { href: '#/backup', title: 'Резервная копия', text: 'Копия в файл, автокопия в папку, восстановление' },
-  { href: '#/settings', title: 'Настройки', text: 'Имя, участок, внешний вид' },
+const GUIDE = { href: '#/guide', title: 'Как пользоваться DachaBook', text: 'Руководство: чтобы дача была в порядке и доставляла минимум хлопот' }
+
+const DICTIONARIES = [
+  { href: '#/dictionaries/work-kinds', title: 'Виды работ', text: 'Стрижка, полив, внесение удобрений' },
+  { href: '#/dictionaries/units', title: 'Единицы расходных материалов', text: 'кг, л, мл, шт., бутылка' },
+  { href: '#/dictionaries/consumable-kinds', title: 'Виды расходных материалов', text: 'Удобрение, масло, бытовая химия' },
 ]
+
+const SETTINGS = [
+  { href: '#/settings?part=plot', title: 'Участок', text: 'Адрес, координаты и фото дачи' },
+  { href: '#/sync', title: 'Облако и резервное копирование', text: 'Яндекс Диск и копия в файл' },
+  { href: '#/settings?part=appearance', title: 'Внешний вид программы', text: 'Тема, размер текста, фото в записях' },
+  { href: '#/settings?part=updates', title: 'Проверка обновлений', text: 'Есть ли новая версия' },
+  { href: '#/lab', title: 'Лаборатория проверок (служебная)', text: 'Проверки хранения, сети и облака' },
+]
+
+const SERVICE = [
+  { href: '#/works', title: 'План работ', text: 'Сезонные работы и отметки о выполнении' },
+  { href: '#/watering', title: 'Полив', text: 'Зоны, расписание и совет с учётом дождя' },
+  { href: '#/consumables', title: 'Расходные материалы', text: 'Нормы, запас и где материал используется' },
+  { href: '#/dictionaries/work-conditions', title: 'Условия для проведения работ', text: 'Подписи вроде просохшей почвы' },
+  { href: '#/diary/book', title: 'Дневник в PDF', text: 'Книга по годам и месяцам' },
+  { href: '#/import', title: 'Импорт из Evernote', text: 'Перенос дневников из файлов ENEX' },
+  { href: '#/archive', title: 'Архив импорта', text: 'Исходные строки Evernote' },
+  { href: '#/plan', title: 'Черновик плана из Evernote', text: 'Предложения работ по месяцам' },
+  { href: '#/share', title: 'Фото в дневник', text: 'Снимки из медиатеки к записи' },
+]
+
+function LinkList({ items }: { items: { href: string; title: string; text: string }[] }) {
+  return (
+    <ul className="list">
+      {items.map((link) => (
+        <li key={link.href}>
+          <a className="list-item" href={link.href}>
+            <strong>{link.title}</strong>
+            <span className="muted">{link.text}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 export function MoreScreen() {
   return (
     <Screen title="Ещё" help="more" tab="/more">
+      <LinkList items={[GUIDE]} />
+      <h2 className="section-title">Справочники</h2>
+      <LinkList items={DICTIONARIES} />
+      <h2 className="section-title">Настройки</h2>
+      <LinkList items={SETTINGS} />
       <ul className="list">
-        {LINKS.map((link) => (
-          <li key={link.href}>
-            <a className="list-item" href={link.href}>
-              <strong>{link.title}</strong>
-              <span className="muted">{link.text}</span>
-            </a>
-          </li>
-        ))}
+        <li className="list-item">
+          <strong>Пользователи</strong>
+          <span className="muted">Появится на следующих этапах</span>
+        </li>
       </ul>
+      <h2 className="section-title">Сервис</h2>
+      <LinkList items={SERVICE} />
+      <h2 className="section-title">Корзина</h2>
+      <LinkList items={[{ href: '#/trash', title: 'Корзина', text: 'Удалённые записи и материалы, восстановление' }]} />
     </Screen>
   )
 }
@@ -59,11 +91,17 @@ async function purge(item: TrashItem): Promise<void> {
   const events = await db.events.toArray()
   const references = await db.references.toArray()
   const plan = await db.planDrafts.toArray()
+  const objects = await db.objects.toArray()
+  const groups = await db.plantGroups.toArray()
+  const works = await db.planWorks.toArray()
   for (const id of fileIds) {
     const used =
       events.some((event) => event.photoIds.includes(id) || event.attachmentIds.includes(id)) ||
       references.some((reference) => reference.fileIds.includes(id)) ||
-      plan.some((item) => item.fileIds.includes(id))
+      plan.some((item) => item.fileIds.includes(id)) ||
+      objects.some((object) => object.photoIds?.includes(id)) ||
+      groups.some((group) => group.photoIds?.includes(id)) ||
+      works.some((work) => work.photoIds?.includes(id))
     if (!used) await purgeDoc(db, 'files', id)
   }
 }

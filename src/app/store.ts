@@ -18,6 +18,10 @@ export interface AppSettings {
   /** Прежние названия видов работ → новые: подсказки импорта знают о переименованиях. */
   workKindRenames: Record<string, string>
   consumableUnits: string[]
+  /** Виды расходных материалов: удобрение, масло, бытовая химия. Без остатков и норм. */
+  consumableKinds: string[]
+  /** Условия проведения работ текстом. Заморозки считаются отдельно и сюда не входят. */
+  workConditions: string[]
   /** Адрес и координаты участка: хранятся только на устройствах и в резервных копиях, не в коде. */
   plotAddress: string
   plotLocation: PlotLocation | null
@@ -48,6 +52,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ],
   workKindRenames: {},
   consumableUnits: UNITS,
+  consumableKinds: ['Удобрение', 'Средство защиты', 'Семена и посадочный материал', 'Горюче-смазочные', 'Бытовая химия'],
+  workConditions: ['Как только просохнет почва после таяния снега'],
   plotAddress: '',
   plotLocation: null,
   plotPhotoId: '',
@@ -63,9 +69,14 @@ export async function getSetting<K extends keyof AppSettings>(key: K): Promise<A
   return (row?.value as AppSettings[K] | undefined) ?? DEFAULT_SETTINGS[key]
 }
 
+const DICTIONARY_KEYS = ['workKinds', 'workKindRenames', 'consumableUnits', 'consumableKinds', 'workConditions'] as const
+
 export async function setSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): Promise<void> {
   await db.settings.put({ key, value })
   if (key === 'authorName') currentAuthor = value as string
+  if ((DICTIONARY_KEYS as readonly string[]).includes(key)) {
+    await db.settings.put({ key: 'dictionariesUpdatedAt', value: new Date().toISOString() })
+  }
 }
 
 export function useSettings(): AppSettings | undefined {
