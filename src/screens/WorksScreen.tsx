@@ -888,6 +888,10 @@ function WorkForm({
         </select>
       </label>
       )}
+      {recurrence === 'yearly' && conditionType === 'afterSpringFrost' && (
+        <p className="hint">После весенних заморозков, в ближайшую субботу.</p>
+      )}
+      {recurrence === 'yearly' && conditionType === 'label' && conditionLabel && <p className="hint">{conditionLabel}</p>}
       {recurrence === 'yearly' && conditionType === 'beforeAutumnFrost' && (
         <label className="field">
           За сколько дней до заморозков напоминать

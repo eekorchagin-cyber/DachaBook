@@ -106,6 +106,8 @@ body {
   border-radius: 14px;
   padding: 16px;
   margin: 14px 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .card-header {
@@ -233,6 +235,12 @@ body {
   margin-top: 4px;
 }
 
+.care-links h4.section-title {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
 .search-query {
   margin: 8px 0 0;
 }
@@ -325,9 +333,14 @@ body {
   gap: 4px;
   margin-top: 12px;
   font-size: 0.9rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .field input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   font: inherit;
   padding: 10px;
   border-radius: 8px;
@@ -607,6 +620,9 @@ textarea::placeholder {
 .field textarea,
 .search-row input,
 .consumable-row input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   font: inherit;
   padding: 10px;
   border-radius: 8px;
@@ -1621,6 +1637,8 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
   margin: 12px 0;
   display: grid;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .periods legend {
@@ -1632,10 +1650,14 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
   display: flex;
   gap: 6px;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .period-row select {
-  flex: 1;
+  flex: 1 1 0;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   font: inherit;
   padding: 8px;
