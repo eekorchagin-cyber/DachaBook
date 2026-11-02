@@ -212,9 +212,25 @@ body {
   text-overflow: ellipsis;
 }
 
-.plan-actions .search-button {
+.plan-actions .search-button,
+.actions > .search-button {
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+.home-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.home-menu .list-item {
+  text-decoration: none;
+}
+
+.home-signs {
+  margin-top: 4px;
 }
 
 .search-query {

@@ -43,6 +43,10 @@ export function ActionButton(props: {
         type="button"
         className={props.secondary ? 'button secondary' : 'button'}
         disabled={busy || props.disabled}
+        onMouseDown={(event) => {
+          // Не снимать фокус с поля до щелчка: иначе клавиатура закрывается, меню возвращается и кнопка смещается.
+          if (event.button === 0) event.preventDefault()
+        }}
         onClick={async () => {
           setBusy(true)
           setError(null)

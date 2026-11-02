@@ -164,9 +164,11 @@ function seasonWorkStatus(work: PlanWork, history: string[], context: WorkContex
     return upcomingStatus(first, today, suffix, 'с')
   }
   if (today > end) {
-    return completions.length
-      ? { state: 'done', message: 'сезон этого расписания закончился' }
-      : { state: 'overdue', date: end, message: `сезон был до ${dateText(end)}` }
+    const last = occurrences.at(-1) ?? end
+    if (completions.length) return { state: 'done', message: 'сезон этого расписания закончился' }
+    return schedule.weekdays?.length
+      ? { state: 'overdue', date: last, message: `последний раз в сезоне был ${dateText(last)}` }
+      : { state: 'overdue', date: last, message: `сезон был до ${dateText(end)}` }
   }
   const due = open.find((date) => date <= today)
   if (due) {

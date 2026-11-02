@@ -1,10 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { navigate, useRoute } from '../app/router'
+import { useEffect, useState } from 'react'
+import { localPath, navigate, useRoute } from '../app/router'
 import { repo, type AppSettings } from '../app/store'
 import { workTimes } from '../domain/applications'
-import { parseNonNegative } from '../domain/consumables'
+import { parseNonNegative, parseQuantity } from '../domain/consumables'
 import { MONTH_NAMES, todayAtSite } from '../domain/dates'
 import { buyPackages, packagesFromStore, packagesToStore, purchasePlan, rateAreas } from '../domain/purchases'
 import { excerptAround, includesAllWords, normalizeText } from '../domain/diaryFilter'
@@ -18,6 +17,8 @@ import { dateText } from '../plan/frost'
 import { isUpcoming, seasonStartYear, seasonWindow, WORK_STATES, type WorkStatus } from '../plan/status'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
+import { PhotoFields } from '../ui/PhotoFields'
+import { SearchButton, SearchQuery } from '../ui/SearchDialog'
 import { ActionButton } from '../ui/Section'
 
 const GROUPS: { title: string; states: WorkStatus['state'][] }[] = [
@@ -31,9 +32,11 @@ const GROUPS: { title: string; states: WorkStatus['state'][] }[] = [
 const conditionText = (condition?: WorkCondition) =>
   !condition
     ? ''
-    : condition.type === 'beforeAutumnFrost'
-      ? `за ${condition.leadDays} дн. до первых осенних заморозков`
-      : `после весенних заморозков${condition.weekday === 6 ? ', в субботу' : ''}`
+    : condition.type === 'label'
+      ? condition.text
+      : condition.type === 'beforeAutumnFrost'
+        ? `за ${condition.leadDays} дн. до первых осенних заморозков`
+        : `после весенних заморозков${condition.weekday === 6 ? ', в субботу' : ''}`
 
 const WEEKDAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
@@ -363,8 +366,9 @@ function SeasonEditor({ schedule, rhythm, onSchedule, onRhythm }: { schedule: Se
         </label>
       </div>
       <p className="hint">
-        Окно повторяется каждый год. Если окончание раньше начала (уборка снега с ноября по март), сезон заканчивается в следующем календарном году. Время только
-        подписывает, когда работу удобно делать: в этот час напоминание не приходит.
+        Окно повторяется каждый год. Дата «по 30 сентября» — граница окна, а не день работы: при повторе по субботам последний раз приходится на последнюю субботу
+        сентября. Если окончание раньше начала (уборка снега с ноября по март), сезон заканчивается в следующем календарном году. Время только подписывает, когда
+        работу удобно делать: в этот час напоминание не приходит.
       </p>
     </fieldset>
   )
@@ -387,6 +391,11 @@ function WorkMaterials({
   onSave,
   onRemove,
   onEdit,
+  rates,
+  rateUnits,
+  units,
+  onRate,
+  onRateUnit,
 }: {
   consumableIds: string[]
   stocks: Record<string, string>
@@ -398,6 +407,11 @@ function WorkMaterials({
   onSave: (id: string) => Promise<void>
   onRemove: (id: string) => Promise<void>
   onEdit: (id: string) => Promise<void>
+  rates: Record<string, string>
+  rateUnits: Record<string, string>
+  units: string[]
+  onRate: (id: string, value: string) => void
+  onRateUnit: (id: string, value: string) => void
 }) {
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const selected = consumableIds
@@ -421,6 +435,11 @@ function WorkMaterials({
           onSave={() => onSave(item.id)}
           onRemove={() => onRemove(item.id)}
           onEdit={() => onEdit(item.id)}
+          rate={rates[item.id] ?? ''}
+          rateUnit={rateUnits[item.id] || item.unit}
+          units={units}
+          onRate={(value) => onRate(item.id, value)}
+          onRateUnit={(value) => onRateUnit(item.id, value)}
         />
       ))}
       {available.length > 0 && (
@@ -458,6 +477,11 @@ function MaterialNeed({
   onSave,
   onRemove,
   onEdit,
+  rate,
+  rateUnit,
+  units,
+  onRate,
+  onRateUnit,
 }: {
   item: Consumable
   stock: string
@@ -468,6 +492,11 @@ function MaterialNeed({
   onSave: () => Promise<void>
   onRemove: () => Promise<void>
   onEdit: () => Promise<void>
+  rate: string
+  rateUnit: string
+  units: string[]
+  onRate: (value: string) => void
+  onRateUnit: (value: string) => void
 }) {
   const stockInvalid = !!stock.trim() && parseNonNegative(stock) === undefined
   const plan = purchasePlan({
@@ -491,7 +520,22 @@ function MaterialNeed({
           <button type="button" className="source-link button-link" onClick={() => void onEdit()}>
             {item.name}
           </button>
+          {rate.trim() ? `, ${rate.trim()} ${rateUnit} на 1 раз` : ''}
         </p>
+        <label className="field span">
+          На 1 раз для этой работы
+          <span className="measure-line">
+            <input aria-label={`На 1 раз ${item.name}`} inputMode="decimal" placeholder="Например: 400" value={rate} onChange={(event) => onRate(event.target.value)} />
+            <select aria-label={`Единица на 1 раз ${item.name}`} value={rateUnit} onChange={(event) => onRateUnit(event.target.value)}>
+              {units.map((unit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </select>
+          </span>
+        </label>
+        <p className="hint span">Пусто — для группы растений считается по норме на 1 м². Для бойлера, газонокосилки и других объектов укажите количество здесь.</p>
         <label className="field">
           Количество внесений за 1 сезон
           <span className="result-line">
@@ -556,6 +600,8 @@ function WorkForm({
   settings,
   objects,
   plantGroups,
+  presetGroupId,
+  presetObjectId,
   onClose,
 }: {
   work?: PlanWork
@@ -563,20 +609,31 @@ function WorkForm({
   settings: AppSettings
   objects: { id: string; name: string; areaM2?: number }[]
   plantGroups: PlantGroup[]
+  presetGroupId?: string
+  presetObjectId?: string
   onClose: () => void
 }) {
   const [title, setTitle] = useState(work?.title ?? suggestion?.title ?? '')
   const [workKind, setWorkKind] = useState(work?.workKind ?? suggestion?.workKind ?? '')
-  const [objectIds, setObjectIds] = useState(work?.objectIds ?? suggestion?.objectIds ?? [])
-  const [plantGroupIds, setPlantGroupIds] = useState<string[]>(work?.plantGroupIds ?? [])
+  const [objectIds, setObjectIds] = useState(work?.objectIds ?? suggestion?.objectIds ?? (presetObjectId ? [presetObjectId] : []))
+  const [plantGroupIds, setPlantGroupIds] = useState<string[]>(work?.plantGroupIds ?? (presetGroupId ? [presetGroupId] : []))
   const [recurrence, setRecurrence] = useState<PlanWork['recurrence']>(work?.recurrence ?? 'yearly')
   const [periods, setPeriods] = useState<PlanPeriod[]>(work?.periods ?? (suggestion ? [{ month: Number(suggestion.lastDate.slice(5, 7)) }] : []))
   const [schedule, setSchedule] = useState<SeasonSchedule>(work?.seasonSchedule ?? defaultSchedule(suggestion?.lastDate))
   const [rhythm, setRhythm] = useState<'weeks' | 'days'>(work?.seasonSchedule?.weekdays?.length ? 'days' : 'weeks')
   const [conditionType, setConditionType] = useState<'' | WorkCondition['type']>(work?.condition?.type ?? '')
+  const [conditionLabel, setConditionLabel] = useState(work?.condition?.type === 'label' ? work.condition.text : '')
   const [leadDays, setLeadDays] = useState(String(work?.condition?.type === 'beforeAutumnFrost' ? work.condition.leadDays : 7))
   const [note, setNote] = useState(work?.note ?? '')
   const [consumableIds, setConsumableIds] = useState<string[]>(work?.consumableIds ?? [])
+  const [rateText, setRateText] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(work?.consumableRates ?? {}).map(([id, rate]) => [id, String(rate.quantity)])),
+  )
+  const [rateUnits, setRateUnits] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(work?.consumableRates ?? {}).map(([id, rate]) => [id, rate.unit ?? ''])),
+  )
+  const [photoIds, setPhotoIds] = useState(work?.photoIds ?? [])
+  const [fileNotes, setFileNotes] = useState(work?.fileNotes ?? {})
   const [workId, setWorkId] = useState(work?.id)
   const [revision, setRevision] = useState(work?.revision)
   const [stocks, setStocks] = useState<Record<string, string>>({})
@@ -621,12 +678,21 @@ function WorkForm({
       return undefined
     }
     setError('')
+    const consumableRates = Object.fromEntries(
+      ids.flatMap((id) => {
+        const quantity = parseQuantity(rateText[id] ?? '')
+        if (!quantity) return []
+        return [[id, { quantity, unit: rateUnits[id] || undefined }]]
+      }),
+    )
     const condition: WorkCondition | undefined =
       recurrence === 'yearly' && conditionType === 'beforeAutumnFrost'
         ? { type: 'beforeAutumnFrost', leadDays: Math.max(1, Number(leadDays) || 7) }
         : recurrence === 'yearly' && conditionType === 'afterSpringFrost'
           ? { type: 'afterSpringFrost', weekday: 6, calmDays: 3 }
-          : undefined
+          : recurrence === 'yearly' && conditionType === 'label' && conditionLabel
+            ? { type: 'label', text: conditionLabel }
+            : undefined
     const seasonSchedule: SeasonSchedule | undefined =
       recurrence === 'season'
         ? {
@@ -654,6 +720,9 @@ function WorkForm({
       historyWords: work?.historyWords,
       sourceDraftId: work?.sourceDraftId,
       consumableIds: ids,
+      consumableRates,
+      photoIds,
+      fileNotes,
       seasons: work?.seasons ?? {},
       active,
     }
@@ -786,14 +855,36 @@ function WorkForm({
         onSave={saveStock}
         onRemove={removeMaterial}
         onEdit={openMaterial}
+        rates={rateText}
+        rateUnits={rateUnits}
+        units={settings.consumableUnits}
+        onRate={(id, value) => setRateText((current) => ({ ...current, [id]: value }))}
+        onRateUnit={(id, value) => setRateUnits((current) => ({ ...current, [id]: value }))}
       />
       {recurrence === 'yearly' && (
       <label className="field">
         Условие
-        <select value={conditionType} onChange={(event) => setConditionType(event.target.value as typeof conditionType)}>
+        <select
+          value={conditionType === 'label' ? `label:${conditionLabel}` : conditionType}
+          onChange={(event) => {
+            const value = event.target.value
+            if (value.startsWith('label:')) {
+              setConditionType('label')
+              setConditionLabel(value.slice('label:'.length))
+              return
+            }
+            setConditionType(value as typeof conditionType)
+            setConditionLabel('')
+          }}
+        >
           <option value="">Без условия — по срокам</option>
           <option value="beforeAutumnFrost">До первых осенних заморозков</option>
           <option value="afterSpringFrost">После весенних заморозков, в ближайшую субботу</option>
+          {[...new Set([...(conditionLabel ? [conditionLabel] : []), ...settings.workConditions])].map((text) => (
+            <option key={text} value={`label:${text}`}>
+              {text}
+            </option>
+          ))}
         </select>
       </label>
       )}
@@ -803,6 +894,11 @@ function WorkForm({
           <input inputMode="numeric" value={leadDays} onChange={(event) => setLeadDays(event.target.value)} />
         </label>
       )}
+      {recurrence === 'yearly' && conditionType === 'label' && (
+        <p className="hint">Это подпись из справочника условий. День работы она не назначает: отметьте выполнение, когда на участке так и произошло.</p>
+      )}
+      <h3 className="section-title">Фотографии</h3>
+      <PhotoFields ids={photoIds} notes={fileNotes} onChange={(ids, notes) => { setPhotoIds(ids); setFileNotes(notes) }} />
       <label className="field">
         Примечание
         <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} />
@@ -850,67 +946,30 @@ function ClimateNote() {
   )
 }
 
-function WorkSearchDialog({ initial, onFind, onClose }: { initial: string; onFind: (value: string) => void; onClose: () => void }) {
-  const [value, setValue] = useState(initial)
-  const field = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    field.current?.focus()
-  }, [])
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-  return createPortal(
-    <div className="sheet-backdrop" role="presentation" onClick={onClose}>
-      <form
-        className="sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Поиск по плану работ"
-        onClick={(event) => event.stopPropagation()}
-        onSubmit={(event) => {
-          event.preventDefault()
-          onFind(value)
-        }}
-      >
-        <h2>Поиск</h2>
-        <label className="field">
-          Что найти
-          <input ref={field} type="search" placeholder="Например: гортензии" aria-label="Что найти в плане работ" value={value} onChange={(event) => setValue(event.target.value)} />
-        </label>
-        <div className="actions">
-          <button type="submit" className="button">
-            Найти
-          </button>
-          <button type="button" className="button secondary" onClick={onClose}>
-            Отмена
-          </button>
-        </div>
-      </form>
-    </div>,
-    document.body,
-  )
-}
-
 export function WorksScreen({ settings }: { settings: AppSettings }) {
   const { list, works, context } = useWorkStatuses()
   const objects = useLiveQuery(() => db.objects.toArray(), []) ?? []
   const plantGroups = useLiveQuery(() => db.plantGroups.toArray(), []) ?? []
   const events = useLiveQuery(() => db.events.toArray(), []) ?? []
-  const requested = useRoute().query.get('work')
+  const route = useRoute()
+  const requested = route.query.get('work')
+  const back = localPath(route.query.get('back'))
   const [query, setQuery] = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [editing, setEditing] = useState<{ id?: string; suggestion?: PlanSuggestion } | null>(requested ? { id: requested } : null)
+  const [editing, setEditing] = useState<{ id?: string; suggestion?: PlanSuggestion; groupId?: string; objectId?: string } | null>(
+    requested === 'new'
+      ? { groupId: route.query.get('group') ?? undefined, objectId: route.query.get('object') ?? undefined }
+      : requested
+        ? { id: requested }
+        : null,
+  )
   useEffect(() => {
     window.scrollTo({ top: 0 })
   }, [editing])
 
   const close = () => {
     setEditing(null)
-    if (requested) navigate('/works')
+    if (back) navigate(back)
+    else if (requested) navigate('/works')
   }
 
   if (editing) {
@@ -939,6 +998,8 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
           settings={settings}
           objects={formObjects}
           plantGroups={plantGroups.filter((group) => !group.deletedAt && (group.active || work?.plantGroupIds.includes(group.id))).sort((a, b) => a.name.localeCompare(b.name, 'ru'))}
+          presetGroupId={editing.groupId}
+          presetObjectId={editing.objectId}
           onClose={close}
         />
       </Screen>
@@ -979,32 +1040,9 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
         <a className="button secondary" href="#/plan">
           Из черновика Evernote
         </a>
-        <button type="button" className={query ? 'icon-button search-button active' : 'icon-button search-button'} aria-label="Поиск" aria-pressed={query !== ''} onClick={() => setSearchOpen(true)}>
-          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-3.5-3.5" />
-          </svg>
-        </button>
+        <SearchButton query={query} label="Поиск по плану работ" placeholder="Например: гортензии" onFind={setQuery} />
       </div>
-      {query && (
-        <p className="search-query">
-          Нашли по запросу «{query}».{' '}
-          <button type="button" className="button-link source-link" onClick={() => setQuery('')}>
-            Сбросить
-          </button>
-        </p>
-      )}
-      {searchOpen && (
-        <WorkSearchDialog
-          initial={query}
-          onClose={() => setSearchOpen(false)}
-          onFind={(value) => {
-            setQuery(value.trim())
-            setSearchOpen(false)
-            window.scrollTo({ top: 0 })
-          }}
-        />
-      )}
+      <SearchQuery query={query} onClear={() => setQuery('')} />
       {!settings.plotLocation && (
         <p className="hint">
           Для работ, зависящих от заморозков, нужны координаты участка: <a href="#/settings">«Ещё → Настройки → Участок»</a>.

@@ -3,13 +3,16 @@ import { useEffect, useState } from 'react'
 import { navigate } from '../app/router'
 import { repo } from '../app/store'
 import { fertilizerSummary } from '../domain/careLinks'
+import { includesAllWords } from '../domain/diaryFilter'
 import { OBJECT_TYPES } from '../domain/labels'
 import type { CareObject, DocInput, ObjectType, PlantGroup } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
+import { PhotoFields } from '../ui/PhotoFields'
+import { SearchButton, SearchQuery } from '../ui/SearchDialog'
 import { ActionButton } from '../ui/Section'
-import { CareLinks } from './CareLinks'
 import { useFertilizerLines } from './useFertilizerLines'
+import { WorkLinks } from './WorkLinks'
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru')
 
@@ -25,6 +28,8 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
   const [count, setCount] = useState(object?.plantCount?.toString() ?? '')
   const [location, setLocation] = useState(object?.location ?? '')
   const [description, setDescription] = useState(object?.description ?? '')
+  const [photoIds, setPhotoIds] = useState(object?.photoIds ?? [])
+  const [fileNotes, setFileNotes] = useState(object?.fileNotes ?? {})
 
   const save = async (active = object?.active ?? true) => {
     const input: DocInput<CareObject> = {
@@ -34,6 +39,8 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
       plantCount: numberOrUndefined(count),
       location: location.trim() || undefined,
       description: description.trim() || undefined,
+      photoIds,
+      fileNotes,
       active,
     }
     if (object) await repo.update('objects', object.id, input, object.revision)
@@ -76,7 +83,9 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
         Описание
         <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
       </label>
-      {object && <ObjectWorks objectId={object.id} />}
+      <h3 className="section-title">Фотографии</h3>
+      <PhotoFields ids={photoIds} notes={fileNotes} onChange={(ids, notes) => { setPhotoIds(ids); setFileNotes(notes) }} />
+      {object && <WorkLinks objectId={object.id} returnPath={`/objects?object=${object.id}`} />}
       {object && <ObjectGroups objectId={object.id} />}
       <div className="actions">
         <ActionButton disabled={!name.trim()} onRun={() => save()}>
@@ -95,30 +104,6 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
   )
 }
 
-function ObjectWorks({ objectId }: { objectId: string }) {
-  const works = useLiveQuery(() => db.planWorks.filter((work) => !work.deletedAt && work.objectIds.includes(objectId)).toArray(), [objectId]) ?? []
-  const sorted = [...works].sort((a, b) => Number(b.active) - Number(a.active) || a.title.localeCompare(b.title, 'ru'))
-  return (
-    <>
-      <h3 className="section-title">Работы</h3>
-      {sorted.length === 0 ? (
-        <p className="hint">Работ по этому объекту пока нет. Они появятся, когда в плане у работы будет выбран этот объект.</p>
-      ) : (
-        <ul className="list">
-          {sorted.map((work) => (
-            <li key={work.id}>
-              <a className="list-item" href={`#/works?work=${work.id}`}>
-                <strong>{work.title}</strong>
-                {!work.active && <span className="muted">в архиве плана</span>}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
-  )
-}
-
 function ObjectGroups({ objectId }: { objectId: string }) {
   const groups = useLiveQuery(() => db.plantGroups.filter((group) => !group.deletedAt && group.objectIds.includes(objectId)).toArray(), [objectId]) ?? []
   return (
@@ -133,6 +118,8 @@ function GroupForm({ group, objects, fromDictionaries, onClose }: { group?: Plan
   const [objectIds, setObjectIds] = useState<string[]>(group?.objectIds ?? [])
   const [area, setArea] = useState(group?.areaM2?.toString() ?? '')
   const [description, setDescription] = useState(group?.description ?? '')
+  const [photoIds, setPhotoIds] = useState(group?.photoIds ?? [])
+  const [fileNotes, setFileNotes] = useState(group?.fileNotes ?? {})
   const toggle = (id: string) => setObjectIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]))
 
   const save = async (active = group?.active ?? true) => {
@@ -141,6 +128,8 @@ function GroupForm({ group, objects, fromDictionaries, onClose }: { group?: Plan
       objectIds,
       areaM2: numberOrUndefined(area),
       description: description.trim() || undefined,
+      photoIds,
+      fileNotes,
       active,
     }
     if (group) await repo.update('plantGroups', group.id, input, group.revision)
@@ -173,10 +162,12 @@ function GroupForm({ group, objects, fromDictionaries, onClose }: { group?: Plan
         Описание, сорта
         <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
       </label>
+      <h3 className="section-title">Фотографии</h3>
+      <PhotoFields ids={photoIds} notes={fileNotes} onChange={(ids, notes) => { setPhotoIds(ids); setFileNotes(notes) }} />
       {group ? (
-        <CareLinks plantGroupId={group.id} draftArea={area} returnPath={`/objects?view=groups&group=${group.id}${fromDictionaries ? '&from=dictionaries' : ''}`} />
+        <WorkLinks plantGroupId={group.id} returnPath={`/objects?view=groups&group=${group.id}${fromDictionaries ? '&from=dictionaries' : ''}`} />
       ) : (
-        <p className="hint">Сохраните группу, затем свяжите её с видом работ и расходным материалом — так посчитается количество удобрения.</p>
+        <p className="hint">Сохраните группу, затем кнопкой «Добавить работу» откроется план с уже отмеченной группой.</p>
       )}
       <div className="actions">
         <ActionButton disabled={!name.trim()} onRun={() => save()}>
@@ -200,11 +191,13 @@ export function ObjectsScreen({
   initialView = 'objects',
   fromDictionaries = false,
   initialGroupId,
+  initialObjectId,
   returnTo,
 }: {
   initialView?: 'objects' | 'groups'
   fromDictionaries?: boolean
   initialGroupId?: string
+  initialObjectId?: string
   returnTo?: string
 }) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt).toArray(), []) ?? []
@@ -212,7 +205,10 @@ export function ObjectsScreen({
   const groups = loadedGroups ?? []
   const fertilizer = useFertilizerLines() ?? []
   const [view, setView] = useState<'objects' | 'groups'>(initialGroupId ? 'groups' : initialView)
-  const [editing, setEditing] = useState<{ kind: 'object' | 'group'; id?: string } | null>(initialGroupId ? { kind: 'group', id: initialGroupId } : null)
+  const [editing, setEditing] = useState<{ kind: 'object' | 'group'; id?: string } | null>(
+    initialObjectId ? { kind: 'object', id: initialObjectId } : initialGroupId ? { kind: 'group', id: initialGroupId } : null,
+  )
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -222,7 +218,7 @@ export function ObjectsScreen({
   const groupsOf = (objectId: string) => groups.filter((group) => group.objectIds.includes(objectId)).sort(byName).map((group) => (group.active ? group.name : `${group.name} (архив)`))
   const archived = objects.filter((item) => !item.active).sort(byName)
   const close = () => {
-    if (returnTo && editing?.kind === 'group' && editing.id === initialGroupId) {
+    if (returnTo && ((editing?.kind === 'group' && editing.id === initialGroupId) || (editing?.kind === 'object' && editing.id === initialObjectId))) {
       navigate(returnTo)
       return
     }
@@ -273,11 +269,13 @@ export function ObjectsScreen({
             <button type="button" className="button" onClick={() => setEditing({ kind: 'object' })}>
               + Добавить объект
             </button>
+            <SearchButton query={query} label="Поиск по объектам" placeholder="Например: газон" onFind={setQuery} />
           </div>
+          <SearchQuery query={query} onClear={() => setQuery('')} />
           <p className="hint">Газон, сад, грядки и места на участке. Нажмите на объект, чтобы изменить его или убрать в архив.</p>
           {active.length === 0 && <EmptyState>Добавьте газон, сад, грядки или место на участке.</EmptyState>}
           <ul className="list">
-            {active.map((object) => (
+            {active.filter((object) => includesAllWords(query, object.name)).map((object) => (
               <li key={object.id}>
                 <button type="button" className="list-item" onClick={() => setEditing({ kind: 'object', id: object.id })}>
                   <strong>{object.name}</strong>
@@ -313,11 +311,13 @@ export function ObjectsScreen({
             <button type="button" className="button" onClick={() => setEditing({ kind: 'group' })}>
               + Добавить группу
             </button>
+            <SearchButton query={query} label="Поиск по группам растений" placeholder="Например: хвойные" onFind={setQuery} />
           </div>
+          <SearchQuery query={query} onClear={() => setQuery('')} />
           <p className="hint">Группы растений («Хвойные», «Ягодные кусты», «Гортензии») привязываются к объектам. Площадь и связка с видом работ и материалом дают количество удобрения.</p>
           {groups.length === 0 && <EmptyState>Групп растений пока нет.</EmptyState>}
           <ul className="list">
-            {[...groups].sort(byName).map((group) => (
+            {[...groups].filter((group) => includesAllWords(query, group.name)).sort(byName).map((group) => (
               <li key={group.id}>
                 <button type="button" className="list-item" onClick={() => setEditing({ kind: 'group', id: group.id })}>
                   <strong>

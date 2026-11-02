@@ -40,3 +40,54 @@ export function resolveRename(renames: Record<string, string>, name: string): st
 export function mergeItems(current: string[], incoming: string[]): string[] {
   return [...current, ...incoming.filter((item) => !current.some((existing) => same(existing, item)))]
 }
+
+/** Справочники, общие для телефона и планшета. Пустой список не затирает заполненный. */
+export interface DictionarySnapshot {
+  updatedAt: string
+  workKinds: string[]
+  workKindRenames: Record<string, string>
+  consumableUnits: string[]
+  consumableKinds: string[]
+  workConditions: string[]
+}
+
+function unionLists(current: string[], incoming: string[]): string[] {
+  if (current.length === 0) return [...incoming]
+  if (incoming.length === 0) return [...current]
+  return mergeItems(current, incoming)
+}
+
+function applyRenames(names: string[], renames: Record<string, string>): string[] {
+  const next: string[] = []
+  for (const name of names) {
+    const resolved = resolveRename(renames, name)
+    if (!next.some((item) => same(item, resolved))) next.push(resolved)
+  }
+  return next
+}
+
+/** Сливает справочники двух устройств: переименование «Подкормка» → «Внесение удобрений» применяется и к старому списку. */
+export function mergeDictionaries(local: DictionarySnapshot, remote: DictionarySnapshot | null): DictionarySnapshot {
+  if (!remote) return local
+  const localNewer = local.updatedAt >= remote.updatedAt
+  const renames = localNewer ? { ...remote.workKindRenames, ...local.workKindRenames } : { ...local.workKindRenames, ...remote.workKindRenames }
+  return {
+    updatedAt: local.updatedAt > remote.updatedAt ? local.updatedAt : remote.updatedAt,
+    workKinds: applyRenames(unionLists(local.workKinds, remote.workKinds), renames),
+    workKindRenames: renames,
+    consumableUnits: unionLists(local.consumableUnits, remote.consumableUnits),
+    consumableKinds: unionLists(local.consumableKinds, remote.consumableKinds),
+    workConditions: unionLists(local.workConditions, remote.workConditions),
+  }
+}
+
+export function sameDictionaries(a: DictionarySnapshot, b: DictionarySnapshot): boolean {
+  const list = (left: string[], right: string[]) => left.length === right.length && left.every((item, index) => item === right[index])
+  return (
+    list(a.workKinds, b.workKinds) &&
+    list(a.consumableUnits, b.consumableUnits) &&
+    list(a.consumableKinds, b.consumableKinds) &&
+    list(a.workConditions, b.workConditions) &&
+    JSON.stringify(a.workKindRenames) === JSON.stringify(b.workKindRenames)
+  )
+}

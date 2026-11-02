@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRoute } from '../app/router'
 import { ensureSeeded } from '../app/seed'
 import { restoreBackup, type RestoreResult } from '../backup/backup'
 import { setSetting, type AppSettings, type PhotoPosition, type ThemeSetting } from '../app/store'
@@ -34,6 +35,11 @@ const SCALES = [
 
 export function SettingsScreen({ settings }: { settings: AppSettings }) {
   const [name, setName] = useState(settings.authorName)
+  const part = useRoute().query.get('part')
+  useEffect(() => {
+    if (!part) return
+    document.getElementById(part)?.scrollIntoView({ block: 'start' })
+  }, [part])
   return (
     <Screen title="Настройки" help="settings" back="/more" tab="/more">
       <section className="card">
@@ -44,7 +50,7 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
         </label>
       </section>
       <PlotSection settings={settings} />
-      <section className="card">
+      <section className="card" id="appearance">
         <h2>Внешний вид</h2>
         <fieldset className="choice">
           <legend>Тема</legend>
@@ -81,7 +87,7 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
           Открыть справочники
         </a>
       </section>
-      <section className="card">
+      <section className="card" id="updates">
         <h2>Дополнительно</h2>
         <p>{versionLabel()}</p>
         <UpdateCheck />
@@ -162,7 +168,7 @@ function PlotSection({ settings }: { settings: AppSettings }) {
   }
 
   return (
-    <section className="card">
+    <section className="card" id="plot">
       <h2>Участок</h2>
       {settings.plotPhotoId && (
         <div className="plot-hero">

@@ -18,7 +18,12 @@ export function Screen(props: { title: string; help?: string; back?: string; onB
   useEffect(() => {
     const element = tabbar.current
     if (!element || typeof ResizeObserver === 'undefined') return
-    const apply = () => document.documentElement.style.setProperty('--tabbar-height', `${Math.ceil(element.getBoundingClientRect().height)}px`)
+    const apply = () => {
+      // Пока идёт ввод, меню скрыто и его высота 0. Не обнулять запас: иначе страница сдвигается и «Сохранить» уезжает из-под пальца.
+      const height = Math.ceil(element.getBoundingClientRect().height)
+      if (height <= 0) return
+      document.documentElement.style.setProperty('--tabbar-height', `${height}px`)
+    }
     apply()
     const observer = new ResizeObserver(apply)
     observer.observe(element)

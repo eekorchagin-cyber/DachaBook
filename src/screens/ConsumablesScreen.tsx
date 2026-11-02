@@ -8,8 +8,10 @@ import { convertQuantity, purchasePlan, substanceUnit, suggestedRateUnit } from 
 import type { CareObject, Consumable, DocInput, PlantGroup } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
+import { SearchButton, SearchQuery } from '../ui/SearchDialog'
 import { SuggestInput } from '../ui/SuggestInput'
 import { ActionButton } from '../ui/Section'
+import { includesAllWords } from '../domain/diaryFilter'
 import { CareLinks } from './CareLinks'
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru')
@@ -42,22 +44,35 @@ function UsedInGroups({ consumableId, fromWork }: { consumableId: string; fromWo
   )
 }
 
-/** Отдельная ссылка в каждую работу, где выбран этот материал. */
+/** Один материал может быть в разных работах: уксус — хвойным и бойлеру, масло — газонокосилке. Норма на 1 раз у каждой работы своя. */
 function UsedInWorks({ consumableId }: { consumableId: string }) {
   const works = useLiveQuery(
     () => db.planWorks.filter((work) => !work.deletedAt && (work.consumableIds ?? []).includes(consumableId)).toArray(),
     [consumableId],
   )
+  const objects = useLiveQuery(() => db.objects.toArray(), []) ?? []
+  const groups = useLiveQuery(() => db.plantGroups.toArray(), []) ?? []
   if (!works || works.length === 0) return null
+  const nameOf = (ids: string[], source: { id: string; name: string }[]) => ids.map((id) => source.find((item) => item.id === id)?.name).filter(Boolean)
   const listed = [...works].sort((a, b) => a.title.localeCompare(b.title, 'ru'))
   return (
     <div className="material-works">
-      <p className="hint">Материал выбран в работах. В каждую можно вернуться отдельно.</p>
-      {listed.map((work) => (
-        <a key={work.id} className="source-link" href={`#/works?work=${work.id}`}>
-          Вернуться к работе «{work.title}»
-        </a>
-      ))}
+      <h3 className="section-title">Где используется</h3>
+      <p className="hint">Норма на 1 раз задаётся в карточке работы. Один и тот же материал может быть и у группы растений, и у объекта.</p>
+      {listed.map((work) => {
+        const rate = work.consumableRates?.[consumableId]
+        const where = [...nameOf(work.plantGroupIds, groups).map((name) => `группа «${name}»`), ...nameOf(work.objectIds, objects).map((name) => `объект «${name}»`)]
+        const amount = rate ? `${quantityText(rate.quantity, rate.unit || '')} на 1 раз` : ''
+        return (
+          <p key={work.id}>
+            <a className="source-link" href={`#/works?work=${work.id}&back=${encodeURIComponent(`/consumables?id=${consumableId}`)}`}>
+              {work.title}
+            </a>
+            {where.length > 0 ? ` — ${where.join(', ')}` : ''}
+            {amount ? `, ${amount}` : ''}
+          </p>
+        )
+      })}
     </div>
   )
 }
@@ -78,6 +93,7 @@ function ConsumableForm({
   onClose: () => void
 }) {
   const [name, setName] = useState(consumable?.name ?? '')
+  const [kind, setKind] = useState(consumable?.kind ?? '')
   const [unit, setUnit] = useState(consumable?.unit ?? 'кг')
   const [rate, setRate] = useState(consumable?.ratePerM2?.toString() ?? '')
   const [rateUnit, setRateUnit] = useState(consumable?.rateUnit ?? suggestedRateUnit(consumable?.unit ?? 'кг'))
@@ -86,7 +102,9 @@ function ConsumableForm({
   const [note, setNote] = useState(consumable?.note ?? '')
   const [description, setDescription] = useState(consumable?.description ?? '')
   const [url, setUrl] = useState(consumable?.url ?? '')
-  const units = useSettings()?.consumableUnits ?? UNITS
+  const settings = useSettings()
+  const units = settings?.consumableUnits ?? UNITS
+  const kinds = settings?.consumableKinds ?? []
   const link = normalizeUrl(url)
   const duplicate = findConsumable(consumables, name)
   const nameTaken = !!duplicate && duplicate.id !== consumable?.id
@@ -121,6 +139,7 @@ function ConsumableForm({
       packQuantity: parseQuantity(pack),
       packUnit: separate && parseQuantity(pack) ? substance : undefined,
       objectIds,
+      kind: kind || undefined,
       description: description.trim() || undefined,
       url: link ?? undefined,
       note: note.trim() || undefined,
@@ -143,6 +162,19 @@ function ConsumableForm({
         <input placeholder="Например, «Азофоска» или «Мульча из коры»" value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       {nameTaken && <p className="error">Материал с таким названием уже есть.</p>}
+      {kinds.length > 0 && (
+        <label className="field">
+          Вид материала
+          <select aria-label="Вид материала" value={kind} onChange={(event) => setKind(event.target.value)}>
+            <option value="">Не указан</option>
+            {kinds.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="field">
         Описание
         <textarea rows={3} placeholder="Что это и для чего: состав, действие, когда применять" value={description} onChange={(event) => setDescription(event.target.value)} />
@@ -274,6 +306,7 @@ export function ConsumablesScreen() {
   const fromWork = route.query.get('work')
   const returnTo = localPath(route.query.get('back'))
   const [editing, setEditing] = useState<{ id?: string } | null>(requested ? { id: requested } : null)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -311,16 +344,18 @@ export function ConsumablesScreen() {
 
   const objectNames = (ids: string[]) => ids.map((id) => objects.find((object) => object.id === id)?.name).filter(Boolean).join(', ')
   const linked = (ids: string[]) => objects.filter((object) => ids.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 }))
-  const active = consumables.filter((item) => item.active).sort(byName)
+  const active = consumables.filter((item) => item.active && includesAllWords(query, `${item.name} ${item.kind ?? ''} ${item.description ?? ''}`)).sort(byName)
   const archived = consumables.filter((item) => !item.active).sort(byName)
 
   return (
-    <Screen title="Расходные материалы" help="consumables" back="/dictionaries" tab="/more">
+    <Screen title="Расходные материалы" help="consumables" back="/more" tab="/more">
       <div className="actions">
         <button type="button" className="button" onClick={() => setEditing({})}>
           + Добавить материал
         </button>
+        <SearchButton query={query} label="Поиск по материалам" placeholder="Например: уксус" onFind={setQuery} />
       </div>
+      <SearchQuery query={query} onClear={() => setQuery('')} />
       <p className="hint">
         Удобрения, средства защиты, семена, мульча. Здесь — само вещество: единица, фасовка и норма на м². Сколько внести за сезон считается в работе плана, где материал выбран.
       </p>

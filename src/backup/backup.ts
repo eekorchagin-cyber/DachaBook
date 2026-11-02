@@ -1,6 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate'
 import { DEFAULT_SETTINGS, type AppSettings } from '../app/store'
-import { mergeItems } from '../domain/dictionaries'
+import { mergeDictionaries, type DictionarySnapshot } from '../domain/dictionaries'
 import { SCHEMA_VERSION, type DocMeta, type StoredFile } from '../domain/types'
 import type { DiaryDatabase } from '../storage/db'
 import { verifyChecksum } from '../storage/repository'
@@ -43,7 +43,7 @@ deletedAt (если в корзине) и checksum — SHA-256 содержим�
 Пароли, токены и личные настройки устройства в копию не входят.
 `
 
-const SHARED_SETTINGS = ['workKinds', 'workKindRenames', 'consumableUnits', 'plotAddress', 'plotLocation', 'plotPhotoId']
+const SHARED_SETTINGS = ['workKinds', 'workKindRenames', 'consumableUnits', 'consumableKinds', 'workConditions', 'plotAddress', 'plotLocation', 'plotPhotoId']
 
 function extension(fileName: string): string {
   const match = fileName.match(/\.[A-Za-z0-9]{1,8}$/)
@@ -206,17 +206,34 @@ export async function restoreBackup(database: DiaryDatabase, data: ArrayBuffer):
 
   const shared = entries['settings/shared.json']
   if (shared) {
-    const incoming = JSON.parse(strFromU8(shared)) as Partial<Pick<AppSettings, 'workKinds' | 'workKindRenames' | 'consumableUnits' | 'plotAddress' | 'plotLocation' | 'plotPhotoId'>>
+    const incoming = JSON.parse(strFromU8(shared)) as Partial<Pick<AppSettings, 'workKinds' | 'workKindRenames' | 'consumableUnits' | 'consumableKinds' | 'workConditions' | 'plotAddress' | 'plotLocation' | 'plotPhotoId'>>
     const local = async <K extends keyof AppSettings>(key: K) => ((await database.settings.get(key))?.value as AppSettings[K] | undefined) ?? DEFAULT_SETTINGS[key]
     if (incoming.plotAddress && !(await database.settings.get('plotAddress'))?.value) await database.settings.put({ key: 'plotAddress', value: incoming.plotAddress })
     if (incoming.plotLocation && !(await database.settings.get('plotLocation'))?.value) await database.settings.put({ key: 'plotLocation', value: incoming.plotLocation })
     if (incoming.plotPhotoId && !(await database.settings.get('plotPhotoId'))?.value) await database.settings.put({ key: 'plotPhotoId', value: incoming.plotPhotoId })
-    for (const key of ['workKinds', 'consumableUnits'] as const) {
-      const current = await local(key)
-      const merged = mergeItems(current, incoming[key] ?? [])
-      if (merged.length !== current.length) await database.settings.put({ key, value: merged })
+    const current: DictionarySnapshot = {
+      updatedAt: '',
+      workKinds: await local('workKinds'),
+      workKindRenames: await local('workKindRenames'),
+      consumableUnits: await local('consumableUnits'),
+      consumableKinds: await local('consumableKinds'),
+      workConditions: await local('workConditions'),
     }
-    if (incoming.workKindRenames) await database.settings.put({ key: 'workKindRenames', value: { ...incoming.workKindRenames, ...(await local('workKindRenames')) } })
+    const merged = mergeDictionaries(current, {
+      updatedAt: '',
+      workKinds: incoming.workKinds ?? [],
+      workKindRenames: incoming.workKindRenames ?? {},
+      consumableUnits: incoming.consumableUnits ?? [],
+      consumableKinds: incoming.consumableKinds ?? [],
+      workConditions: incoming.workConditions ?? [],
+    })
+    await database.settings.bulkPut([
+      { key: 'workKinds', value: merged.workKinds },
+      { key: 'workKindRenames', value: merged.workKindRenames },
+      { key: 'consumableUnits', value: merged.consumableUnits },
+      { key: 'consumableKinds', value: merged.consumableKinds },
+      { key: 'workConditions', value: merged.workConditions },
+    ])
   }
   return result
 }

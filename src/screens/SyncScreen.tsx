@@ -138,6 +138,13 @@ export function SyncScreen() {
         )}
       </section>
       <section className="card">
+        <h2>Резервная копия</h2>
+        <p className="hint">Файл копии и автокопия в папку — отдельно от облака. Облако само разносит дневник между устройствами.</p>
+        <a className="button secondary" href="#/backup">
+          Открыть резервное копирование
+        </a>
+      </section>
+      <section className="card">
         <h2>Другие облака</h2>
         <ul className="list">
           <li className="list-row">

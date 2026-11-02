@@ -6,7 +6,9 @@ import { MONTH_NAMES, todayAtSite } from '../domain/dates'
 import type { CareObject, DocInput, WateringKind, WateringZone } from '../domain/types'
 import { dateText } from '../plan/frost'
 import { db } from '../storage/db'
+import { includesAllWords } from '../domain/diaryFilter'
 import { EmptyState, Screen } from '../ui/Screen'
+import { SearchButton, SearchQuery } from '../ui/SearchDialog'
 import { ActionButton } from '../ui/Section'
 import { useForecast } from '../weather/service'
 import { skipWateringToday, undoWateringSkip } from '../watering/actions'
@@ -266,6 +268,7 @@ export function WateringScreen({ settings }: { settings: AppSettings }) {
   const today = todayAtSite().date
   const precipitation = useMemo(() => precipitationMap(forecast?.daily), [forecast])
   const [editing, setEditing] = useState<{ id?: string } | null>(null)
+  const [query, setQuery] = useState('')
   useEffect(() => {
     window.scrollTo({ top: 0 })
   }, [editing])
@@ -279,8 +282,8 @@ export function WateringScreen({ settings }: { settings: AppSettings }) {
   }
 
   const names = (ids: string[]) => ids.map((id) => objects.find((object) => object.id === id)?.name).filter(Boolean).join(', ')
-  const active = (zones ?? []).filter((zone) => zone.active)
-  const archived = (zones ?? []).filter((zone) => !zone.active)
+  const active = (zones ?? []).filter((zone) => zone.active && includesAllWords(query, zone.name))
+  const archived = (zones ?? []).filter((zone) => !zone.active && includesAllWords(query, zone.name))
   const list = active
     .map((zone) => {
       const history = wateringHistory(zone, events)
@@ -298,7 +301,9 @@ export function WateringScreen({ settings }: { settings: AppSettings }) {
         <button type="button" className="button" onClick={() => setEditing({})}>
           + Зона
         </button>
+        <SearchButton query={query} label="Поиск по зонам полива" placeholder="Например: газон" onFind={setQuery} />
       </div>
+      <SearchQuery query={query} onClear={() => setQuery('')} />
       {zones && active.length === 0 && <EmptyState>Зон пока нет. Добавьте газон, сад или грядки.</EmptyState>}
       {list.length > 0 && (
         <ul className="list">
