@@ -1,9 +1,12 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import type { FertilizerLine } from '../domain/careLinks'
 import { quantityText } from '../domain/consumables'
 import { periodText, scheduleText } from '../domain/labels'
-import type { PlanWork } from '../domain/types'
+import type { Consumable, PlanWork } from '../domain/types'
+import { useWorkStatuses } from '../plan/useWorkStatuses'
 import { db } from '../storage/db'
 import { useFertilizerLines } from './useFertilizerLines'
+import { splitCardWorks } from './workGroups'
 
 function whenText(work: PlanWork): string {
   if (work.recurrence === 'season' && work.seasonSchedule) return scheduleText(work.seasonSchedule)
@@ -16,9 +19,12 @@ export function WorkLinks({ plantGroupId, objectId, returnPath }: { plantGroupId
   const works = useLiveQuery(() => db.planWorks.filter((work) => !work.deletedAt).toArray(), []) ?? []
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), []) ?? []
   const lines = useFertilizerLines(plantGroupId ? { plantGroupId } : undefined) ?? []
+  const { list } = useWorkStatuses()
+  const doneIds = new Set(list.filter((item) => item.status.state === 'done').map((item) => item.work.id))
   const matched = works
     .filter((work) => (plantGroupId ? work.plantGroupIds.includes(plantGroupId) : false) || (objectId ? work.objectIds.includes(objectId) : false))
-    .sort((a, b) => Number(b.active) - Number(a.active) || a.title.localeCompare(b.title, 'ru'))
+    .sort((a, b) => a.title.localeCompare(b.title, 'ru'))
+  const groups = splitCardWorks(matched, doneIds)
 
   const params = new URLSearchParams({ work: 'new', back: returnPath })
   if (plantGroupId) params.set('group', plantGroupId)
@@ -29,7 +35,38 @@ export function WorkLinks({ plantGroupId, objectId, returnPath }: { plantGroupId
       <h3 className="section-title">Работы и материалы</h3>
       <p className="hint">Название, вид, описание и кратность берутся из карточки работы. Здесь их можно только посмотреть. Количество на 1 раз стоит после названия материала.</p>
       {matched.length === 0 && <p className="hint">Работ пока нет.</p>}
-      {matched.map((work) => {
+      <WorkGroup title="Запланированные" works={groups.planned} plantGroupId={plantGroupId} consumables={consumables} lines={lines} returnPath={returnPath} />
+      <WorkGroup title="Выполненные" works={groups.done} plantGroupId={plantGroupId} consumables={consumables} lines={lines} returnPath={returnPath} />
+      <WorkGroup title="В архиве плана" works={groups.archived} plantGroupId={plantGroupId} consumables={consumables} lines={lines} returnPath={returnPath} />
+      <div className="actions">
+        <a className="button" href={`#/works?${params.toString()}`}>
+          Добавить работу
+        </a>
+      </div>
+    </section>
+  )
+}
+
+function WorkGroup({
+  title,
+  works,
+  plantGroupId,
+  consumables,
+  lines,
+  returnPath,
+}: {
+  title: string
+  works: PlanWork[]
+  plantGroupId?: string
+  consumables: Consumable[]
+  lines: FertilizerLine[]
+  returnPath: string
+}) {
+  if (works.length === 0) return null
+  return (
+    <div>
+      <h4 className="section-title">{title}</h4>
+      {works.map((work) => {
         const linked = plantGroupId ? lines.filter((line) => line.workKind === work.workKind).map((line) => line.consumableId) : []
         const ids = [...new Set([...(work.consumableIds ?? []), ...linked])]
         return (
@@ -38,7 +75,6 @@ export function WorkLinks({ plantGroupId, objectId, returnPath }: { plantGroupId
             {work.workKind && <p className="small">Вид работы: {work.workKind}</p>}
             <p className="small muted">Кратность: {whenText(work)}</p>
             {work.note && <p className="small">{work.note}</p>}
-            {!work.active && <p className="small muted">В архиве плана</p>}
             {ids.length > 0 && (
               <ul className="list">
                 {ids.map((id) => {
@@ -63,11 +99,6 @@ export function WorkLinks({ plantGroupId, objectId, returnPath }: { plantGroupId
           </article>
         )
       })}
-      <div className="actions">
-        <a className="button" href={`#/works?${params.toString()}`}>
-          Добавить работу
-        </a>
-      </div>
-    </section>
+    </div>
   )
 }
