@@ -38,15 +38,15 @@ function SignText({ sign, link = false }: { sign: FolkSign; link?: boolean }) {
   )
 }
 
-/** Карточка на главном экране: примета на сегодня или ближайшая на неделе. */
+/** Карточка на главном экране: примета на сегодня или ближайшая из предстоящих. */
 export function TodaySignCard({ signs }: { signs: FolkSign[] }) {
   const today = todayMonthDay()
-  const { signs: found, ahead } = upcomingSigns(signs, today)
+  const { signs: found, ahead } = upcomingSigns(signs, today, 366)
   if (found.length === 0) return null
   return (
     <section className="card">
       <div className="card-header">
-        <h2>{ahead === 0 ? 'Народная примета на сегодня' : `Народная примета: ${folkSignDate(found[0])}`}</h2>
+        <h2>{ahead === 0 ? 'Народная примета на сегодня' : `Ближайшая примета: ${folkSignDate(found[0])}`}</h2>
         <a className="small source-link" href="#/signs">
           Все приметы
         </a>

@@ -11,10 +11,11 @@ import { ActionButton } from '../ui/Section'
 
 const GUIDE = { href: '#/guide', title: 'Как пользоваться DachaBook', text: 'Руководство: чтобы дача была в порядке и доставляла минимум хлопот' }
 
-const DICTIONARIES = [
-  { href: '#/dictionaries/work-kinds', title: 'Виды работ', text: 'Стрижка, полив, внесение удобрений' },
-  { href: '#/dictionaries/units', title: 'Единицы расходных материалов', text: 'кг, л, мл, шт., бутылка' },
-  { href: '#/dictionaries/consumable-kinds', title: 'Виды расходных материалов', text: 'Удобрение, масло, бытовая химия' },
+const DICTIONARIES = [{ href: '#/dictionaries', title: 'Справочники', text: 'Виды работ, материалы, единицы и условия' }]
+
+const WORKS = [
+  { href: '#/works', title: 'План работ', text: 'Сезонные работы и отметки о выполнении' },
+  { href: '#/watering', title: 'Полив', text: 'Зоны, расписание и совет с учётом дождя' },
 ]
 
 const SETTINGS = [
@@ -26,10 +27,6 @@ const SETTINGS = [
 ]
 
 const SERVICE = [
-  { href: '#/works', title: 'План работ', text: 'Сезонные работы и отметки о выполнении' },
-  { href: '#/watering', title: 'Полив', text: 'Зоны, расписание и совет с учётом дождя' },
-  { href: '#/consumables', title: 'Расходные материалы', text: 'Нормы, запас и где материал используется' },
-  { href: '#/dictionaries/work-conditions', title: 'Условия для проведения работ', text: 'Подписи вроде просохшей почвы' },
   { href: '#/diary/book', title: 'Дневник в PDF', text: 'Книга по годам и месяцам' },
   { href: '#/import', title: 'Импорт из Evernote', text: 'Перенос дневников из файлов ENEX' },
   { href: '#/archive', title: 'Архив импорта', text: 'Исходные строки Evernote' },
@@ -58,6 +55,8 @@ export function MoreScreen() {
       <LinkList items={[GUIDE]} />
       <h2 className="section-title">Справочники</h2>
       <LinkList items={DICTIONARIES} />
+      <h2 className="section-title">Работы</h2>
+      <LinkList items={WORKS} />
       <h2 className="section-title">Настройки</h2>
       <LinkList items={SETTINGS} />
       <ul className="list">

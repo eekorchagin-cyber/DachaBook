@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { cleanItem, itemProblem, moveItem } from '../domain/dictionaries'
+import { cleanItem, itemProblem } from '../domain/dictionaries'
 
 interface ListEditorProps {
   label: string
@@ -14,7 +14,7 @@ interface ListEditorProps {
   hrefLabel?: string
 }
 
-function ItemRow(props: { item: string; items: string[]; index: number } & Pick<ListEditorProps, 'onSave' | 'onRename' | 'onRemove' | 'hrefFor' | 'hrefLabel'>) {
+function ItemRow(props: { item: string; items: string[]; index: number } & Pick<ListEditorProps, 'onRename' | 'onRemove' | 'hrefFor' | 'hrefLabel'>) {
   const { item, items, index } = props
   const [value, setValue] = useState(item)
   const [error, setError] = useState<string | null>(null)
@@ -47,16 +47,10 @@ function ItemRow(props: { item: string; items: string[]; index: number } & Pick<
         }}
       />
       {props.hrefFor && (
-        <a className="button secondary small" href={props.hrefFor(item)} aria-label={`${props.hrefLabel ?? 'Открыть'} «${item}»`}>
+        <a className="source-link" href={props.hrefFor(item)} aria-label={`${props.hrefLabel ?? 'Открыть'} «${item}»`}>
           {props.hrefLabel ?? 'Открыть'}
         </a>
       )}
-      <button type="button" className="icon-button" aria-label="Выше" disabled={index === 0} onClick={() => void props.onSave(moveItem(items, index, -1))}>
-        ↑
-      </button>
-      <button type="button" className="icon-button" aria-label="Ниже" disabled={index === items.length - 1} onClick={() => void props.onSave(moveItem(items, index, 1))}>
-        ↓
-      </button>
       <button type="button" className="icon-button" aria-label={`Убрать «${item}»`} onClick={() => void props.onRemove(item)}>
         ×
       </button>
@@ -86,7 +80,7 @@ export function ListEditor(props: ListEditorProps) {
     <div className="dictionary">
       <ul className="dictionary-list" aria-label={props.label}>
         {props.items.map((item, index) => (
-          <ItemRow key={item} item={item} items={props.items} index={index} onSave={props.onSave} onRename={props.onRename} onRemove={props.onRemove} hrefFor={props.hrefFor} hrefLabel={props.hrefLabel} />
+          <ItemRow key={item} item={item} items={props.items} index={index} onRename={props.onRename} onRemove={props.onRemove} hrefFor={props.hrefFor} hrefLabel={props.hrefLabel} />
         ))}
       </ul>
       <div className="dictionary-row">

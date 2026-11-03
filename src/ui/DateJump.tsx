@@ -31,7 +31,14 @@ export function DateJump({ events }: { events: DiaryEvent[] }) {
   const [year, setYear] = useState<string | null>(null)
   const [month, setMonth] = useState<number | null>(null)
   const [day, setDay] = useState('')
-  if (years.length === 0) return null
+  if (years.length === 0) {
+    return (
+      <section className="card date-jump">
+        <h2>Перейти к дате</h2>
+        <p className="hint">Появится, когда в дневнике будут записи.</p>
+      </section>
+    )
+  }
   const inRange = (from: string, to: string) => dates.filter((date) => date >= from && date <= to).length
 
   return (

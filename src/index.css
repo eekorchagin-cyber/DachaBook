@@ -108,13 +108,28 @@ body {
   margin: 14px 0;
   min-width: 0;
   max-width: 100%;
+  scroll-margin-top: 72px;
+}
+
+.home-lookup {
+  max-height: min(85dvh, 720px);
+  overflow: auto;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+}
+
+.card-header h2 {
+  min-width: 0;
+}
+
+.card-header a {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .card-links {
@@ -479,8 +494,9 @@ textarea::placeholder {
 .button.big {
   flex: 1;
   text-align: center;
-  padding: 16px;
-  font-size: 1.05rem;
+  padding: 10px 8px;
+  font-size: 1rem;
+  white-space: nowrap;
 }
 
 .quick-actions {
@@ -1400,14 +1416,16 @@ details.card[open] > summary::before {
 
 .dictionary-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 8px;
+  min-width: 0;
 }
 
 .dictionary-row input {
-  flex: 1 1 220px;
+  flex: 1 1 auto;
+  width: 0;
   min-width: 0;
   font: inherit;
   padding: 8px 10px;

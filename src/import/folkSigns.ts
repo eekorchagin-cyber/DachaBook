@@ -64,7 +64,7 @@ export function dayOfYear(month: number, day: number): number {
   return DAYS_IN_MONTH.slice(0, month - 1).reduce((sum, days) => sum + days, 0) + day
 }
 
-/** Приметы на сегодня, а если их нет — ближайшие в пределах недели вперёд. */
+/** Приметы на сегодня, а если их нет — ближайшие в пределах days дней вперёд (год замыкается). */
 export function upcomingSigns<T extends Pick<FolkSign, 'month' | 'day'>>(signs: T[], today: { month: number; day: number }, days = 7): { signs: T[]; ahead: number } {
   const now = dayOfYear(today.month, today.day)
   for (let ahead = 0; ahead <= days; ahead++) {
