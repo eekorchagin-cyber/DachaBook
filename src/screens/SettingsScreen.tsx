@@ -38,7 +38,8 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
   const part = useRoute().query.get('part')
   useEffect(() => {
     if (!part) return
-    document.getElementById(part)?.scrollIntoView({ block: 'start' })
+    const timer = window.setTimeout(() => document.getElementById(part)?.scrollIntoView({ block: 'start' }), 0)
+    return () => window.clearTimeout(timer)
   }, [part])
   return (
     <Screen title="Настройки" help="settings" back="/more" tab="/more">
@@ -80,20 +81,10 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
           ))}
         </fieldset>
       </section>
-      <section className="card">
-        <h2>Справочники</h2>
-        <p className="hint">Виды работ, единицы, объекты, группы растений, расходные материалы, народные приметы.</p>
-        <a className="button secondary" href="#/dictionaries">
-          Открыть справочники
-        </a>
-      </section>
       <section className="card" id="updates">
-        <h2>Дополнительно</h2>
+        <h2>Проверка обновлений</h2>
         <p>{versionLabel()}</p>
         <UpdateCheck />
-        <a className="button secondary" href="#/lab">
-          Лаборатория проверок
-        </a>
       </section>
     </Screen>
   )

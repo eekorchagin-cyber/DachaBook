@@ -54,5 +54,6 @@ describe('народные приметы', () => {
     expect(upcomingSigns(signs, { month: 10, day: 10 })).toEqual({ signs: [signs[1]], ahead: 4 })
     expect(upcomingSigns(signs, { month: 12, day: 31 })).toEqual({ signs: [signs[0]], ahead: 7 })
     expect(upcomingSigns(signs, { month: 11, day: 1 }).signs).toEqual([])
+    expect(upcomingSigns(signs, { month: 11, day: 1 }, 366)).toEqual({ signs: [signs[0]], ahead: 67 })
   })
 })

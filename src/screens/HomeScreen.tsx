@@ -1,8 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { navigate } from '../app/router'
 import type { PhotoPosition } from '../app/store'
 import { versionLabel } from '../app/version'
 import { compareEvents } from '../domain/diaryFilter'
+import type { DiaryEvent } from '../domain/types'
 import { db } from '../storage/db'
 import { syncSummary, useSyncStatus } from '../sync/runner'
 import { AutoBackupWarning } from '../ui/AutoBackup'
@@ -35,7 +38,7 @@ export function HomeScreen({
   const latest = [...(events ?? [])].sort(compareEvents).slice(0, 5)
 
   return (
-    <Screen title="DachaBook" help="home" tab="/">
+    <Screen title="DachaBook" help="home" tab="/" actions={<HomeLookup events={events ?? []} />}>
       {plotPhotoId && (
         <a className="plot-hero" href="#/settings">
           <PlotPhoto id={plotPhotoId} />
@@ -58,28 +61,13 @@ export function HomeScreen({
           ✎ Новая запись
         </a>
         <a className="button big secondary" href="#/diary/new?type=measurement">
-          🌡 Измерения почвы
+          🌡 Измерения
         </a>
       </div>
-      <nav className="home-menu" aria-label="Главное меню">
-        <h2 className="section-title">Объекты</h2>
-        <a className="list-item" href="#/objects">
-          <strong>Объекты и места</strong>
-          <span className="muted">Газон, сад, грядки, дом и хозяйство</span>
-        </a>
-        <a className="list-item" href="#/objects?view=groups">
-          <strong>Группы растений</strong>
-          <span className="muted">Хвойные, ягодные кусты, гортензии</span>
-        </a>
-        <a className="button home-signs" href="#/signs">
-          Народные приметы
-        </a>
-      </nav>
       <WeatherCard />
       {signs && <TodaySignCard signs={signs} />}
       <UpcomingWorksCard />
       <UpcomingWateringCard />
-      {events && <DateJump events={events} />}
       <h2 className="section-title">Последние записи</h2>
       {events && latest.length === 0 && <EmptyState>Записей пока нет. Начните с кнопки «Новая запись».</EmptyState>}
       {latest.map((event) => (
@@ -92,6 +80,53 @@ export function HomeScreen({
       )}
       <p className="version app-version">{versionLabel()}</p>
     </Screen>
+  )
+}
+
+function HomeLookup({ events }: { events: DiaryEvent[] }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  return (
+    <>
+      <button type="button" className="icon-button" aria-label="Поиск и переход к дате" onClick={() => setOpen(true)}>
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="11" cy="11" r="7" />
+          <path d="M20 20l-3.5-3.5" />
+        </svg>
+      </button>
+      {open &&
+        createPortal(
+          <div className="sheet-backdrop" role="presentation" onClick={() => setOpen(false)}>
+            <div className="sheet home-lookup" role="dialog" aria-modal="true" aria-label="Поиск и переход к дате" onClick={(event) => event.stopPropagation()}>
+              <h2>Дневник</h2>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  setOpen(false)
+                  navigate(`/diary?text=${encodeURIComponent(text.trim())}`)
+                }}
+              >
+                <label className="field">
+                  Поиск по дневнику
+                  <input type="search" value={text} placeholder="Например: редис" aria-label="Поиск по дневнику" onChange={(event) => setText(event.target.value)} />
+                </label>
+                <div className="actions">
+                  <button type="submit" className="button">
+                    Найти
+                  </button>
+                </div>
+              </form>
+              <DateJump events={events} />
+              <div className="actions">
+                <button type="button" className="button secondary" onClick={() => setOpen(false)}>
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 

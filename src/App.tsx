@@ -41,9 +41,11 @@ export default function App() {
   }, [settings])
 
   const pathKey = route.path.join('/')
+  const part = route.query.get('part')
   useEffect(() => {
+    if (part) return
     window.scrollTo({ top: 0 })
-  }, [pathKey])
+  }, [pathKey, part])
 
   useEffect(() => {
     if (!settings?.authorName) return
@@ -80,9 +82,9 @@ export default function App() {
       }
       return (
         <DiaryScreen
-          key={`${route.query.get('from') ?? ''}-${route.query.get('to') ?? ''}`}
+          key={`${route.query.get('from') ?? ''}-${route.query.get('to') ?? ''}-${route.query.get('text') ?? ''}`}
           settings={settings}
-          initialFilter={{ from: route.query.get('from') ?? undefined, to: route.query.get('to') ?? undefined }}
+          initialFilter={{ from: route.query.get('from') ?? undefined, to: route.query.get('to') ?? undefined, text: route.query.get('text') ?? undefined }}
         />
       )
     case 'objects':

@@ -157,7 +157,7 @@ export function ShareScreen() {
                 try {
                   const ids = await storePhotos()
                   const text = caption ? `&comment=${encodeURIComponent(caption)}` : ''
-                  navigate(`/diary/new?type=observation&photos=${ids.join(',')}${text}`)
+                  navigate(`/diary/new?type=observation&date=${date}&photos=${ids.join(',')}${text}`)
                 } catch (caught) {
                   setError(errorText(caught))
                 }
