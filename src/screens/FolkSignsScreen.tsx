@@ -3,14 +3,14 @@ import { useEffect, useState } from 'react'
 import { repo } from '../app/store'
 import { MONTH_NAMES, todayMonthDay } from '../domain/dates'
 import type { DocInput, FolkSign } from '../domain/types'
-import { dayOfYear, folkSignDate, folkSignKey, parseFolkSigns, upcomingSigns } from '../import/folkSigns'
+import { byUpcoming, folkSignDate, folkSignKey, parseFolkSigns, upcomingSigns } from '../import/folkSigns'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { SearchButton, SearchQuery } from '../ui/SearchDialog'
 import { includesAllWords } from '../domain/diaryFilter'
 import { ActionButton } from '../ui/Section'
 
-const byDate = (a: FolkSign, b: FolkSign) => dayOfYear(a.month, a.day) - dayOfYear(b.month, b.day) || a.title.localeCompare(b.title, 'ru')
+const byDate = (a: FolkSign, b: FolkSign) => a.month - b.month || a.day - b.day || a.title.localeCompare(b.title, 'ru')
 
 function useFolkSigns(): FolkSign[] | undefined {
   return useLiveQuery(async () => (await db.folkSigns.filter((sign) => !sign.deletedAt).toArray()).sort(byDate), [])
@@ -38,24 +38,24 @@ function SignText({ sign, link = false }: { sign: FolkSign; link?: boolean }) {
   )
 }
 
-/** Карточка на главном экране: примета на сегодня или ближайшая из предстоящих. */
+/** Плашка на главном экране: одна ближайшая предстоящая примета. Сегодня — самая близкая. */
 export function TodaySignCard({ signs }: { signs: FolkSign[] }) {
   const today = todayMonthDay()
   const { signs: found, ahead } = upcomingSigns(signs, today, 366)
-  if (found.length === 0) return null
+  const sign = found[0]
+  if (!sign) return null
   return (
     <section className="card">
       <div className="card-header">
-        <h2>{ahead === 0 ? 'Народная примета на сегодня' : `Ближайшая примета: ${folkSignDate(found[0])}`}</h2>
+        <h2>Приметы</h2>
         <a className="small source-link" href="#/signs">
           Все приметы
         </a>
       </div>
-      {found.map((sign) => (
-        <p key={sign.id}>
-          <SignText sign={sign} link />
-        </p>
-      ))}
+      <p className="small muted">{ahead === 0 ? `Сегодня, ${folkSignDate(sign)}` : folkSignDate(sign)}</p>
+      <p>
+        <SignText sign={sign} link />
+      </p>
     </section>
   )
 }
@@ -172,11 +172,7 @@ export function FolkSignsScreen() {
     )
   }
 
-  const months = MONTH_NAMES.map((name, index) => ({
-    name,
-    month: index + 1,
-    signs: (signs ?? []).filter((sign) => sign.month === index + 1 && includesAllWords(query, `${sign.title} ${sign.text}`)),
-  })).filter((group) => group.signs.length > 0)
+  const ordered = [...(signs ?? [])].filter((sign) => includesAllWords(query, `${sign.title} ${sign.text}`)).sort(byUpcoming(today))
 
   return (
     <Screen title="Народные приметы" help="signs" back="/" tab="/">
@@ -195,23 +191,20 @@ export function FolkSignsScreen() {
       <SearchQuery query={query} onClear={() => setQuery('')} />
       <p className="hint">Фольклорный календарь по новому стилю. Сверяйте сроки работ с погодой, прогревом почвы и риском заморозков на участке.</p>
       {signs && signs.length === 0 && <EmptyState>Примет пока нет.</EmptyState>}
-      {months.map((group) => (
-        <section key={group.month}>
-          <h2 className="section-title">{group.name}</h2>
-          <ul className="list">
-            {group.signs.map((sign) => (
-              <li key={sign.id}>
-                <button type="button" className={sign.month === today.month && sign.day === today.day ? 'list-item today' : 'list-item'} onClick={() => setEditing({ id: sign.id })}>
-                  <strong>{folkSignDate(sign)}</strong>
-                  <span>
-                    <SignText sign={sign} />
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      {ordered.length > 0 && (
+        <ul className="list">
+          {ordered.map((sign) => (
+            <li key={sign.id}>
+              <button type="button" className={sign.month === today.month && sign.day === today.day ? 'list-item today' : 'list-item'} onClick={() => setEditing({ id: sign.id })}>
+                <strong>{folkSignDate(sign)}</strong>
+                <span>
+                  <SignText sign={sign} />
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </Screen>
   )
 }
