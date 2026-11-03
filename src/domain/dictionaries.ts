@@ -36,6 +36,15 @@ export function resolveRename(renames: Record<string, string>, name: string): st
   return current
 }
 
+/** Алфавит справочника: без учёта регистра, «ё» рядом с «е». */
+export function byAlphabet(a: string, b: string): number {
+  return a.localeCompare(b, 'ru', { sensitivity: 'base' })
+}
+
+export function sortAlphabet(items: string[]): string[] {
+  return [...items].sort(byAlphabet)
+}
+
 /** Объединение списков при восстановлении копии: свой порядок сохраняется, новые пункты добавляются в конец. */
 export function mergeItems(current: string[], incoming: string[]): string[] {
   return [...current, ...incoming.filter((item) => !current.some((existing) => same(existing, item)))]
@@ -68,16 +77,24 @@ function applyRenames(names: string[], renames: Record<string, string>): string[
 
 /** Сливает справочники двух устройств: переименование «Подкормка» → «Внесение удобрений» применяется и к старому списку. */
 export function mergeDictionaries(local: DictionarySnapshot, remote: DictionarySnapshot | null): DictionarySnapshot {
-  if (!remote) return local
+  if (!remote) {
+    return {
+      ...local,
+      workKinds: sortAlphabet(local.workKinds),
+      consumableUnits: sortAlphabet(local.consumableUnits),
+      consumableKinds: sortAlphabet(local.consumableKinds),
+      workConditions: sortAlphabet(local.workConditions),
+    }
+  }
   const localNewer = local.updatedAt >= remote.updatedAt
   const renames = localNewer ? { ...remote.workKindRenames, ...local.workKindRenames } : { ...local.workKindRenames, ...remote.workKindRenames }
   return {
     updatedAt: local.updatedAt > remote.updatedAt ? local.updatedAt : remote.updatedAt,
-    workKinds: applyRenames(unionLists(local.workKinds, remote.workKinds), renames),
+    workKinds: sortAlphabet(applyRenames(unionLists(local.workKinds, remote.workKinds), renames)),
     workKindRenames: renames,
-    consumableUnits: unionLists(local.consumableUnits, remote.consumableUnits),
-    consumableKinds: unionLists(local.consumableKinds, remote.consumableKinds),
-    workConditions: unionLists(local.workConditions, remote.workConditions),
+    consumableUnits: sortAlphabet(unionLists(local.consumableUnits, remote.consumableUnits)),
+    consumableKinds: sortAlphabet(unionLists(local.consumableKinds, remote.consumableKinds)),
+    workConditions: sortAlphabet(unionLists(local.workConditions, remote.workConditions)),
   }
 }
 

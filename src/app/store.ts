@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { UNITS } from '../domain/consumables'
+import { sortAlphabet } from '../domain/dictionaries'
 import type { PlotLocation } from '../domain/location'
 import { db } from '../storage/db'
 import { Repository } from '../storage/repository'
@@ -71,8 +72,11 @@ export async function getSetting<K extends keyof AppSettings>(key: K): Promise<A
 
 const DICTIONARY_KEYS = ['workKinds', 'workKindRenames', 'consumableUnits', 'consumableKinds', 'workConditions'] as const
 
+const SORTED_LISTS = ['workKinds', 'consumableUnits', 'consumableKinds', 'workConditions'] as const
+
 export async function setSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): Promise<void> {
-  await db.settings.put({ key, value })
+  const stored = (SORTED_LISTS as readonly string[]).includes(key) ? sortAlphabet(value as string[]) : value
+  await db.settings.put({ key, value: stored })
   if (key === 'authorName') currentAuthor = value as string
   if ((DICTIONARY_KEYS as readonly string[]).includes(key)) {
     await db.settings.put({ key: 'dictionariesUpdatedAt', value: new Date().toISOString() })
@@ -84,6 +88,10 @@ export function useSettings(): AppSettings | undefined {
     const rows = await db.settings.toArray()
     const values = Object.fromEntries(rows.map((row) => [row.key, row.value])) as Partial<AppSettings>
     const settings = { ...DEFAULT_SETTINGS, ...values }
+    settings.workKinds = sortAlphabet(settings.workKinds)
+    settings.consumableUnits = sortAlphabet(settings.consumableUnits)
+    settings.consumableKinds = sortAlphabet(settings.consumableKinds)
+    settings.workConditions = sortAlphabet(settings.workConditions)
     currentAuthor = settings.authorName
     return settings
   })

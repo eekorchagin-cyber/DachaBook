@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addRename, itemProblem, mergeDictionaries, mergeItems, moveItem, resolveRename, type DictionarySnapshot } from './dictionaries'
+import { addRename, byAlphabet, itemProblem, mergeDictionaries, mergeItems, moveItem, resolveRename, sortAlphabet, type DictionarySnapshot } from './dictionaries'
 
 describe('справочники', () => {
   it('не допускает пустых и повторяющихся пунктов, в том числе с другим регистром и «ё»', () => {
@@ -25,6 +25,11 @@ describe('справочники', () => {
     expect(resolveRename(renames, 'Удобрение')).toBe('Подкормка')
   })
 
+  it('сортирует справочник по алфавиту без учёта регистра', () => {
+    expect(sortAlphabet(['Полив', 'обрезка', 'Ёлка', 'ель'])).toEqual(['Ёлка', 'ель', 'обрезка', 'Полив'])
+    expect(byAlphabet('кг', 'л')).toBeLessThan(0)
+  })
+
   it('при объединении сохраняет свой порядок и добавляет новые пункты', () => {
     expect(mergeItems(['кг', 'л'], ['Л', 'шт.', 'кг', 'мешок'])).toEqual(['кг', 'л', 'шт.', 'мешок'])
   })
@@ -47,7 +52,7 @@ describe('справочники', () => {
       workConditions: [],
     }
     const merged = mergeDictionaries(ipad, phone)
-    expect(merged.workKinds).toEqual(['Внесение удобрений', 'Полив', 'Мульчирование'])
+    expect(merged.workKinds).toEqual(['Внесение удобрений', 'Мульчирование', 'Полив'])
     expect(merged.consumableUnits).toEqual(['кг', 'л'])
     expect(merged.consumableKinds).toEqual(['Удобрение'])
     expect(merged.workConditions).toEqual(['Как только просохнет почва после таяния снега'])
