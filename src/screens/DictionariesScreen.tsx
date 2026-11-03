@@ -33,11 +33,11 @@ export function DictionariesScreen({ settings }: { settings: AppSettings }) {
   }))
   const items = [
     { href: '#/dictionaries/work-kinds', title: 'Виды работ', text: 'Стрижка газона, полив, внесение удобрений… — выбор в записях работ', count: settings.workKinds.length },
-    { href: '#/dictionaries/units', title: 'Единицы расходных материалов', text: 'кг, л, шт. — для норм и расхода материалов', count: settings.consumableUnits.length },
     { href: '#/dictionaries/consumable-kinds', title: 'Виды расходных материалов', text: 'Удобрение, горюче-смазочные, бытовая химия — без остатков и норм', count: settings.consumableKinds.length },
-    { href: '#/dictionaries/work-conditions', title: 'Условия для проведения работ', text: 'Подпись к работе. День сама не назначает', count: settings.workConditions.length },
+    { href: '#/dictionaries/units', title: 'Единицы расходных материалов', text: 'кг, л, шт. — для норм и расхода материалов', count: settings.consumableUnits.length },
     { href: '#/consumables', title: 'Расходные материалы', text: 'Удобрения, средства, масло, уксус: нормы и описания', count: counts?.consumables },
-  ]
+    { href: '#/dictionaries/work-conditions', title: 'Условия для проведения работ', text: 'Подпись к работе. День сама не назначает', count: settings.workConditions.length },
+  ].sort((a, b) => a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }))
   return (
     <Screen title="Справочники" help="dictionaries" back="/more" tab="/more">
       <p className="hint">Списки, из которых выбираются значения в записях дневника. Нажмите на справочник, чтобы открыть и изменить его.</p>
@@ -75,7 +75,7 @@ export function DictionaryScreen({ kind, settings, query }: { kind: string; sett
       <Screen title="Виды работ" help="dictionaries" back="/dictionaries" tab="/more">
         <p className="hint">
           Нажмите на название, чтобы переименовать его (Enter — сохранить, Esc — отменить): вид работы изменится и во всех записях дневника, в плане и в связках с
-          материалами. Убранный вид останется в старых записях. «Связи» открывает группы и материалы этого вида. Новые пункты добавляются в конец списка, и в таком порядке они стоят в выпадающих списках.
+          материалами. Убранный вид останется в старых записях. «Связи» открывает группы и материалы этого вида. Список и выпадающие списки идут по алфавиту.
         </p>
         <ListEditor
           label="Виды работ"
