@@ -64,6 +64,18 @@ export function dayOfYear(month: number, day: number): number {
   return DAYS_IN_MONTH.slice(0, month - 1).reduce((sum, days) => sum + days, 0) + day
 }
 
+/** Сколько дней от сегодня до этой даты приметы. 0 — сегодня, дальше по кругу года. */
+export function daysAhead(month: number, day: number, today: { month: number; day: number }): number {
+  const now = dayOfYear(today.month, today.day)
+  const target = dayOfYear(month, day)
+  return (target - now + 366) % 366
+}
+
+/** Сверху ближайшая предстоящая, внизу самая дальняя. Сегодня считается ближайшей. */
+export function byUpcoming<T extends Pick<FolkSign, 'month' | 'day' | 'title'>>(today: { month: number; day: number }) {
+  return (a: T, b: T) => daysAhead(a.month, a.day, today) - daysAhead(b.month, b.day, today) || (a.title ?? '').localeCompare(b.title ?? '', 'ru')
+}
+
 /** Приметы на сегодня, а если их нет — ближайшие в пределах days дней вперёд (год замыкается). */
 export function upcomingSigns<T extends Pick<FolkSign, 'month' | 'day'>>(signs: T[], today: { month: number; day: number }, days = 7): { signs: T[]; ahead: number } {
   const now = dayOfYear(today.month, today.day)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import bundled from '../seed/folk-signs.md?raw'
-import { folkSignKey, parseDayMonth, parseFolkSigns, upcomingSigns } from './folkSigns'
+import { byUpcoming, folkSignKey, parseDayMonth, parseFolkSigns, upcomingSigns } from './folkSigns'
 
 const SAMPLE = `| Дата | Описание приметы |
 |---|---|
@@ -55,5 +55,16 @@ describe('народные приметы', () => {
     expect(upcomingSigns(signs, { month: 12, day: 31 })).toEqual({ signs: [signs[0]], ahead: 7 })
     expect(upcomingSigns(signs, { month: 11, day: 1 }).signs).toEqual([])
     expect(upcomingSigns(signs, { month: 11, day: 1 }, 366)).toEqual({ signs: [signs[0]], ahead: 67 })
+  })
+
+  it('сортирует от ближайшей предстоящей к самой дальней, через Новый год', () => {
+    const signs = [
+      { month: 1, day: 7, title: 'Рождество' },
+      { month: 10, day: 14, title: 'Покров' },
+      { month: 11, day: 14, title: 'Кузьма' },
+    ]
+    const today = { month: 11, day: 3 }
+    expect([...signs].sort(byUpcoming(today)).map((sign) => sign.title)).toEqual(['Кузьма', 'Рождество', 'Покров'])
+    expect(upcomingSigns(signs, today, 366).signs[0]?.title).toBe('Кузьма')
   })
 })
