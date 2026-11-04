@@ -160,17 +160,19 @@ export async function disableSync(): Promise<void> {
 
 const requested = new Set<string>()
 
-/** Оригинал фото или файла, которого нет на устройстве: скачать из облака (один раз за сеанс на файл). */
+/** Оригинал фото или файла, которого нет на устройстве: скачать из облака. Повтор — если скачать не удалось. */
 export async function requestOriginal(id: string): Promise<void> {
   if (requested.has(id)) return
   requested.add(id)
-  const adapter = await currentCloud()
-  const file = (await db.files.get(id)) as StoredFile | undefined
-  if (!adapter || !file) return
   try {
+    const adapter = await currentCloud()
+    const file = (await db.files.get(id)) as StoredFile | undefined
+    if (!adapter || !file) return
     await fetchOriginal(db, adapter, file)
   } catch {
-    requested.delete(id)
+    // Повтор при следующем открытии.
+  } finally {
+    if (!(await db.fileContents.get(id))?.original) requested.delete(id)
   }
 }
 

@@ -24,7 +24,10 @@ export function isHeic(blob: Blob, fileName: string): boolean {
 export async function addPhoto(blob: Blob, fileName: string): Promise<StoredFile> {
   const sha256 = await sha256Hex(blob)
   const existing = await findSame(sha256, 'photo')
-  if (existing) return existing
+  if (existing) {
+    await keepOriginal(existing.id, blob)
+    return existing
+  }
   const heic = isHeic(blob, fileName)
   let thumb: Thumbnail | undefined
   try {
@@ -52,7 +55,10 @@ export async function addPhoto(blob: Blob, fileName: string): Promise<StoredFile
 export async function addAttachment(blob: Blob, fileName: string): Promise<StoredFile> {
   const sha256 = await sha256Hex(blob)
   const existing = await findSame(sha256, 'attachment')
-  if (existing) return existing
+  if (existing) {
+    await keepOriginal(existing.id, blob)
+    return existing
+  }
   const file = await repo.create('files', {
     role: 'attachment',
     fileName,
@@ -63,6 +69,13 @@ export async function addAttachment(blob: Blob, fileName: string): Promise<Store
   })
   await db.fileContents.put({ id: file.id, original: blob })
   return file
+}
+
+/** Повторно выбранный файл с тем же содержимым не создаёт вторую запись, но пустую копию заполняет. */
+async function keepOriginal(id: string, blob: Blob): Promise<void> {
+  const content = await db.fileContents.get(id)
+  if (content?.original) return
+  await db.fileContents.put({ ...content, id, original: blob })
 }
 
 /** Временный адрес содержимого файла для <img> или открытия; освобождается при размонтировании. */
@@ -82,9 +95,21 @@ export function useFileUrl(id: string | undefined, variant: 'thumb' | 'original'
 }
 
 export async function openFile(id: string): Promise<void> {
-  const [meta, content] = await Promise.all([db.files.get(id), db.fileContents.get(id)])
+  let content = await db.fileContents.get(id)
+  if (!content?.original) {
+    await requestOriginal(id)
+    content = await db.fileContents.get(id)
+  }
+  const meta = await db.files.get(id)
   if (!content?.original) throw new Error('Оригинал файла недоступен на этом устройстве')
   const url = URL.createObjectURL(new Blob([content.original], { type: meta?.mime ?? content.original.type }))
-  window.open(url, '_blank', 'noopener')
+  const link = document.createElement('a')
+  link.href = url
+  link.target = '_blank'
+  link.rel = 'noopener'
+  if (meta?.fileName) link.download = meta.fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }

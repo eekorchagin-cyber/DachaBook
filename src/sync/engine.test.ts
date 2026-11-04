@@ -139,6 +139,28 @@ describe('синхронизация двух устройств через об
     expect(await synchronize(phone.database, cloud, options('iPhone'))).toMatchObject({ pulled: 1, thumbs: 1 })
   })
 
+  it('вложение таблицы уходит в облако и скачивается на другое устройство по запросу', async () => {
+    const cloud = new MemoryCloud()
+    const mac = device('Mac')
+    const tablet = device('iPad')
+    const file = await mac.repo.create('files', {
+      role: 'attachment',
+      fileName: 'Потребность в удобрениях.xls',
+      mime: 'application/vnd.ms-excel',
+      size: 4,
+      sha256: 'xls',
+      uploadState: 'local',
+    })
+    await mac.database.fileContents.put({ id: file.id, original: new Blob([new Uint8Array([9, 8, 7, 6])]) })
+    expect(await synchronize(mac.database, cloud, options('Mac'))).toMatchObject({ uploadedFiles: 1 })
+    expect(cloud.files.has(`files/originals/${file.id}.xls`)).toBe(true)
+
+    await synchronize(tablet.database, cloud, options('iPad'))
+    expect((await tablet.database.fileContents.get(file.id))?.original).toBeUndefined()
+    const original = await fetchOriginal(tablet.database, cloud, (await tablet.database.files.get(file.id)) as StoredFile)
+    expect(new Uint8Array(await original!.arrayBuffer())).toEqual(new Uint8Array([9, 8, 7, 6]))
+  })
+
   it('фото без уменьшенной копии (HEIC в Chrome): копию не запрашивают из облака при каждой синхронизации', async () => {
     const cloud = new MemoryCloud()
     const mac = device('Mac')
