@@ -5,7 +5,9 @@ import { navigate } from '../app/router'
 import type { PhotoPosition } from '../app/store'
 import { versionLabel } from '../app/version'
 import { compareEvents } from '../domain/diaryFilter'
+import { searchProgram, type ProgramSection } from '../domain/programSearch'
 import type { DiaryEvent } from '../domain/types'
+import { htmlToText } from '../lib/sanitize'
 import { db } from '../storage/db'
 import { syncSummary, useSyncStatus } from '../sync/runner'
 import { AutoBackupWarning } from '../ui/AutoBackup'
@@ -116,6 +118,7 @@ function HomeLookup({ events }: { events: DiaryEvent[] }) {
                   </button>
                 </div>
               </form>
+              <ProgramSearch onOpen={() => setOpen(false)} />
               <DateJump events={events} />
               <div className="actions">
                 <button type="button" className="button secondary" onClick={() => setOpen(false)}>
@@ -127,6 +130,91 @@ function HomeLookup({ events }: { events: DiaryEvent[] }) {
           document.body,
         )}
     </>
+  )
+}
+
+function ProgramSearch({ onOpen }: { onOpen: () => void }) {
+  const [text, setText] = useState('')
+  const [query, setQuery] = useState('')
+  const found = useLiveQuery(async () => {
+    if (!query) return [] as ProgramSection[]
+    const [references, files, works, objects, groups, consumables, events, zones, signs] = await Promise.all([
+      db.references.filter((item) => !item.deletedAt).toArray(),
+      db.files.toArray(),
+      db.planWorks.filter((item) => !item.deletedAt).toArray(),
+      db.objects.filter((item) => !item.deletedAt).toArray(),
+      db.plantGroups.filter((item) => !item.deletedAt).toArray(),
+      db.consumables.filter((item) => !item.deletedAt).toArray(),
+      db.events.filter((item) => !item.deletedAt).toArray(),
+      db.wateringZones.filter((item) => !item.deletedAt).toArray(),
+      db.folkSigns.filter((item) => !item.deletedAt).toArray(),
+    ])
+    const fileName = new Map(files.map((file) => [file.id, file.fileName]))
+    const objectName = new Map(objects.map((item) => [item.id, item.name]))
+    const groupName = new Map(groups.map((item) => [item.id, item.name]))
+    const names = (ids: string[], map: Map<string, string>) => ids.map((id) => map.get(id)).filter(Boolean).join(' ')
+    return searchProgram(query, {
+      articles: references.map((item) => ({
+        title: item.title,
+        text: [item.tags.join(' '), htmlToText(item.html), item.fileIds.map((id) => fileName.get(id)).filter(Boolean).join(' ')].join(' '),
+        href: `#/library/${item.id}`,
+      })),
+      works: works.map((item) => ({
+        title: item.title,
+        text: [item.workKind, item.note, names(item.objectIds, objectName), names(item.plantGroupIds, groupName)].filter(Boolean).join(' '),
+        href: `#/works?work=${item.id}`,
+      })),
+      events: events.map((item) => ({
+        title: item.comment.slice(0, 80) || item.workKind || 'Запись дневника',
+        text: [item.comment, item.workKind].filter(Boolean).join(' '),
+        href: `#/diary/${item.id}`,
+      })),
+      consumables: consumables.map((item) => ({
+        title: item.name,
+        text: [item.kind, item.description, item.note].filter(Boolean).join(' '),
+        href: `#/consumables?id=${item.id}`,
+      })),
+      objects: objects.map((item) => ({ title: item.name, text: item.description ?? '', href: '#/objects' })),
+      groups: groups.map((item) => ({ title: item.name, text: item.description ?? '', href: '#/objects?view=groups' })),
+      zones: zones.map((item) => ({ title: item.name, text: '', href: '#/watering' })),
+      signs: signs.map((item) => ({ title: item.title || item.text.slice(0, 80), text: item.text, href: '#/signs' })),
+    })
+  }, [query])
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        setQuery(text.trim())
+      }}
+    >
+      <h2>Поиск по всей программе</h2>
+      <label className="field">
+        Статьи, план работ, материалы, объекты
+        <input type="search" value={text} placeholder="Например: астильба" aria-label="Поиск по всей программе" onChange={(event) => setText(event.target.value)} />
+      </label>
+      <div className="actions">
+        <button type="submit" className="button">
+          Найти
+        </button>
+      </div>
+      {query && found && found.length === 0 && <p className="hint">Ничего не найдено.</p>}
+      {found?.map((section) => (
+        <section key={section.title}>
+          <h3 className="section-title">{section.title}</h3>
+          <ul className="list">
+            {section.hits.map((hit, index) => (
+              <li key={`${hit.href}-${index}`}>
+                <a className="list-item" href={hit.href} onClick={onOpen}>
+                  <strong>{hit.title}</strong>
+                  {hit.excerpt && <span className="muted excerpt">{hit.excerpt}</span>}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </form>
   )
 }
 
