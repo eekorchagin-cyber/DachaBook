@@ -294,7 +294,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
 
   if (result) {
     return (
-      <Screen title="Импорт из Evernote" help="import" back="/more" tab="/more">
+      <Screen title="Импорт из Evernote" help="import" back="/more/evernote" tab="/more">
         <section className="card">
           <h2>Импорт завершён</h2>
           <ul>
@@ -345,7 +345,7 @@ export function ImportScreen({ settings }: { settings: AppSettings }) {
     })
 
   return (
-    <Screen title="Импорт из Evernote" help="import" back="/more" tab="/more">
+    <Screen title="Импорт из Evernote" help="import" back="/more/evernote" tab="/more">
       <section className="card">
         <h2>1. Файлы ENEX</h2>
         <p className="hint">

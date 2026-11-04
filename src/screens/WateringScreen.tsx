@@ -292,10 +292,10 @@ export function WateringScreen({ settings }: { settings: AppSettings }) {
     .sort((a, b) => STATUS_ORDER[a.status.state] - STATUS_ORDER[b.status.state] || a.zone.name.localeCompare(b.zone.name, 'ru'))
 
   return (
-    <Screen title="Полив" help="watering" back="/more" tab="/more">
+    <Screen title="Полив" help="watering" back="/more/works" tab="/more">
       <p className="hint">
         Три независимые зоны — газон, сад и грядки. Рекомендация смотрит на расписание и осадки Open-Meteo. «Полито» открывает запись дневника. Координаты
-        участка: {settings.plotLocation ? 'заданы' : 'не заданы — «Ещё → Настройки → Участок»'}.
+        участка: {settings.plotLocation ? 'заданы' : 'не заданы — «Ещё → Настройки программы → Участок»'}.
       </p>
       <div className="actions">
         <button type="button" className="button" onClick={() => setEditing({})}>

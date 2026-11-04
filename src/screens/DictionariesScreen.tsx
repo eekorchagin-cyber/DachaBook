@@ -34,7 +34,7 @@ export function DictionariesScreen({ settings }: { settings: AppSettings }) {
   const items = [
     { href: '#/dictionaries/work-kinds', title: 'Виды работ', text: 'Стрижка газона, полив, внесение удобрений… — выбор в записях работ', count: settings.workKinds.length },
     { href: '#/dictionaries/consumable-kinds', title: 'Виды расходных материалов', text: 'Удобрение, горюче-смазочные, бытовая химия — без остатков и норм', count: settings.consumableKinds.length },
-    { href: '#/dictionaries/units', title: 'Единицы расходных материалов', text: 'кг, л, шт. — для норм и расхода материалов', count: settings.consumableUnits.length },
+    { href: '#/dictionaries/units', title: 'Единицы измерения расходных материалов', text: 'кг, л, шт. — для норм и расхода материалов', count: settings.consumableUnits.length },
     { href: '#/consumables', title: 'Расходные материалы', text: 'Удобрения, средства, масло, уксус: нормы и описания', count: counts?.consumables },
     { href: '#/dictionaries/work-conditions', title: 'Условия для проведения работ', text: 'Подпись к работе. День сама не назначает', count: settings.workConditions.length },
   ].sort((a, b) => a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }))
@@ -128,7 +128,7 @@ export function DictionaryScreen({ kind, settings, query }: { kind: string; sett
   }
   if (kind === 'units') {
     return (
-      <Screen title="Единицы материалов" help="dictionaries" back="/dictionaries" tab="/more">
+      <Screen title="Единицы измерения расходных материалов" help="dictionaries" back="/dictionaries" tab="/more">
         <p className="hint">Единицы для норм и расхода материалов. Переименование меняет единицу и у материалов; количества не пересчитываются.</p>
         <ListEditor
           label="Единицы расходных материалов"

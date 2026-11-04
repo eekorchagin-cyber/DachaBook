@@ -130,7 +130,7 @@ export default function App() {
     case 'guide':
       return <GuideScreen section={route.query.get('section') ?? undefined} />
     case 'more':
-      return <MoreScreen />
+      return <MoreScreen page={param} />
     case 'settings':
       return <SettingsScreen settings={settings} />
     default:

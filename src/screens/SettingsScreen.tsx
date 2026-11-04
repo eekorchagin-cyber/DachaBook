@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect, useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useRoute } from '../app/router'
 import { ensureSeeded } from '../app/seed'
 import { restoreBackup, type RestoreResult } from '../backup/backup'
@@ -36,56 +36,80 @@ const SCALES = [
 export function SettingsScreen({ settings }: { settings: AppSettings }) {
   const [name, setName] = useState(settings.authorName)
   const part = useRoute().query.get('part')
-  useEffect(() => {
-    if (!part) return
-    const timer = window.setTimeout(() => document.getElementById(part)?.scrollIntoView({ block: 'start' }), 0)
-    return () => window.clearTimeout(timer)
-  }, [part])
+  const account = (
+    <section className="card" id="account">
+      <h2>Учётная запись</h2>
+      <label className="field">
+        Ваше имя (подпись записей)
+        <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => void setSetting('authorName', name.trim())} />
+      </label>
+    </section>
+  )
+  const appearance = (
+    <section className="card" id="appearance">
+      <h2>Внешний вид</h2>
+      <fieldset className="choice">
+        <legend>Тема</legend>
+        {THEMES.map((theme) => (
+          <label key={theme.value}>
+            <input type="radio" name="theme" checked={settings.theme === theme.value} onChange={() => void setSetting('theme', theme.value)} />
+            {theme.label}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset className="choice">
+        <legend>Размер текста</legend>
+        {SCALES.map((scale) => (
+          <label key={scale.value}>
+            <input type="radio" name="scale" checked={settings.textScale === scale.value} onChange={() => void setSetting('textScale', scale.value)} />
+            {scale.label}
+          </label>
+        ))}
+      </fieldset>
+    </section>
+  )
+  const programLook = (
+    <section className="card" id="program">
+      <h2>Внешний вид программы</h2>
+      <fieldset className="choice">
+        <legend>Фото в записях дневника</legend>
+        {PHOTO_POSITIONS.map((position) => (
+          <label key={position.value}>
+            <input type="radio" name="photos" checked={settings.photoPosition === position.value} onChange={() => void setSetting('photoPosition', position.value)} />
+            {position.label}
+          </label>
+        ))}
+      </fieldset>
+    </section>
+  )
+  const updates = (
+    <section className="card" id="updates">
+      <h2>Проверка обновлений</h2>
+      <p>{versionLabel()}</p>
+      <UpdateCheck />
+    </section>
+  )
+  const pages: Record<string, { title: string; back: string; body: ReactNode }> = {
+    account: { title: 'Учётная запись', back: '/more/program', body: account },
+    plot: { title: 'Участок', back: '/more/program', body: <PlotSection settings={settings} /> },
+    appearance: { title: 'Внешний вид', back: '/more/program', body: appearance },
+    program: { title: 'Внешний вид программы', back: '/more/program', body: programLook },
+    updates: { title: 'Проверка обновлений', back: '/more/service', body: updates },
+  }
+  const page = part ? pages[part] : undefined
+  if (page) {
+    return (
+      <Screen title={page.title} help="settings" back={page.back} tab="/more">
+        {page.body}
+      </Screen>
+    )
+  }
   return (
-    <Screen title="Настройки" help="settings" back="/more" tab="/more">
-      <section className="card">
-        <h2>Учётная запись</h2>
-        <label className="field">
-          Ваше имя (подпись записей)
-          <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => void setSetting('authorName', name.trim())} />
-        </label>
-      </section>
+    <Screen title="Настройки" help="settings" back="/more/program" tab="/more">
+      {account}
       <PlotSection settings={settings} />
-      <section className="card" id="appearance">
-        <h2>Внешний вид</h2>
-        <fieldset className="choice">
-          <legend>Тема</legend>
-          {THEMES.map((theme) => (
-            <label key={theme.value}>
-              <input type="radio" name="theme" checked={settings.theme === theme.value} onChange={() => void setSetting('theme', theme.value)} />
-              {theme.label}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="choice">
-          <legend>Размер текста</legend>
-          {SCALES.map((scale) => (
-            <label key={scale.value}>
-              <input type="radio" name="scale" checked={settings.textScale === scale.value} onChange={() => void setSetting('textScale', scale.value)} />
-              {scale.label}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="choice">
-          <legend>Фото в записях дневника</legend>
-          {PHOTO_POSITIONS.map((position) => (
-            <label key={position.value}>
-              <input type="radio" name="photos" checked={settings.photoPosition === position.value} onChange={() => void setSetting('photoPosition', position.value)} />
-              {position.label}
-            </label>
-          ))}
-        </fieldset>
-      </section>
-      <section className="card" id="updates">
-        <h2>Проверка обновлений</h2>
-        <p>{versionLabel()}</p>
-        <UpdateCheck />
-      </section>
+      {appearance}
+      {programLook}
     </Screen>
   )
 }

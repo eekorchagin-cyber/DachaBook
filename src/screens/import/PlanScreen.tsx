@@ -36,7 +36,7 @@ export function PlanScreen() {
   const objectName = (id: string) => objects?.find((item) => item.id === id)?.name
 
   return (
-    <Screen title="Черновик плана" help="plan" back="/more" tab="/more">
+    <Screen title="Черновик плана" help="plan" back="/more/evernote" tab="/more">
       <div className="segmented">
         {(
           [

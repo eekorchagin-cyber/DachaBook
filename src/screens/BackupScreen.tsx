@@ -67,7 +67,7 @@ export function BackupScreen() {
   }
 
   return (
-    <Screen title="Резервная копия" help="backup" back="/more" tab="/more">
+    <Screen title="Резервная копия" help="backup" back="/more/cloud" tab="/more">
       <section className="card">
         <h2>Экспорт</h2>
         <p className="hint">

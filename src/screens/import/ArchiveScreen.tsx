@@ -52,7 +52,7 @@ export function ArchiveScreen() {
   const unused = (items ?? []).filter((item) => item.createdRecordIds.length === 0).length
 
   return (
-    <Screen title="Архив импорта" help="archive" back="/more" tab="/more">
+    <Screen title="Архив импорта" help="archive" back="/more/evernote" tab="/more">
       <p className="hint">
         Все строки и заметки из импортированных файлов в исходном виде. Всего: {items?.length ?? 0}, не использовано: {unused}.
       </p>
