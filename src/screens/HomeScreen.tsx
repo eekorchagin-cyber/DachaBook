@@ -40,7 +40,7 @@ export function HomeScreen({
   return (
     <Screen title="DachaBook" help="home" tab="/" actions={<HomeLookup events={events ?? []} />}>
       {plotPhotoId && (
-        <a className="plot-hero" href="#/settings">
+        <a className="plot-hero" href="#/settings?part=plot">
           <PlotPhoto id={plotPhotoId} />
         </a>
       )}
@@ -49,7 +49,7 @@ export function HomeScreen({
         <p className="plot-address">📍 {plotAddress}</p>
       ) : (
         <p className="hint">
-          <a className="plot-address-link" href="#/settings">
+          <a className="plot-address-link" href="#/settings?part=plot">
             Укажите адрес дачи в настройках
           </a>
         </p>

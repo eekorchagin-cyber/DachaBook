@@ -33,7 +33,7 @@ export function WeatherCard() {
       <section className="card">
         <h2>Погода на участке</h2>
         <p className="hint">
-          Чтобы видеть погоду и прогноз, укажите координаты участка: <a href="#/settings">«Ещё → Настройки → Участок»</a>.
+          Чтобы видеть погоду и прогноз, укажите координаты участка: <a href="#/settings?part=plot">«Ещё → Настройки программы → Участок»</a>.
         </p>
       </section>
     )

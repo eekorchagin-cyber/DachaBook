@@ -9,39 +9,56 @@ import { purgeDoc } from '../sync/engine'
 import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
 
-const GUIDE = { href: '#/guide', title: 'Как пользоваться DachaBook', text: 'Руководство: чтобы дача была в порядке и доставляла минимум хлопот' }
-
-const DICTIONARIES = [{ href: '#/dictionaries', title: 'Справочники', text: 'Виды работ, материалы, единицы и условия' }]
-
-const WORKS = [
-  { href: '#/works', title: 'План работ', text: 'Сезонные работы и отметки о выполнении' },
-  { href: '#/watering', title: 'Полив', text: 'Зоны, расписание и совет с учётом дождя' },
+const TOP = [
+  { href: '#/guide', title: 'Как пользоваться DachaBook' },
+  { href: '#/more/works', title: 'Настройки работ' },
+  { href: '#/dictionaries', title: 'Справочники' },
+  { href: '#/more/program', title: 'Настройки программы' },
+  { href: '#/more/service', title: 'Сервис' },
+  { href: '#/trash', title: 'Корзина' },
 ]
 
-const SETTINGS = [
-  { href: '#/settings?part=plot', title: 'Участок', text: 'Адрес, координаты и фото дачи' },
-  { href: '#/sync', title: 'Облако и резервное копирование', text: 'Яндекс Диск и копия в файл' },
-  { href: '#/settings?part=appearance', title: 'Внешний вид программы', text: 'Тема, размер текста, фото в записях' },
-  { href: '#/settings?part=updates', title: 'Проверка обновлений', text: 'Есть ли новая версия' },
-  { href: '#/lab', title: 'Лаборатория проверок (служебная)', text: 'Проверки хранения, сети и облака' },
+const WORKS = [
+  { href: '#/works', title: 'План работ' },
+  { href: '#/watering', title: 'Полив' },
+]
+
+const PROGRAM = [
+  { href: '#/settings?part=account', title: 'Учётная запись' },
+  { href: '#/settings?part=plot', title: 'Участок' },
+  { href: '#/more/users', title: 'Пользователи' },
+  { href: '#/settings?part=appearance', title: 'Внешний вид' },
+  { href: '#/more/cloud', title: 'Облако и резервное копирование' },
+  { href: '#/settings?part=program', title: 'Внешний вид программы' },
+]
+
+const CLOUD = [
+  { href: '#/sync', title: 'Яндекс Диск' },
+  { href: '#/backup', title: 'Резервная копия' },
+  { href: '#/more/clouds', title: 'Другие облака' },
 ]
 
 const SERVICE = [
-  { href: '#/diary/book', title: 'Дневник в PDF', text: 'Книга по годам и месяцам' },
-  { href: '#/import', title: 'Импорт из Evernote', text: 'Перенос дневников из файлов ENEX' },
-  { href: '#/archive', title: 'Архив импорта', text: 'Исходные строки Evernote' },
-  { href: '#/plan', title: 'Черновик плана из Evernote', text: 'Предложения работ по месяцам' },
-  { href: '#/share', title: 'Фото в дневник', text: 'Снимки из медиатеки к записи' },
+  { href: '#/share', title: 'Фото в дневник' },
+  { href: '#/diary/book', title: 'Дневник в PDF' },
+  { href: '#/more/evernote', title: 'Evernote' },
+  { href: '#/lab', title: 'Лаборатория проверок (служебная)' },
+  { href: '#/settings?part=updates', title: 'Проверка обновлений' },
 ]
 
-function LinkList({ items }: { items: { href: string; title: string; text: string }[] }) {
+const EVERNOTE = [
+  { href: '#/import', title: 'Импорт из Evernote' },
+  { href: '#/archive', title: 'Архив импорта' },
+  { href: '#/plan', title: 'Черновик плана из Evernote' },
+]
+
+function LinkList({ items }: { items: { href: string; title: string }[] }) {
   return (
     <ul className="list">
       {items.map((link) => (
         <li key={link.href}>
           <a className="list-item" href={link.href}>
             <strong>{link.title}</strong>
-            <span className="muted">{link.text}</span>
           </a>
         </li>
       ))}
@@ -49,26 +66,55 @@ function LinkList({ items }: { items: { href: string; title: string; text: strin
   )
 }
 
-export function MoreScreen() {
+function Menu({ title, back, items }: { title: string; back: string; items: { href: string; title: string }[] }) {
+  return (
+    <Screen title={title} help="more" back={back} tab="/more">
+      <LinkList items={items} />
+    </Screen>
+  )
+}
+
+export function MoreScreen({ page }: { page?: string }) {
+  if (page === 'works') return <Menu title="Настройки работ" back="/more" items={WORKS} />
+  if (page === 'program') return <Menu title="Настройки программы" back="/more" items={PROGRAM} />
+  if (page === 'cloud') return <Menu title="Облако и резервное копирование" back="/more/program" items={CLOUD} />
+  if (page === 'service') return <Menu title="Сервис" back="/more" items={SERVICE} />
+  if (page === 'evernote') return <Menu title="Evernote" back="/more/service" items={EVERNOTE} />
+  if (page === 'users') {
+    return (
+      <Screen title="Пользователи" help="more" back="/more/program" tab="/more">
+        <p className="hint">Общий дневник нескольких людей появится на следующих этапах. Сейчас записи подписываются одним именем — оно задаётся в учётной записи.</p>
+        <a className="button secondary" href="#/settings?part=account">
+          Учётная запись
+        </a>
+      </Screen>
+    )
+  }
+  if (page === 'clouds') {
+    return (
+      <Screen title="Другие облака" help="more" back="/more/cloud" tab="/more">
+        <p className="hint">Кроме Яндекс Диска другие облака пока не подключены. Дневник можно хранить в файле резервной копии.</p>
+        <div className="actions">
+          <a className="button secondary" href="#/sync">
+            Яндекс Диск
+          </a>
+          <a className="button secondary" href="#/backup">
+            Резервная копия
+          </a>
+        </div>
+      </Screen>
+    )
+  }
+  if (page) {
+    return (
+      <Screen title="Ещё" help="more" back="/more" tab="/more">
+        <EmptyState>Такого раздела нет.</EmptyState>
+      </Screen>
+    )
+  }
   return (
     <Screen title="Ещё" help="more" tab="/more">
-      <LinkList items={[GUIDE]} />
-      <h2 className="section-title">Справочники</h2>
-      <LinkList items={DICTIONARIES} />
-      <h2 className="section-title">Работы</h2>
-      <LinkList items={WORKS} />
-      <h2 className="section-title">Настройки</h2>
-      <LinkList items={SETTINGS} />
-      <ul className="list">
-        <li className="list-item">
-          <strong>Пользователи</strong>
-          <span className="muted">Появится на следующих этапах</span>
-        </li>
-      </ul>
-      <h2 className="section-title">Сервис</h2>
-      <LinkList items={SERVICE} />
-      <h2 className="section-title">Корзина</h2>
-      <LinkList items={[{ href: '#/trash', title: 'Корзина', text: 'Удалённые записи и материалы, восстановление' }]} />
+      <LinkList items={TOP} />
     </Screen>
   )
 }

@@ -1036,7 +1036,7 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
   const visible = groups.length + suggestions.length + closed.length + archived.length
 
   return (
-    <Screen title="План работ" help="works" back="/more" tab="/more">
+    <Screen title="План работ" help="works" back="/more/works" tab="/more">
       <div className="actions plan-actions">
         <button type="button" className="button" onClick={() => setEditing({})}>
           + Работа
@@ -1049,7 +1049,7 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
       <SearchQuery query={query} onClear={() => setQuery('')} />
       {!settings.plotLocation && (
         <p className="hint">
-          Для работ, зависящих от заморозков, нужны координаты участка: <a href="#/settings">«Ещё → Настройки → Участок»</a>.
+          Для работ, зависящих от заморозков, нужны координаты участка: <a href="#/settings?part=plot">«Ещё → Настройки программы → Участок»</a>.
         </p>
       )}
       <ClimateNote />

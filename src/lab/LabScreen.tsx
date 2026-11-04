@@ -30,8 +30,8 @@ export function LabScreen() {
   return (
     <main className="screen">
       <header className="screen-header">
-        <a href="#/" className="back">
-          ← Главная
+        <a href="#/more/service" className="back">
+          ← Сервис
         </a>
         <h1>Лаборатория проверок</h1>
         <p className="hint">

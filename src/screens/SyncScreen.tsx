@@ -73,7 +73,7 @@ export function SyncScreen() {
   const result = status.lastResult
 
   return (
-    <Screen title="Облако" help="sync" back="/more" tab="/more">
+    <Screen title="Яндекс Диск" help="sync" back="/more/cloud" tab="/more">
       <section className="card">
         <h2>Яндекс Диск</h2>
         {status.connected ? (
