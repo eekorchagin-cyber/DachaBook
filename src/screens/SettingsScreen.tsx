@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { useRoute } from '../app/router'
 import { ensureSeeded } from '../app/seed'
 import { restoreBackup, type RestoreResult } from '../backup/backup'
-import { setSetting, type AppSettings, type PhotoPosition, type ThemeSetting } from '../app/store'
+import { setSetting, type AppSettings, type ThemeSetting } from '../app/store'
 import { versionLabel } from '../app/version'
 import { locationText, parseLocation, roundLocation, type PlotLocation } from '../domain/location'
 import { addPhoto, isImageFile } from '../files/files'
@@ -19,12 +19,6 @@ const THEMES: { value: ThemeSetting; label: string }[] = [
   { value: 'system', label: 'Как в системе' },
   { value: 'light', label: 'Светлая' },
   { value: 'dark', label: 'Тёмная' },
-]
-
-const PHOTO_POSITIONS: { value: PhotoPosition; label: string }[] = [
-  { value: 'right', label: 'Справа от текста' },
-  { value: 'left', label: 'Слева от текста' },
-  { value: 'below', label: 'Под текстом' },
 ]
 
 const SCALES = [
@@ -47,7 +41,7 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
   )
   const appearance = (
     <section className="card" id="appearance">
-      <h2>Внешний вид</h2>
+      <h2>Внешний вид программы</h2>
       <fieldset className="choice">
         <legend>Тема</legend>
         {THEMES.map((theme) => (
@@ -68,20 +62,6 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
       </fieldset>
     </section>
   )
-  const programLook = (
-    <section className="card" id="program">
-      <h2>Внешний вид программы</h2>
-      <fieldset className="choice">
-        <legend>Фото в записях дневника</legend>
-        {PHOTO_POSITIONS.map((position) => (
-          <label key={position.value}>
-            <input type="radio" name="photos" checked={settings.photoPosition === position.value} onChange={() => void setSetting('photoPosition', position.value)} />
-            {position.label}
-          </label>
-        ))}
-      </fieldset>
-    </section>
-  )
   const updates = (
     <section className="card" id="updates">
       <h2>Проверка обновлений</h2>
@@ -92,8 +72,7 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
   const pages: Record<string, { title: string; back: string; body: ReactNode }> = {
     account: { title: 'Учётная запись', back: '/more/program', body: account },
     plot: { title: 'Участок', back: '/more/program', body: <PlotSection settings={settings} /> },
-    appearance: { title: 'Внешний вид', back: '/more/program', body: appearance },
-    program: { title: 'Внешний вид программы', back: '/more/program', body: programLook },
+    appearance: { title: 'Внешний вид программы', back: '/more/program', body: appearance },
     updates: { title: 'Проверка обновлений', back: '/more/service', body: updates },
   }
   const page = part ? pages[part] : undefined
@@ -109,7 +88,6 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
       {account}
       <PlotSection settings={settings} />
       {appearance}
-      {programLook}
     </Screen>
   )
 }
