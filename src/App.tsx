@@ -12,6 +12,7 @@ import { ShareScreen } from './screens/ShareScreen'
 import { GuideScreen } from './screens/GuideScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { ArchiveScreen } from './screens/import/ArchiveScreen'
+import { DayOneScreen } from './screens/import/DayOneScreen'
 import { ImportScreen } from './screens/import/ImportScreen'
 import { PlanScreen } from './screens/import/PlanScreen'
 import { LibraryScreen } from './screens/library/LibraryScreen'
@@ -112,6 +113,7 @@ export default function App() {
     case 'watering':
       return <WateringScreen settings={settings} />
     case 'import':
+      if (param === 'dayone') return <DayOneScreen />
       return <ImportScreen settings={settings} />
     case 'archive':
       return <ArchiveScreen />

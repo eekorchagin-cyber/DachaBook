@@ -56,7 +56,7 @@ export interface Measurement {
 
 /** Откуда взята импортированная запись (раздел 3 ТЗ, «Сведения об источнике»). */
 export interface ImportSource {
-  app: 'evernote'
+  app: 'evernote' | 'dayone'
   archiveItemIds: string[]
   files: string[]
   fingerprint: string

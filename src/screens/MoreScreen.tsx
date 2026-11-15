@@ -41,6 +41,7 @@ const SERVICE = [
   { href: '#/share', title: 'Фото в дневник' },
   { href: '#/diary/book', title: 'Дневник в PDF' },
   { href: '#/more/evernote', title: 'Evernote' },
+  { href: '#/import/dayone', title: 'Импорт из Day One' },
   { href: '#/lab', title: 'Лаборатория проверок (служебная)' },
   { href: '#/settings?part=updates', title: 'Проверка обновлений' },
 ]
