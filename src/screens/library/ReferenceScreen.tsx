@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
 import { navigate } from '../../app/router'
+import { pageLink } from '../../domain/labelProgram'
 import { repo } from '../../app/store'
 import type { DocInput, ReferenceMaterial } from '../../domain/types'
 import { addAttachment } from '../../files/files'
@@ -8,6 +9,7 @@ import { errorText } from '../../lib/format'
 import { htmlToText, textToHtml } from '../../lib/sanitize'
 import { db } from '../../storage/db'
 import { AttachmentRow } from '../../ui/AttachmentRow'
+import { CopyLinkButton } from '../../ui/CopyLinkButton'
 import { Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
 import { ReferenceBody } from './ReferenceBody'
@@ -46,6 +48,7 @@ export function ReferenceView({ id }: { id: string }) {
       )}
       <article className="card">
         <ReferenceBody html={material.html} />
+        <CopyLinkButton link={pageLink(`/library/${material.id}`)} />
       </article>
       {material.fileIds.length > 0 && (
         <section className="card">

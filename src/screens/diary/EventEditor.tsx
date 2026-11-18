@@ -4,6 +4,7 @@ import { navigate } from '../../app/router'
 import { repo, type AppSettings } from '../../app/store'
 import { todayAtSite } from '../../domain/dates'
 import { findConsumable, resolveUses, rowProblems, type ConsumableRow } from '../../domain/consumables'
+import { suggestStorage } from '../../domain/placeSuggestion'
 import type { Consumable, ConsumableUse, DiaryEvent, DocInput, EventType, PlanWork, WateringZone } from '../../domain/types'
 import { setSeason } from '../../plan/actions'
 import { addAttachment, addPhoto, isImageFile } from '../../files/files'
@@ -23,6 +24,7 @@ import { needsWeather, snapshotKindLabel } from '../../weather/snapshot'
 import { makeParts, type PartDraft } from '../../import/parts'
 import { splitSentences } from '../../import/split'
 import { SplitEditor } from '../../ui/SplitEditor'
+import { PlaceHint } from '../../ui/PlaceHint'
 import { SuggestInput } from '../../ui/SuggestInput'
 import { PhotoThumb } from './EventCard'
 import { splitEvent } from './splitEvent'
@@ -228,7 +230,9 @@ function EventForm({
     try {
       const uses =
         draft.type === 'work'
-          ? await resolveUses(draft.consumables, consumables, (name, unit) => repo.create('consumables', { name, unit, objectIds: draft.objectIds, active: true }))
+          ? await resolveUses(draft.consumables, consumables, (name, unit, extra) =>
+              repo.create('consumables', { name, unit, objectIds: draft.objectIds, place: extra?.place, kind: extra?.kind, active: true }),
+            )
           : undefined
       const saved = event ? await repo.update('events', event.id, toInput(draft, event, uses), event.revision) : await repo.create('events', toInput(draft, undefined, uses, plan?.id))
       if (plan && !event && plan.recurrence !== 'season') await setSeason(plan.id, saved.date.slice(0, 4), { status: 'done', date: saved.date, eventId: saved.id })
@@ -407,7 +411,15 @@ function EventForm({
             </select>
           </label>
         )}
-        {draft.type === 'work' && <ConsumableRows rows={draft.consumables} consumables={consumables} units={settings.consumableUnits} onChange={(rows) => update({ consumables: rows })} />}
+        {draft.type === 'work' && (
+          <ConsumableRows
+            rows={draft.consumables}
+            consumables={consumables}
+            units={settings.consumableUnits}
+            kinds={settings.consumableKinds}
+            onChange={(rows) => update({ consumables: rows })}
+          />
+        )}
         {draft.type === 'measurement' && (
           <div className="row">
             <label className="field">
@@ -554,7 +566,19 @@ function EventForm({
   )
 }
 
-function ConsumableRows({ rows, consumables, units, onChange }: { rows: ConsumableRow[]; consumables: Consumable[]; units: string[]; onChange: (rows: ConsumableRow[]) => void }) {
+function ConsumableRows({
+  rows,
+  consumables,
+  units,
+  kinds,
+  onChange,
+}: {
+  rows: ConsumableRow[]
+  consumables: Consumable[]
+  units: string[]
+  kinds: string[]
+  onChange: (rows: ConsumableRow[]) => void
+}) {
   const set = (index: number, patch: Partial<ConsumableRow>) => onChange(rows.map((row, current) => (current === index ? { ...row, ...patch } : row)))
   const names = consumables.filter((item) => item.active).map((item) => item.name).sort((a, b) => a.localeCompare(b, 'ru'))
   return (
@@ -562,18 +586,28 @@ function ConsumableRows({ rows, consumables, units, onChange }: { rows: Consumab
       <legend>Расходные материалы</legend>
       {rows.map((row, index) => {
         const known = findConsumable(consumables, row.name)
+        const suggestion = !known && !row.place?.trim() && !row.kind?.trim() ? suggestStorage(row.name, consumables, { kinds }) : undefined
         return (
-          <div key={index} className="consumable-row">
-            <SuggestInput ariaLabel="Материал" placeholder="Материал" value={row.name} options={names} onChange={(name) => set(index, { name })} />
-            <input aria-label="Количество" inputMode="decimal" placeholder="Кол-во" value={row.quantity} onChange={(change) => set(index, { quantity: change.target.value })} />
-            {known ? (
-              <span className="consumable-unit">{known.unit}</span>
-            ) : (
-              <SuggestInput ariaLabel="Единица" placeholder="ед." value={row.unit} options={units} onChange={(unit) => set(index, { unit })} alignEnd />
-            )}
-            <button type="button" className="icon-button" aria-label="Убрать материал" onClick={() => onChange(rows.filter((_, current) => current !== index))}>
-              ×
-            </button>
+          <div key={index}>
+            <div className="consumable-row">
+              <SuggestInput
+                ariaLabel="Материал"
+                placeholder="Материал"
+                value={row.name}
+                options={names}
+                onChange={(name) => set(index, { name, place: undefined, kind: undefined })}
+              />
+              <input aria-label="Количество" inputMode="decimal" placeholder="Кол-во" value={row.quantity} onChange={(change) => set(index, { quantity: change.target.value })} />
+              {known ? (
+                <span className="consumable-unit">{known.unit}</span>
+              ) : (
+                <SuggestInput ariaLabel="Единица" placeholder="ед." value={row.unit} options={units} onChange={(unit) => set(index, { unit })} alignEnd />
+              )}
+              <button type="button" className="icon-button" aria-label="Убрать материал" onClick={() => onChange(rows.filter((_, current) => current !== index))}>
+                ×
+              </button>
+            </div>
+            {suggestion && <PlaceHint suggestion={suggestion} applyKind onAccept={() => set(index, { place: suggestion.place, kind: suggestion.kind })} />}
           </div>
         )
       })}

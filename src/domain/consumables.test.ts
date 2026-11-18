@@ -41,6 +41,15 @@ describe('расходные материалы', () => {
     ])
   })
 
+  it('новому материалу передаёт принятое место и вид', async () => {
+    const created: string[] = []
+    await resolveUses([{ name: 'Калийная соль', quantity: '1', unit: 'кг', place: 'Сарай', kind: 'Удобрение' }], [], async (name, unit, extra) => {
+      created.push(`${name}|${unit}|${extra?.place}|${extra?.kind}`)
+      return { ...azofoska, id: 'k', name, unit }
+    })
+    expect(created).toEqual(['Калийная соль|кг|Сарай|Удобрение'])
+  })
+
   it('подсказывает, чего не хватает, и показывает количество по-русски', () => {
     expect(rowProblems([{ name: 'Азофоска', quantity: '', unit: '' }, { name: '', quantity: '2', unit: '' }])).toEqual([
       'укажите количество для «Азофоска»',

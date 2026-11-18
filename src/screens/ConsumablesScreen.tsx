@@ -3,12 +3,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { localPath, navigate, useRoute } from '../app/router'
 import { repo, useSettings } from '../app/store'
 import { findConsumable, normalizeUrl, parseQuantity, quantityText, UNITS, urlHost, usageByConsumable } from '../domain/consumables'
+import { groupByPlace, suggestStorage } from '../domain/placeSuggestion'
 import { todayAtSite } from '../domain/dates'
 import { convertQuantity, purchasePlan, substanceUnit, suggestedRateUnit } from '../domain/purchases'
 import type { CareObject, Consumable, DocInput, PlantGroup } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { SearchButton, SearchQuery } from '../ui/SearchDialog'
+import { PlaceHint } from '../ui/PlaceHint'
 import { SuggestInput } from '../ui/SuggestInput'
 import { ActionButton } from '../ui/Section'
 import { includesAllWords } from '../domain/diaryFilter'
@@ -94,6 +96,7 @@ function ConsumableForm({
 }) {
   const [name, setName] = useState(consumable?.name ?? '')
   const [kind, setKind] = useState(consumable?.kind ?? '')
+  const [place, setPlace] = useState(consumable?.place ?? '')
   const [unit, setUnit] = useState(consumable?.unit ?? 'кг')
   const [rate, setRate] = useState(consumable?.ratePerM2?.toString() ?? '')
   const [rateUnit, setRateUnit] = useState(consumable?.rateUnit ?? suggestedRateUnit(consumable?.unit ?? 'кг'))
@@ -140,6 +143,7 @@ function ConsumableForm({
       packUnit: separate && parseQuantity(pack) ? substance : undefined,
       objectIds,
       kind: kind || undefined,
+      place: place.trim() || undefined,
       description: description.trim() || undefined,
       url: link ?? undefined,
       note: note.trim() || undefined,
@@ -154,6 +158,10 @@ function ConsumableForm({
     onClose()
   }
 
+  const suggestion = nameTaken ? undefined : suggestStorage(name, consumables, { kind, kinds, exceptId: consumable?.id })
+  const offer = suggestion && !place.trim() && (suggestion.place || (!kind && suggestion.kind)) ? suggestion : undefined
+  const knownPlaces = [...new Set(consumables.flatMap((item) => (item.place?.trim() && item.id !== consumable?.id ? [item.place.trim()] : [])))].sort((a, b) => a.localeCompare(b, 'ru'))
+
   return (
     <section className="card">
       <h2>{consumable ? 'Изменить материал' : 'Новый расходный материал'}</h2>
@@ -162,6 +170,16 @@ function ConsumableForm({
         <input placeholder="Например, «Азофоска» или «Мульча из коры»" value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       {nameTaken && <p className="error">Материал с таким названием уже есть.</p>}
+      {offer && (
+        <PlaceHint
+          suggestion={offer}
+          applyKind={!kind}
+          onAccept={() => {
+            if (offer.place) setPlace(offer.place)
+            if (!kind && offer.kind) setKind(offer.kind)
+          }}
+        />
+      )}
       {kinds.length > 0 && (
         <label className="field">
           Вид материала
@@ -175,6 +193,21 @@ function ConsumableForm({
           </select>
         </label>
       )}
+      <label className="field">
+        Где лежит
+        <input
+          aria-label="Где лежит"
+          placeholder="Например, «Сарай, полка с удобрениями»"
+          value={place}
+          list="storage-places"
+          onChange={(event) => setPlace(event.target.value)}
+        />
+        <datalist id="storage-places">
+          {knownPlaces.map((item) => (
+            <option key={item} value={item} />
+          ))}
+        </datalist>
+      </label>
       <label className="field">
         Описание
         <textarea rows={3} placeholder="Что это и для чего: состав, действие, когда применять" value={description} onChange={(event) => setDescription(event.target.value)} />
@@ -344,8 +377,10 @@ export function ConsumablesScreen() {
 
   const objectNames = (ids: string[]) => ids.map((id) => objects.find((object) => object.id === id)?.name).filter(Boolean).join(', ')
   const linked = (ids: string[]) => objects.filter((object) => ids.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 }))
-  const active = consumables.filter((item) => item.active && includesAllWords(query, `${item.name} ${item.kind ?? ''} ${item.description ?? ''}`)).sort(byName)
+  const active = consumables.filter((item) => item.active && includesAllWords(query, `${item.name} ${item.kind ?? ''} ${item.place ?? ''} ${item.description ?? ''}`)).sort(byName)
   const archived = consumables.filter((item) => !item.active).sort(byName)
+  const placeGroups = groupByPlace(active)
+  const showPlaces = placeGroups.some((group) => group.place)
 
   return (
     <Screen title="Расходные материалы" help="consumables" back="/dictionaries" tab="/more">
@@ -358,39 +393,45 @@ export function ConsumablesScreen() {
       <SearchQuery query={query} onClear={() => setQuery('')} />
       <p className="hint">
         Удобрения, средства защиты, семена, мульча. Здесь — само вещество: единица, фасовка и норма на м². Сколько внести за сезон считается в работе плана, где материал выбран.
+        Для нового материала программа предложит полку, где уже лежат похожие.
       </p>
       {active.length === 0 && <EmptyState>Материалов пока нет. Добавьте их здесь или прямо в записи работы в дневнике.</EmptyState>}
-      <ul className="list">
-        {active.map((item) => {
-          const used = usage.get(item.id) ?? 0
-          const plan = purchasePlan({
-            unit: item.unit,
-            ratePerM2: item.ratePerM2,
-            rateUnit: item.rateUnit,
-            applications: 1,
-            packQuantity: item.packQuantity,
-            packUnit: item.packUnit,
-            areas: linked(item.objectIds),
-            usedThisYear: 0,
-            pastUsage: [],
-          })
-          return (
-            <li key={item.id}>
-              <button type="button" className="list-item" onClick={() => setEditing({ id: item.id })}>
-                <strong>{item.name}</strong>
-                <span className="muted">
-                  {plan.perUse !== undefined ? `на один раз ${quantityText(plan.perUse, plan.measureUnit)}` : `единица: ${item.unit}`}
-                  {` · израсходовано в ${year}: ${quantityText(used, item.unit)}`}
-                </span>
-                {item.objectIds.length > 0 && <span className="small">Для: {objectNames(item.objectIds)}</span>}
-                {item.description && <span className="small">{item.description}</span>}
-                {item.note && <span className="small">{item.note}</span>}
-                {item.url && <span className="small muted">Источник: {urlHost(item.url)}</span>}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+      {placeGroups.map((group) => (
+        <section key={group.place || 'none'}>
+          {showPlaces && <h2 className="section-title">{group.place || 'Место не указано'}</h2>}
+          <ul className="list">
+            {group.items.map((item) => {
+              const used = usage.get(item.id) ?? 0
+              const plan = purchasePlan({
+                unit: item.unit,
+                ratePerM2: item.ratePerM2,
+                rateUnit: item.rateUnit,
+                applications: 1,
+                packQuantity: item.packQuantity,
+                packUnit: item.packUnit,
+                areas: linked(item.objectIds),
+                usedThisYear: 0,
+                pastUsage: [],
+              })
+              return (
+                <li key={item.id}>
+                  <button type="button" className="list-item" onClick={() => setEditing({ id: item.id })}>
+                    <strong>{item.name}</strong>
+                    <span className="muted">
+                      {plan.perUse !== undefined ? `на один раз ${quantityText(plan.perUse, plan.measureUnit)}` : `единица: ${item.unit}`}
+                      {` · израсходовано в ${year}: ${quantityText(used, item.unit)}`}
+                    </span>
+                    {item.objectIds.length > 0 && <span className="small">Для: {objectNames(item.objectIds)}</span>}
+                    {item.description && <span className="small">{item.description}</span>}
+                    {item.note && <span className="small">{item.note}</span>}
+                    {item.url && <span className="small muted">Источник: {urlHost(item.url)}</span>}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ))}
       {archived.length > 0 && (
         <>
           <h2 className="section-title">Архив</h2>
@@ -399,7 +440,7 @@ export function ConsumablesScreen() {
               <li key={item.id}>
                 <button type="button" className="list-item" onClick={() => setEditing({ id: item.id })}>
                   <strong>{item.name}</strong>
-                  <span className="muted">в архиве, расход в дневнике сохранён</span>
+                  <span className="muted">в архиве, расход в дневнике сохранён{item.place ? ` · ${item.place}` : ''}</span>
                 </button>
               </li>
             ))}

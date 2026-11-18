@@ -28,6 +28,7 @@ const PROGRAM = [
   { href: '#/settings?part=plot', title: 'Участок' },
   { href: '#/more/users', title: 'Пользователи' },
   { href: '#/settings?part=appearance', title: 'Внешний вид программы' },
+  { href: '#/settings?part=labels', title: 'Печать меток' },
   { href: '#/more/cloud', title: 'Облако и резервное копирование' },
 ]
 

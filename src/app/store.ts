@@ -30,6 +30,11 @@ export interface AppSettings {
   plotPhotoId: string
   /** Плашка «Полив» на главной скрыта, пока сегодня раньше этой даты (ГГГГ-ММ-ДД). */
   wateringCardHiddenUntil: string
+  /**
+   * Программа печати меток на этом устройстве.
+   * url — адрес, по которому её открывает браузер: страница сайта или адрес вида name://.
+   */
+  labelProgram: { name: string; url: string }
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -59,6 +64,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   plotLocation: null,
   plotPhotoId: '',
   wateringCardHiddenUntil: '',
+  labelProgram: { name: '', url: '' },
 }
 
 let currentAuthor = ''
@@ -92,6 +98,11 @@ export function useSettings(): AppSettings | undefined {
     settings.consumableUnits = sortAlphabet(settings.consumableUnits)
     settings.consumableKinds = sortAlphabet(settings.consumableKinds)
     settings.workConditions = sortAlphabet(settings.workConditions)
+    const program = settings.labelProgram
+    settings.labelProgram = {
+      name: typeof program?.name === 'string' ? program.name : '',
+      url: typeof program?.url === 'string' ? program.url : '',
+    }
     currentAuthor = settings.authorName
     return settings
   })

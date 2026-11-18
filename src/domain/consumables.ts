@@ -57,6 +57,10 @@ export interface ConsumableRow {
   quantity: string
   /** Единица для нового материала; у существующего берётся из справочника. */
   unit: string
+  /** Куда положить новый материал, если пользователь принял подсказку. */
+  place?: string
+  /** Вид нового материала, если пользователь принял подсказку. */
+  kind?: string
 }
 
 export function findConsumable(consumables: Consumable[], name: string): Consumable | undefined {
@@ -77,7 +81,11 @@ export function rowProblems(rows: ConsumableRow[]): string[] {
  * Строки формы → расход в записи. Неизвестные названия становятся новыми материалами справочника (через create),
  * повторы одного материала складываются.
  */
-export async function resolveUses(rows: ConsumableRow[], consumables: Consumable[], create: (name: string, unit: string) => Promise<Consumable>): Promise<ConsumableUse[]> {
+export async function resolveUses(
+  rows: ConsumableRow[],
+  consumables: Consumable[],
+  create: (name: string, unit: string, extra?: { place?: string; kind?: string }) => Promise<Consumable>,
+): Promise<ConsumableUse[]> {
   const known = [...consumables]
   const uses: ConsumableUse[] = []
   for (const row of rows) {
@@ -85,7 +93,9 @@ export async function resolveUses(rows: ConsumableRow[], consumables: Consumable
     if (!row.name.trim() || quantity === undefined) continue
     let consumable = findConsumable(known, row.name)
     if (!consumable) {
-      consumable = await create(row.name.trim().replace(/\s+/g, ' '), row.unit.trim() || 'шт.')
+      const place = row.place?.trim() || undefined
+      const kind = row.kind?.trim() || undefined
+      consumable = await create(row.name.trim().replace(/\s+/g, ' '), row.unit.trim() || 'шт.', { place, kind })
       known.push(consumable)
     }
     const existing = uses.find((use) => use.consumableId === consumable.id)

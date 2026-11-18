@@ -176,6 +176,17 @@ body {
   font-size: 0.9rem;
 }
 
+.place-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.place-suggestion .hint {
+  margin: 0;
+}
+
 .badge {
   flex-shrink: 0;
   font-size: 0.75rem;
@@ -1337,6 +1348,17 @@ details.card[open] > summary::before {
 
 .source-link {
   color: var(--accent);
+}
+
+.copy-link {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.copy-link .hint,
+.copy-link .error {
+  margin: 0;
 }
 
 .button-link {

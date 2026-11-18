@@ -5,8 +5,10 @@ import { ensureSeeded } from '../app/seed'
 import { restoreBackup, type RestoreResult } from '../backup/backup'
 import { setSetting, type AppSettings, type ThemeSetting } from '../app/store'
 import { versionLabel } from '../app/version'
+import { labelProgramTarget } from '../domain/labelProgram'
 import { locationText, parseLocation, roundLocation, type PlotLocation } from '../domain/location'
 import { addPhoto, isImageFile } from '../files/files'
+import { openLabelProgram } from '../ui/CopyLinkButton'
 import { PlotPhoto } from '../ui/PlotPhoto'
 import { db } from '../storage/db'
 import { Screen } from '../ui/Screen'
@@ -73,6 +75,7 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
     account: { title: 'Учётная запись', back: '/more/program', body: account },
     plot: { title: 'Участок', back: '/more/program', body: <PlotSection settings={settings} /> },
     appearance: { title: 'Внешний вид программы', back: '/more/program', body: appearance },
+    labels: { title: 'Печать меток', back: '/more/program', body: <LabelProgramSection settings={settings} /> },
     updates: { title: 'Проверка обновлений', back: '/more/service', body: updates },
   }
   const page = part ? pages[part] : undefined
@@ -88,7 +91,73 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
       {account}
       <PlotSection settings={settings} />
       {appearance}
+      <LabelProgramSection settings={settings} />
     </Screen>
+  )
+}
+
+function LabelProgramSection({ settings }: { settings: AppSettings }) {
+  const [name, setName] = useState(settings.labelProgram.name)
+  const [url, setUrl] = useState(settings.labelProgram.url)
+  const target = labelProgramTarget(url)
+
+  const save = (nextName: string, nextUrl: string) => {
+    void setSetting('labelProgram', { name: nextName.trim(), url: nextUrl.trim() })
+  }
+
+  return (
+    <section className="card" id="labels">
+      <h2>Печать меток</h2>
+      <p className="hint">
+        Назначьте программу, в которой печатаете метки. После кнопки «Скопировать ссылку» DachaBook копирует ссылку и сразу открывает эту программу — вставьте ссылку в метку.
+      </p>
+      <label className="field">
+        Название программы
+        <input
+          value={name}
+          placeholder="Например, Niimbot"
+          onChange={(event) => {
+            setName(event.target.value)
+            save(event.target.value, url)
+          }}
+        />
+      </label>
+      <label className="field">
+        Адрес, по которому она открывается
+        <input
+          inputMode="url"
+          value={url}
+          placeholder="https://… или niimbot://"
+          onChange={(event) => {
+            setUrl(event.target.value)
+            save(name, event.target.value)
+          }}
+        />
+      </label>
+      {url.trim() && !target && <p className="error">Это не похоже на адрес. Пример: https://niimbot.com или niimbot://</p>}
+      {target && <p className="hint">После «Скопировать ссылку» откроется {name.trim() ? `«${name.trim()}»` : 'эта программа'}.</p>}
+      <div className="actions">
+        <button type="button" className="button secondary" disabled={!target} onClick={() => target && openLabelProgram(target)}>
+          Открыть программу
+        </button>
+        {(name.trim() || url.trim()) && (
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => {
+              setName('')
+              setUrl('')
+              save('', '')
+            }}
+          >
+            Убрать
+          </button>
+        )}
+      </div>
+      <p className="hint">
+        Укажите страницу сайта программы или адрес вида название:// — его пишет сама программа. После «Скопировать ссылку» этот адрес откроется, а ссылку останется вставить в метку.
+      </p>
+    </section>
   )
 }
 

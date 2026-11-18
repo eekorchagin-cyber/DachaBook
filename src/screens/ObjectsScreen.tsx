@@ -4,12 +4,14 @@ import { navigate } from '../app/router'
 import { repo } from '../app/store'
 import { fertilizerSummary } from '../domain/careLinks'
 import { includesAllWords } from '../domain/diaryFilter'
+import { pageLink } from '../domain/labelProgram'
 import { OBJECT_TYPES } from '../domain/labels'
 import type { CareObject, DocInput, ObjectType, PlantGroup } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { PhotoFields } from '../ui/PhotoFields'
 import { SearchButton, SearchQuery } from '../ui/SearchDialog'
+import { CopyLinkButton } from '../ui/CopyLinkButton'
 import { ActionButton } from '../ui/Section'
 import { useFertilizerLines } from './useFertilizerLines'
 import { WorkLinks } from './WorkLinks'
@@ -87,6 +89,7 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
       <PhotoFields ids={photoIds} notes={fileNotes} onChange={(ids, notes) => { setPhotoIds(ids); setFileNotes(notes) }} />
       {object && <WorkLinks objectId={object.id} returnPath={`/objects?object=${object.id}`} />}
       {object && <ObjectGroups objectId={object.id} />}
+      {object && <CopyLinkButton link={pageLink(`/objects?object=${object.id}`)} />}
       <div className="actions">
         <ActionButton disabled={!name.trim()} onRun={() => save()}>
           Сохранить
@@ -169,6 +172,7 @@ function GroupForm({ group, objects, fromDictionaries, onClose }: { group?: Plan
       ) : (
         <p className="hint">Сохраните группу, затем кнопкой «Добавить работу» откроется план с уже отмеченной группой.</p>
       )}
+      {group && <CopyLinkButton link={pageLink(`/objects?view=groups&group=${group.id}`)} />}
       <div className="actions">
         <ActionButton disabled={!name.trim()} onRun={() => save()}>
           Сохранить
