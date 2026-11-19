@@ -1,3 +1,57 @@
+/**
+ * Срок этапа «фото и файлы» по всему объёму, а не по каждому файлу.
+ * До первой передачи берётся уже известная скорость. Дальше — скорость этого этапа и оставшиеся байты.
+ */
+export class StageClock {
+  private totalBytes: number
+  private priorBytesPerSecond: number
+  private doneBytes = 0
+  private transferStartedAt: number | undefined
+
+  constructor(totalBytes: number, priorBytesPerSecond = 0) {
+    this.totalBytes = totalBytes
+    this.priorBytesPerSecond = priorBytesPerSecond
+  }
+
+  pending(): number {
+    return Math.max(0, this.totalBytes - this.doneBytes)
+  }
+
+  /** Первая настоящая передача, а не просмотр уже скопированных файлов. */
+  markStart(now = Date.now()): void {
+    if (this.transferStartedAt == null) this.transferStartedAt = now
+  }
+
+  /** planned — сколько собирались передать, sent — сколько передали. Разница из этапа уходит. */
+  settle(planned: number, sent: number): void {
+    this.totalBytes -= Math.max(0, planned - sent)
+    if (sent > 0) this.doneBytes += sent
+  }
+
+  /** Скорость этого этапа, байт в секунду. Пока передача короче секунды — ещё нет. */
+  rate(now = Date.now()): number | undefined {
+    if (this.doneBytes <= 0 || this.transferStartedAt == null) return undefined
+    const seconds = (now - this.transferStartedAt) / 1000
+    if (seconds < 1) return undefined
+    return this.doneBytes / seconds
+  }
+
+  /** Когда закончится весь оставшийся объём. null — скорость ещё неизвестна, undefined — передавать нечего. */
+  endsAt(now = Date.now()): number | null | undefined {
+    const left = this.pending()
+    if (left <= 0) return undefined
+    const rate = this.rate(now) ?? (this.priorBytesPerSecond > 0 ? this.priorBytesPerSecond : undefined)
+    if (rate == null) return null
+    return now + (left / rate) * 1000
+  }
+}
+
+/** Строка этапа и срок до её конца. Просроченный или ещё неизвестный срок — «оцениваю время». */
+export function withStageTime(head: string, endsAt: number | null, now = Date.now()): string {
+  if (endsAt == null || endsAt - now <= 0) return `${head} До конца этапа: оцениваю время.`
+  return `${head} ${remainingPhrase(endsAt - now, new Date(now))}`
+}
+
 /** Сколько ещё займёт этап по средней скорости уже пройденных элементов. */
 export class StageEta {
   private total: number

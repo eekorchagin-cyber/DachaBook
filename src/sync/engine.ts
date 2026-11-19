@@ -8,7 +8,7 @@ import { DOC_TABLES, type ConflictRecord, type DiaryDatabase, type SyncRecord } 
 import { verifyChecksum } from '../storage/repository'
 import type { CloudAdapter, RemoteEntry } from './cloud'
 import { syncDictionaries } from './dictionaries'
-import { StageEta } from './eta'
+import { StageClock, StageEta, withStageTime } from './eta'
 
 export type Collection = (typeof DOC_TABLES)[number]
 type Doc = DocMeta & Record<string, unknown>
@@ -33,6 +33,8 @@ export interface SyncMeta {
   diaryId: string
   cursors: Partial<Record<Collection, string>>
   lastSuccessAt?: string
+  /** Скорость прошлой передачи фото и файлов, байт в секунду. По ней срок этапа известен до начала копирования. */
+  fileBytesPerSecond?: number
 }
 
 export interface SyncResult {
@@ -52,8 +54,8 @@ export interface SyncOptions {
   author: string
   /** Первое подключение устройства к облаку, где уже есть дневник, при своих данных на устройстве. */
   firstConnect?: 'merge' | 'replace'
-  /** text — ход этапа и срок до его конца; detail — подробности текущего файла. */
-  onProgress?: (text: string, detail?: string) => void
+  /** text — ход этапа и срок до его конца; detail — подробности текущего файла. endsAt — когда закончится весь этап фото и файлов. */
+  onProgress?: (text: string, detail?: string, endsAt?: number | null) => void
   /** Файл, который передаётся сейчас. controller обрывает ожидание, не дожидаясь ответа сети. */
   onFile?: (file: StoredFile, controller: AbortController) => void
   onFileDone?: (id: string) => void
@@ -227,7 +229,7 @@ async function applySnapshot(database: DiaryDatabase, cloud: CloudAdapter, path:
   return true
 }
 
-type Report = (text: string, detail?: string) => void
+type Report = (text: string, detail?: string, endsAt?: number | null) => void
 
 async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta, result: SyncResult, report: Report): Promise<Map<string, Map<string, string | undefined>>> {
   const listed = new Map<string, Map<string, string | undefined>>()
@@ -391,6 +393,14 @@ async function fileHomes(database: DiaryDatabase): Promise<Map<string, string>> 
 
 const fileTitle = (file: StoredFile) => `«${file.fileName}» (${formatBytes(file.size)})`
 
+/** Сколько байт этого файла ещё предстоит отправить: оригинал и уменьшенная копия, которые уже лежат на устройстве. */
+function pendingBytes(content: { original?: Blob; thumb?: Blob } | undefined, state: SyncRecord | undefined): number {
+  let bytes = 0
+  if (content?.original && !state?.originalUploaded) bytes += content.original.size
+  if (content?.thumb && !state?.thumbUploaded) bytes += content.thumb.size
+  return bytes
+}
+
 /** Оригинал на этом устройстве или на другом, и адрес папки на Яндекс Диске. */
 function filePlace(file: StoredFile, hasOriginal: boolean, home?: string): string {
   const here = deviceHere()
@@ -435,14 +445,32 @@ async function passFile(
   }
 }
 
-/** Оригиналы и уменьшенные копии: отправка новых и получение уменьшенных копий, которых нет на устройстве. */
-async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: Report, options: SyncOptions): Promise<void> {
+/** Оригиналы и уменьшенные копии: сначала срок всего объёма, потом передача. */
+async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: Report, options: SyncOptions, meta: SyncMeta): Promise<void> {
   const files = ((await database.files.toArray()) as StoredFile[]).filter((file) => !file.deletedAt)
   const homes = await fileHomes(database)
-  const eta = new StageEta(files.length)
-  eta.start()
+  let totalBytes = 0
+  if (files.length > 0) {
+    report('Оцениваю фото и файлы…')
+    const states = await database.syncState.bulkGet(files.map((file) => `blob/${file.id}`))
+    const contents = await database.fileContents.bulkGet(files.map((file) => file.id))
+    for (let index = 0; index < files.length; index++) {
+      if (states[index]?.fileSkippedAt) continue
+      totalBytes += pendingBytes(contents[index], states[index])
+    }
+  }
+  const clock = new StageClock(totalBytes, meta.fileBytesPerSecond ?? 0)
   let done = 0
-  if (files.length > 0) report(`Фото и файлы: ${eta.progress()}.${eta.suffix()}`)
+  const stageLine = () => {
+    const head = `Фото и файлы: ${done} из ${files.length}.`
+    const endsAt = clock.endsAt()
+    return { text: endsAt === undefined ? head : withStageTime(head, endsAt), endsAt }
+  }
+  const tell = (detail?: string) => {
+    const line = stageLine()
+    report(line.text, detail, line.endsAt)
+  }
+  if (files.length > 0) tell()
   result.failed += await pool(files, ioParallel(Math.min(cloud.parallel ?? 3, 3)), async (file) => {
     const key = `blob/${file.id}`
     const state = (await database.syncState.get(key)) ?? { key }
@@ -451,26 +479,40 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
       if (stepped) return
       stepped = true
       done++
-      eta.finish()
+    }
+    let planned = 0
+    let settled = false
+    let sent = 0
+    const settle = () => {
+      if (settled) return
+      settled = true
+      clock.settle(planned, sent)
+      const rate = clock.rate()
+      if (rate) meta.fileBytesPerSecond = rate
     }
     if (state.fileSkippedAt) {
       step()
-      if (done % 20 === 0 || done === files.length) report(`Фото и файлы: ${eta.progress()}.${eta.suffix()}`)
+      if (done % 20 === 0 || done === files.length) tell()
       return
     }
     const controller = new AbortController()
     options.onFile?.(file, controller)
     const address = `Адрес на Яндекс Диске: DachaBook/diary/${originalPath(file)}.`
     const inDiary = homes.get(file.id) ? ` В программе: ${homes.get(file.id)}.` : ''
-    const stage = `Фото и файлы: ${eta.progress()}.${eta.suffix()}`
-    report(stage, `Сейчас ${fileTitle(file)}. ${address}${inDiary}`)
+    tell(`Сейчас ${fileTitle(file)}. ${address}${inDiary}`)
     try {
       try {
         await untilAbort(
           (async () => {
             const content = await database.fileContents.get(file.id)
-            report(stage, `Сейчас ${fileTitle(file)}. ${filePlace(file, !!content?.original, homes.get(file.id))}`)
+            const hadOriginal = !!state.originalUploaded
+            const hadThumb = !!state.thumbUploaded
+            planned = pendingBytes(content, state)
+            if (planned > 0) clock.markStart()
+            tell(`Сейчас ${fileTitle(file)}. ${filePlace(file, !!content?.original, homes.get(file.id))}`)
             await passFile(database, cloud, file, content, state, result, controller.signal)
+            if (!hadOriginal && state.originalUploaded && content?.original) sent += content.original.size
+            if (!hadThumb && state.thumbUploaded && content?.thumb) sent += content.thumb.size
           })(),
           controller.signal,
         )
@@ -478,14 +520,18 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
         if (!options.isFileSkipped?.(file.id)) throw error
         state.fileSkippedAt = new Date().toISOString()
         await database.syncState.put(state)
+        settle()
         step()
-        report(`Пропущен ${fileTitle(file)}. Фото и файлы: ${eta.progress()}.${eta.suffix()}`)
+        const line = stageLine()
+        report(`Пропущен ${fileTitle(file)}. ${line.text}`, undefined, line.endsAt)
         return
       }
       await database.syncState.put(state)
+      settle()
       step()
-      if (done % 20 === 0 || done === files.length) report(`Фото и файлы: ${eta.progress()}.${eta.suffix()}`)
+      if (done % 20 === 0 || done === files.length) tell()
     } finally {
+      settle()
       step()
       options.onFileDone?.(file.id)
     }
@@ -531,7 +577,7 @@ export async function pendingCount(database: DiaryDatabase): Promise<number> {
 
 /** Одна синхронизация: описание дневника → (первое подключение — снимок) → получение → отправка → файлы → снимок раз в сутки. */
 export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, options: SyncOptions): Promise<SyncResult> {
-  const report: Report = (text, detail) => options.onProgress?.(text, detail)
+  const report: Report = (text, detail, endsAt) => options.onProgress?.(text, detail, endsAt)
   const now = () => options.now?.() ?? new Date()
   const result: SyncResult = { pulled: 0, pushed: 0, conflicts: 0, thumbs: 0, uploadedFiles: 0, bootstrapped: false, failed: 0, errors: [] }
 
@@ -580,8 +626,7 @@ export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, 
     result.failed++
     result.errors.push(`Справочники: ${errorText(caught)}`)
   }
-  report('Фото и файлы…')
-  await syncFiles(database, cloud, result, report, options)
+  await syncFiles(database, cloud, result, report, options, meta)
 
   const interval = options.snapshotIntervalMs ?? 24 * 60 * 60 * 1000
   if (result.pushed > 0 && result.failed === 0 && (!manifest.snapshot || now().getTime() - Date.parse(manifest.snapshot.at) >= interval)) {

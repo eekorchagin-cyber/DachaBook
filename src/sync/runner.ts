@@ -8,6 +8,7 @@ import { db } from '../storage/db'
 import { reopenDatabase } from '../storage/idb'
 import type { CloudAdapter } from './cloud'
 import { fetchOriginal, forgetSync, pendingCount, readSyncMeta, synchronize, type SyncOptions, type SyncResult } from './engine'
+import { withStageTime } from './eta'
 import { YandexAuthError, YandexCloud } from './yandexCloud'
 
 export interface SyncStatus {
@@ -46,6 +47,37 @@ let lastRunAt = 0
 let failures = 0
 const inflight = new Map<string, { fileName: string; fileSize: string; controller: AbortController }>()
 const skippedNow = new Set<string>()
+let stageHead: string | undefined
+let stageEndsAt: number | null | undefined
+let stageTimer: ReturnType<typeof setInterval> | undefined
+
+function stopStageClock(): void {
+  stageHead = undefined
+  stageEndsAt = undefined
+  clearInterval(stageTimer)
+  stageTimer = undefined
+}
+
+/** Срок этапа фото и файлов обновляется, пока копируется текущий файл, а не только когда файл закончился. */
+function stageProgress(now = Date.now()): string | undefined {
+  if (!stageHead || stageEndsAt === undefined) return undefined
+  return withStageTime(stageHead, stageEndsAt, now)
+}
+
+function rememberStage(text: string, endsAt: number | null | undefined): void {
+  if (endsAt === undefined) {
+    stopStageClock()
+    return
+  }
+  stageHead = text.replace(/ До конца этапа.*$/, '')
+  stageEndsAt = endsAt
+  if (!stageTimer) {
+    stageTimer = setInterval(() => {
+      const progress = stageProgress()
+      if (progress) set({ progress })
+    }, 30_000)
+  }
+}
 /** Повтор после сбоя: через 1, 2, 5, затем каждые 10 минут. */
 const RETRY_MS = [60_000, 120_000, 300_000, 600_000]
 
@@ -143,12 +175,14 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
       appVersion: __APP_VERSION__,
       author: (await getSetting('authorName')) || 'Без имени',
       ...extra,
-      onProgress: (progress: string, detail?: string) =>
+      onProgress: (progress: string, detail?: string, endsAt?: number | null) => {
+        rememberStage(progress, endsAt)
         set({
-          progress,
+          progress: stageProgress() ?? progress,
           detail,
           ...(detail && /сейчас «/i.test(detail) ? shownFile() : { fileName: undefined, fileSize: undefined }),
-        }),
+        })
+      },
       onFile: (file: StoredFile, controller: AbortController) => {
         inflight.set(file.id, { fileName: file.fileName, fileSize: formatBytes(file.size), controller })
         set(shownFile())
@@ -178,6 +212,7 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
     else set({ error: errorText(caught), offline: !navigator.onLine })
   } finally {
     inflight.clear()
+    stopStageClock()
     set({ running: false, progress: undefined, detail: undefined, fileName: undefined, fileSize: undefined })
     await refreshCounts()
   }

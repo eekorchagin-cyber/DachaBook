@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { remainingPhrase, StageEta } from './eta'
+import { remainingPhrase, StageClock, StageEta } from './eta'
 
 describe('оставшееся время этапа', () => {
   it('называет минуты и часы', () => {
@@ -27,6 +27,27 @@ describe('оставшееся время этапа', () => {
     eta.finish()
     // 20 секунд на 2 элемента, впереди ещё 8: около минуты.
     expect(eta.suffix(20_000)).toBe(' До конца этапа осталось около 1 минуты.')
+  })
+
+  it('до копирования называет срок всего объёма, а не одного файла', () => {
+    const clock = new StageClock(1000, 100)
+    expect(clock.endsAt(1_000)).toBe(11_000)
+    clock.markStart(1_000)
+    expect(clock.endsAt(6_000)).toBe(16_000)
+    clock.settle(500, 500)
+    expect(clock.endsAt(6_000)).toBe(11_000)
+  })
+
+  it('без известной скорости ждёт первой передачи и вычитает байты, которые передавать не пришлось', () => {
+    const unknown = new StageClock(1000, 0)
+    expect(unknown.endsAt(1_000)).toBeNull()
+    unknown.markStart(0)
+    unknown.settle(250, 250)
+    expect(unknown.endsAt(5_000)).toBe(20_000)
+    const skipped = new StageClock(1000, 10)
+    skipped.settle(400, 0)
+    expect(skipped.pending()).toBe(600)
+    expect(skipped.endsAt(0)).toBe(60_000)
   })
 
   it('добирает объём этапа по мере того, как становятся известны порции', () => {

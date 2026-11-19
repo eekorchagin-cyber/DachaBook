@@ -5,7 +5,7 @@ import type { DiaryEvent, DocInput, StoredFile } from '../domain/types'
 import { DiaryDatabase } from '../storage/db'
 import { Repository } from '../storage/repository'
 import { resolveConflict } from './conflicts'
-import { fetchOriginal, localDataCount, pendingCount, purgeDoc, synchronize, type SyncOptions } from './engine'
+import { fetchOriginal, localDataCount, pendingCount, purgeDoc, readSyncMeta, synchronize, type SyncOptions } from './engine'
 import { MemoryCloud } from './memoryCloud'
 
 function device(name: string) {
@@ -305,5 +305,35 @@ describe('синхронизация двух устройств через об
 
     await synchronize(mac.database, cloud, options('Mac'))
     expect(stuckAttempts).toBe(1)
+  })
+
+  it('перед копированием называет срок всего этапа по общему объёму', async () => {
+    const cloud = new MemoryCloud()
+    const mac = device('Mac')
+    await synchronize(mac.database, cloud, options('Mac'))
+    const meta = await readSyncMeta(mac.database)
+    await mac.database.settings.put({ key: 'syncMeta', value: { ...meta, fileBytesPerSecond: 1 } })
+    const file = await mac.repo.create('files', { role: 'attachment', fileName: 'архив.zip', mime: 'application/zip', size: 4, sha256: 'z', uploadState: 'local' })
+    await mac.database.fileContents.put({ id: file.id, original: new Blob([new Uint8Array(4)]) })
+
+    let originals = 0
+    const realWrite = cloud.write.bind(cloud)
+    cloud.write = (path, data) => {
+      if (path.startsWith('files/originals/')) originals++
+      return realWrite(path, data)
+    }
+    const seen: { text: string; endsAt?: number | null }[] = []
+    await synchronize(
+      mac.database,
+      cloud,
+      options('Mac', {
+        onProgress: (text, _detail, endsAt) => {
+          if (text.startsWith('Фото и файлы') && originals === 0) seen.push({ text, endsAt })
+        },
+      }),
+    )
+
+    expect(seen[0]?.text).toContain('До конца этапа осталось меньше минуты')
+    expect(seen[0]?.endsAt).toBeGreaterThan(Date.now() - 60_000)
   })
 })
