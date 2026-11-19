@@ -1,9 +1,12 @@
 /** Сколько ещё займёт этап по средней скорости уже пройденных элементов. */
 export class StageEta {
+  private total: number
   private startedAt: number | undefined
   private done = 0
 
-  constructor(private total = 0) {}
+  constructor(total = 0) {
+    this.total = total
+  }
 
   start(now = Date.now()): void {
     this.startedAt = now
