@@ -8,6 +8,7 @@ import { DOC_TABLES, type ConflictRecord, type DiaryDatabase, type SyncRecord } 
 import { verifyChecksum } from '../storage/repository'
 import type { CloudAdapter, RemoteEntry } from './cloud'
 import { syncDictionaries } from './dictionaries'
+import { StageEta } from './eta'
 
 export type Collection = (typeof DOC_TABLES)[number]
 type Doc = DocMeta & Record<string, unknown>
@@ -227,22 +228,31 @@ async function applySnapshot(database: DiaryDatabase, cloud: CloudAdapter, path:
 
 async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta, result: SyncResult, report: (text: string) => void): Promise<Map<string, Map<string, string | undefined>>> {
   const listed = new Map<string, Map<string, string | undefined>>()
+  const eta = new StageEta()
+  eta.start()
   for (const collection of DOC_TABLES) {
     const { entries, cursor, complete } = await cloud.listChanges(`docs/${collection}`, meta.cursors[collection])
     if (complete) listed.set(collection, new Map(entries.map((entry) => [entry.path, entry.md5])))
     const keys = entries.map((entry) => `${collection}/${entry.name.replace(/\.json$/, '')}`)
     const states = await database.syncState.bulkGet(keys)
     const changed = entries.filter((entry, index) => !entry.md5 || states[index]?.remoteMd5 !== entry.md5)
+    eta.addTotal(changed.length)
     let done = 0
+    if (changed.length > 0) report(`Получение: ${collection}, 0 из ${changed.length}${eta.suffix()}`)
     const failed = await pool(changed, ioParallel(cloud.parallel ?? 4), async (entry: RemoteEntry) => {
-      const blob = await cloud.read(entry.path)
-      if (!blob) return
-      const text = await blob.text()
-      const outcome = await applyRemote(database, collection, JSON.parse(text) as Doc, entry.md5 ?? textMd5(text))
-      if (outcome === 'added' || outcome === 'updated' || outcome === 'purged') result.pulled++
-      if (outcome === 'conflict') result.conflicts++
-      if (outcome === 'corrupted') result.errors.push(`Повреждена запись в облаке: ${entry.path}`)
-      if (++done % 20 === 0) report(`Получение: ${collection}, ${done} из ${changed.length}`)
+      try {
+        const blob = await cloud.read(entry.path)
+        if (!blob) return
+        const text = await blob.text()
+        const outcome = await applyRemote(database, collection, JSON.parse(text) as Doc, entry.md5 ?? textMd5(text))
+        if (outcome === 'added' || outcome === 'updated' || outcome === 'purged') result.pulled++
+        if (outcome === 'conflict') result.conflicts++
+        if (outcome === 'corrupted') result.errors.push(`Повреждена запись в облаке: ${entry.path}`)
+      } finally {
+        done++
+        eta.finish()
+        if (done === 1 || done % 5 === 0 || done === changed.length) report(`Получение: ${collection}, ${done} из ${changed.length}${eta.suffix()}`)
+      }
     }, result.errors)
     // Курсор не сдвигается, если что-то не получено: при следующей синхронизации эти файлы будут прочитаны снова.
     if (cursor && failed === 0) meta.cursors[collection] = cursor
@@ -287,34 +297,43 @@ async function pushTombstones(database: DiaryDatabase, cloud: CloudAdapter, auth
 
 async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<string, Map<string, string | undefined>>, result: SyncResult, report: (text: string) => void): Promise<void> {
   const conflicted = new Set((await database.conflicts.toArray()).map((item) => item.key))
+  const eta = new StageEta()
+  eta.start()
   for (const collection of DOC_TABLES) {
     const docs = (await database.table(collection).toArray()) as Doc[]
     const states = await database.syncState.bulkGet(docs.map((doc) => `${collection}/${doc.id}`))
     const dirty = docs.filter((doc, index) => doc.revision !== states[index]?.revision && !conflicted.has(`${collection}/${doc.id}`))
+    eta.addTotal(dirty.length)
     let done = 0
+    if (dirty.length > 0) report(`Отправка: ${collection}, 0 из ${dirty.length}${eta.suffix()}`)
     result.failed += await pool(dirty, ioParallel(cloud.parallel ?? 4), async (doc) => {
-      const key = `${collection}/${doc.id}`
-      const path = docPath(collection, doc.id)
-      const state = await database.syncState.get(key)
-      const known = listed.get(collection)
-      const remote = known ? (known.has(path) ? { md5: known.get(path) } : null) : await cloud.stat(path)
-      if (remote && remote.md5 !== state?.remoteMd5) {
-        // В облаке появилась другая версия: сначала получить её, отправлять только если она старше локальной.
-        const blob = await cloud.read(path)
-        if (blob) {
-          const text = await blob.text()
-          const outcome = await applyRemote(database, collection, JSON.parse(text) as Doc, remote.md5 ?? textMd5(text))
-          if (outcome === 'conflict') result.conflicts++
-          if (outcome !== 'kept') return
+      try {
+        const key = `${collection}/${doc.id}`
+        const path = docPath(collection, doc.id)
+        const state = await database.syncState.get(key)
+        const known = listed.get(collection)
+        const remote = known ? (known.has(path) ? { md5: known.get(path) } : null) : await cloud.stat(path)
+        if (remote && remote.md5 !== state?.remoteMd5) {
+          // В облаке появилась другая версия: сначала получить её, отправлять только если она старше локальной.
+          const blob = await cloud.read(path)
+          if (blob) {
+            const text = await blob.text()
+            const outcome = await applyRemote(database, collection, JSON.parse(text) as Doc, remote.md5 ?? textMd5(text))
+            if (outcome === 'conflict') result.conflicts++
+            if (outcome !== 'kept') return
+          }
         }
+        const current = (await database.table(collection).get(doc.id)) as Doc | undefined
+        if (!current) return
+        const text = docText(current)
+        await cloud.write(path, new Blob([text], { type: 'application/json' }))
+        await database.syncState.put({ ...(await database.syncState.get(key)), key, revision: current.revision, remoteMd5: textMd5(text), purged: false })
+        result.pushed++
+      } finally {
+        done++
+        eta.finish()
+        if (done === 1 || done % 5 === 0 || done === dirty.length) report(`Отправка: ${collection}, ${done} из ${dirty.length}${eta.suffix()}`)
       }
-      const current = (await database.table(collection).get(doc.id)) as Doc | undefined
-      if (!current) return
-      const text = docText(current)
-      await cloud.write(path, new Blob([text], { type: 'application/json' }))
-      await database.syncState.put({ ...(await database.syncState.get(key)), key, revision: current.revision, remoteMd5: textMd5(text), purged: false })
-      result.pushed++
-      if (++done % 20 === 0) report(`Отправка: ${collection}, ${done} из ${dirty.length}`)
     }, result.errors)
   }
 }
@@ -417,25 +436,36 @@ async function passFile(
 async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: (text: string) => void, options: SyncOptions): Promise<void> {
   const files = ((await database.files.toArray()) as StoredFile[]).filter((file) => !file.deletedAt)
   const homes = await fileHomes(database)
+  const eta = new StageEta(files.length)
+  eta.start()
   let done = 0
+  if (files.length > 0) report(`Фото и файлы: 0 из ${files.length}${eta.suffix()}`)
   result.failed += await pool(files, ioParallel(Math.min(cloud.parallel ?? 3, 3)), async (file) => {
     const key = `blob/${file.id}`
     const state = (await database.syncState.get(key)) ?? { key }
+    let stepped = false
+    const step = () => {
+      if (stepped) return
+      stepped = true
+      done++
+      eta.finish()
+    }
     if (state.fileSkippedAt) {
-      if (++done % 20 === 0) report(`Фото и файлы: ${done} из ${files.length}`)
+      step()
+      if (done % 20 === 0 || done === files.length) report(`Фото и файлы: ${done} из ${files.length}${eta.suffix()}`)
       return
     }
     const controller = new AbortController()
     options.onFile?.(file, controller)
     const address = `Адрес на Яндекс Диске: DachaBook/diary/${originalPath(file)}.`
     const inDiary = homes.get(file.id) ? ` В программе: ${homes.get(file.id)}.` : ''
-    report(`Фото и файлы: ${done} из ${files.length}, сейчас ${fileTitle(file)}. ${address}${inDiary}`)
+    report(`Фото и файлы: ${done} из ${files.length}, сейчас ${fileTitle(file)}. ${address}${inDiary}${eta.suffix()}`)
     try {
       try {
         await untilAbort(
           (async () => {
             const content = await database.fileContents.get(file.id)
-            report(`Фото и файлы: ${done} из ${files.length}, сейчас ${fileTitle(file)}. ${filePlace(file, !!content?.original, homes.get(file.id))}`)
+            report(`Фото и файлы: ${done} из ${files.length}, сейчас ${fileTitle(file)}. ${filePlace(file, !!content?.original, homes.get(file.id))}${eta.suffix()}`)
             await passFile(database, cloud, file, content, state, result, controller.signal)
           })(),
           controller.signal,
@@ -444,12 +474,15 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
         if (!options.isFileSkipped?.(file.id)) throw error
         state.fileSkippedAt = new Date().toISOString()
         await database.syncState.put(state)
-        report(`Пропущен ${fileTitle(file)}. Фото и файлы: ${++done} из ${files.length}`)
+        step()
+        report(`Пропущен ${fileTitle(file)}. Фото и файлы: ${done} из ${files.length}${eta.suffix()}`)
         return
       }
       await database.syncState.put(state)
-      if (++done % 20 === 0) report(`Фото и файлы: ${done} из ${files.length}`)
+      step()
+      if (done % 20 === 0 || done === files.length) report(`Фото и файлы: ${done} из ${files.length}${eta.suffix()}`)
     } finally {
+      step()
       options.onFileDone?.(file.id)
     }
   }, result.errors)
