@@ -52,7 +52,8 @@ export interface SyncOptions {
   author: string
   /** Первое подключение устройства к облаку, где уже есть дневник, при своих данных на устройстве. */
   firstConnect?: 'merge' | 'replace'
-  onProgress?: (text: string) => void
+  /** text — ход этапа и срок до его конца; detail — подробности текущего файла. */
+  onProgress?: (text: string, detail?: string) => void
   /** Файл, который передаётся сейчас. controller обрывает ожидание, не дожидаясь ответа сети. */
   onFile?: (file: StoredFile, controller: AbortController) => void
   onFileDone?: (id: string) => void
@@ -226,7 +227,9 @@ async function applySnapshot(database: DiaryDatabase, cloud: CloudAdapter, path:
   return true
 }
 
-async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta, result: SyncResult, report: (text: string) => void): Promise<Map<string, Map<string, string | undefined>>> {
+type Report = (text: string, detail?: string) => void
+
+async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta, result: SyncResult, report: Report): Promise<Map<string, Map<string, string | undefined>>> {
   const listed = new Map<string, Map<string, string | undefined>>()
   const eta = new StageEta()
   eta.start()
@@ -238,7 +241,7 @@ async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta
     const changed = entries.filter((entry, index) => !entry.md5 || states[index]?.remoteMd5 !== entry.md5)
     eta.addTotal(changed.length)
     let done = 0
-    if (changed.length > 0) report(`Получение: ${collection}, 0 из ${changed.length}${eta.suffix()}`)
+    if (changed.length > 0) report(`Получение: ${eta.progress()}.${eta.suffix()}`)
     const failed = await pool(changed, ioParallel(cloud.parallel ?? 4), async (entry: RemoteEntry) => {
       try {
         const blob = await cloud.read(entry.path)
@@ -251,7 +254,7 @@ async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta
       } finally {
         done++
         eta.finish()
-        if (done === 1 || done % 5 === 0 || done === changed.length) report(`Получение: ${collection}, ${done} из ${changed.length}${eta.suffix()}`)
+        if (done === 1 || done % 5 === 0 || done === changed.length) report(`Получение: ${eta.progress()}.${eta.suffix()}`)
       }
     }, result.errors)
     // Курсор не сдвигается, если что-то не получено: при следующей синхронизации эти файлы будут прочитаны снова.
@@ -295,7 +298,7 @@ async function pushTombstones(database: DiaryDatabase, cloud: CloudAdapter, auth
   }
 }
 
-async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<string, Map<string, string | undefined>>, result: SyncResult, report: (text: string) => void): Promise<void> {
+async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<string, Map<string, string | undefined>>, result: SyncResult, report: Report): Promise<void> {
   const conflicted = new Set((await database.conflicts.toArray()).map((item) => item.key))
   const eta = new StageEta()
   eta.start()
@@ -305,7 +308,7 @@ async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<st
     const dirty = docs.filter((doc, index) => doc.revision !== states[index]?.revision && !conflicted.has(`${collection}/${doc.id}`))
     eta.addTotal(dirty.length)
     let done = 0
-    if (dirty.length > 0) report(`Отправка: ${collection}, 0 из ${dirty.length}${eta.suffix()}`)
+    if (dirty.length > 0) report(`Отправка: ${eta.progress()}.${eta.suffix()}`)
     result.failed += await pool(dirty, ioParallel(cloud.parallel ?? 4), async (doc) => {
       try {
         const key = `${collection}/${doc.id}`
@@ -332,7 +335,7 @@ async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<st
       } finally {
         done++
         eta.finish()
-        if (done === 1 || done % 5 === 0 || done === dirty.length) report(`Отправка: ${collection}, ${done} из ${dirty.length}${eta.suffix()}`)
+        if (done === 1 || done % 5 === 0 || done === dirty.length) report(`Отправка: ${eta.progress()}.${eta.suffix()}`)
       }
     }, result.errors)
   }
@@ -433,13 +436,13 @@ async function passFile(
 }
 
 /** Оригиналы и уменьшенные копии: отправка новых и получение уменьшенных копий, которых нет на устройстве. */
-async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: (text: string) => void, options: SyncOptions): Promise<void> {
+async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: Report, options: SyncOptions): Promise<void> {
   const files = ((await database.files.toArray()) as StoredFile[]).filter((file) => !file.deletedAt)
   const homes = await fileHomes(database)
   const eta = new StageEta(files.length)
   eta.start()
   let done = 0
-  if (files.length > 0) report(`Фото и файлы: 0 из ${files.length}${eta.suffix()}`)
+  if (files.length > 0) report(`Фото и файлы: ${eta.progress()}.${eta.suffix()}`)
   result.failed += await pool(files, ioParallel(Math.min(cloud.parallel ?? 3, 3)), async (file) => {
     const key = `blob/${file.id}`
     const state = (await database.syncState.get(key)) ?? { key }
@@ -452,20 +455,21 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
     }
     if (state.fileSkippedAt) {
       step()
-      if (done % 20 === 0 || done === files.length) report(`Фото и файлы: ${done} из ${files.length}${eta.suffix()}`)
+      if (done % 20 === 0 || done === files.length) report(`Фото и файлы: ${eta.progress()}.${eta.suffix()}`)
       return
     }
     const controller = new AbortController()
     options.onFile?.(file, controller)
     const address = `Адрес на Яндекс Диске: DachaBook/diary/${originalPath(file)}.`
     const inDiary = homes.get(file.id) ? ` В программе: ${homes.get(file.id)}.` : ''
-    report(`Фото и файлы: ${done} из ${files.length}, сейчас ${fileTitle(file)}. ${address}${inDiary}${eta.suffix()}`)
+    const stage = `Фото и файлы: ${eta.progress()}.${eta.suffix()}`
+    report(stage, `Сейчас ${fileTitle(file)}. ${address}${inDiary}`)
     try {
       try {
         await untilAbort(
           (async () => {
             const content = await database.fileContents.get(file.id)
-            report(`Фото и файлы: ${done} из ${files.length}, сейчас ${fileTitle(file)}. ${filePlace(file, !!content?.original, homes.get(file.id))}${eta.suffix()}`)
+            report(stage, `Сейчас ${fileTitle(file)}. ${filePlace(file, !!content?.original, homes.get(file.id))}`)
             await passFile(database, cloud, file, content, state, result, controller.signal)
           })(),
           controller.signal,
@@ -475,12 +479,12 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
         state.fileSkippedAt = new Date().toISOString()
         await database.syncState.put(state)
         step()
-        report(`Пропущен ${fileTitle(file)}. Фото и файлы: ${done} из ${files.length}${eta.suffix()}`)
+        report(`Пропущен ${fileTitle(file)}. Фото и файлы: ${eta.progress()}.${eta.suffix()}`)
         return
       }
       await database.syncState.put(state)
       step()
-      if (done % 20 === 0 || done === files.length) report(`Фото и файлы: ${done} из ${files.length}${eta.suffix()}`)
+      if (done % 20 === 0 || done === files.length) report(`Фото и файлы: ${eta.progress()}.${eta.suffix()}`)
     } finally {
       step()
       options.onFileDone?.(file.id)
@@ -527,7 +531,7 @@ export async function pendingCount(database: DiaryDatabase): Promise<number> {
 
 /** Одна синхронизация: описание дневника → (первое подключение — снимок) → получение → отправка → файлы → снимок раз в сутки. */
 export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, options: SyncOptions): Promise<SyncResult> {
-  const report = options.onProgress ?? (() => undefined)
+  const report: Report = (text, detail) => options.onProgress?.(text, detail)
   const now = () => options.now?.() ?? new Date()
   const result: SyncResult = { pulled: 0, pushed: 0, conflicts: 0, thumbs: 0, uploadedFiles: 0, bootstrapped: false, failed: 0, errors: [] }
 

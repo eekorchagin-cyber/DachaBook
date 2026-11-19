@@ -1479,6 +1479,22 @@ details.card[open] > summary::before {
 
 .sync-line-row .sync-line {
   margin: 0;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sync-detail {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.sync-detail p {
+  margin: 4px 0;
 }
 
 .sync-skip {

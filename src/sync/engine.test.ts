@@ -282,7 +282,7 @@ describe('синхронизация двух устройств через об
       mac.database,
       cloud,
       options('Mac', {
-        onProgress: (text) => progress.push(text),
+        onProgress: (text, detail) => progress.push(detail ? `${text} ${detail}` : text),
         onFile: (file, controller) => {
           if (file.id !== stuck.id) return
           setTimeout(() => {
@@ -294,7 +294,7 @@ describe('синхронизация двух устройств через об
       }),
     )
 
-    expect(progress.some((text) => text.includes('сейчас «большое.mp4» (4 Б)'))).toBe(true)
+    expect(progress.some((text) => text.includes('Сейчас «большое.mp4» (4 Б)') && text.includes('До конца этапа'))).toBe(true)
     expect(progress.some((text) => text.includes('Оригинал на этом компьютере') && text.includes(`DachaBook/diary/files/originals/${stuck.id}.mp4`) && text.includes('запись дневника 2026-05-12, Полив дорожки'))).toBe(true)
     expect(progress.some((text) => text.includes('Пропущен «большое.mp4»'))).toBe(true)
     expect(result.failed).toBe(0)

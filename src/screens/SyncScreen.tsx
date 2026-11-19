@@ -79,6 +79,7 @@ export function SyncScreen() {
         {status.connected ? (
           <>
             <p className={summary.warning ? 'error' : 'notice'}>{summary.text}</p>
+            {status.running && status.detail && <p className="hint">{status.detail}</p>}
             {status.fileName && (
               <div className="actions">
                 <button type="button" className="button secondary" onClick={() => skipCurrentSyncFile()}>

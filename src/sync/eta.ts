@@ -29,24 +29,39 @@ export class StageEta {
     return (elapsed / this.done) * left
   }
 
-  /** Хвост к строке этапа: пусто, «оцениваю время» или «осталось около …». */
+  /** Сколько элементов этапа уже пройдено и сколько их всего. */
+  progress(): string {
+    return `${this.done} из ${this.total}`
+  }
+
+  /** Срок до конца всей очереди этапа, не текущего файла. */
   suffix(now = Date.now()): string {
     if (this.total <= 0 || this.done >= this.total) return ''
     const ms = this.remainingMs(now)
-    if (ms == null) return ' Оцениваю время.'
-    return ` ${remainingPhrase(ms)}`
+    if (ms == null) return ' До конца этапа: оцениваю время.'
+    return ` ${remainingPhrase(ms, new Date(now))}`
   }
 }
 
-/** «Осталось около 2 часов 5 минут.» Числительные — в родительном падеже после «около». */
-export function remainingPhrase(ms: number): string {
-  if (ms < 60_000) return 'Осталось меньше минуты.'
+const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+
+/** До часа — длительность. Дольше — примерное время окончания: сегодня «около 14:35», после полуночи «завтра в 1:20», дальше — дата. */
+export function remainingPhrase(ms: number, now = new Date()): string {
+  if (ms < 60_000) return 'До конца этапа осталось меньше минуты.'
   const minutes = Math.round(ms / 60_000)
-  if (minutes < 60) return `Осталось около ${minutes} ${genitive(minutes, 'минуты', 'минут')}.`
-  const hours = Math.floor(minutes / 60)
-  const rest = minutes % 60
-  const hourPart = `${hours} ${genitive(hours, 'часа', 'часов')}`
-  return rest ? `Осталось около ${hourPart} ${rest} ${genitive(rest, 'минуты', 'минут')}.` : `Осталось около ${hourPart}.`
+  if (minutes <= 60) {
+    if (minutes === 60) return 'До конца этапа осталось около 1 часа.'
+    return `До конца этапа осталось около ${minutes} ${genitive(minutes, 'минуты', 'минут')}.`
+  }
+  const end = new Date(now.getTime() + ms)
+  const time = `${end.getHours()}:${String(end.getMinutes()).padStart(2, '0')}`
+  const day = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const days = Math.round((day(end) - day(now)) / 86_400_000)
+  if (days <= 0) return `До конца этапа около ${time}.`
+  if (days === 1) return `До конца этапа завтра в ${time}.`
+  const date = `${end.getDate()} ${MONTHS[end.getMonth()]}`
+  const year = end.getFullYear() === now.getFullYear() ? '' : ` ${end.getFullYear()}`
+  return `До конца этапа ${date}${year} в ${time}.`
 }
 
 /** 1, 21 — форма единственного; остальные — множественного. */

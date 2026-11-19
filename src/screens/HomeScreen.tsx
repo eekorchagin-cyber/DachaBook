@@ -220,6 +220,7 @@ function ProgramSearch({ onOpen }: { onOpen: () => void }) {
 
 function SyncLine() {
   const status = useSyncStatus()
+  const [open, setOpen] = useState(false)
   if (!status.connected) {
     return (
       <a className="sync-line" href="#/sync">
@@ -228,15 +229,28 @@ function SyncLine() {
     )
   }
   const summary = syncSummary(status)
-  return (
-    <div className="sync-line-row">
+  const detail = status.running ? status.detail : undefined
+  if (!detail) {
+    return (
       <a className={summary.warning ? 'sync-line warning' : 'sync-line'} href={status.conflicts > 0 ? '#/conflicts' : '#/sync'}>
         ☁ {summary.text}
       </a>
-      {status.fileName && (
-        <button type="button" className="sync-skip" onClick={() => skipCurrentSyncFile()}>
-          Пропустить «{status.fileName}»{status.fileSize ? ` (${status.fileSize})` : ''}
-        </button>
+    )
+  }
+  return (
+    <div className="sync-line-row">
+      <button type="button" className="sync-line" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        ☁ {summary.text}
+      </button>
+      {open && (
+        <div className="sync-detail">
+          <p>{detail}</p>
+          {status.fileName && (
+            <button type="button" className="sync-skip" onClick={() => skipCurrentSyncFile()}>
+              Пропустить «{status.fileName}»{status.fileSize ? ` (${status.fileSize})` : ''}
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

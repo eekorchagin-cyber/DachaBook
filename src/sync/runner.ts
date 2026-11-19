@@ -14,6 +14,8 @@ export interface SyncStatus {
   connected: boolean
   running: boolean
   progress?: string
+  /** Подробности текущего файла. На главном экране скрыты, пока строку не нажмут. */
+  detail?: string
   /** Файл, который передаётся прямо сейчас. */
   fileName?: string
   /** Размер этого файла, уже в виде «4.2 МБ». */
@@ -134,15 +136,19 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
   }
   clearTimeout(changeTimer)
   lastRunAt = Date.now()
-  set({ running: true, progress: 'Синхронизация…', fileName: undefined, fileSize: undefined, error: undefined, offline: false, needsLogin: false })
+  set({ running: true, progress: 'Синхронизация…', detail: undefined, fileName: undefined, fileSize: undefined, error: undefined, offline: false, needsLogin: false })
   let result: SyncResult | undefined
   try {
     const options = {
       appVersion: __APP_VERSION__,
       author: (await getSetting('authorName')) || 'Без имени',
       ...extra,
-      onProgress: (progress: string) =>
-        set({ progress, ...(progress.includes('сейчас «') || progress.startsWith('Пропущен «') ? shownFile() : { fileName: undefined, fileSize: undefined }) }),
+      onProgress: (progress: string, detail?: string) =>
+        set({
+          progress,
+          detail,
+          ...(detail && /сейчас «/i.test(detail) ? shownFile() : { fileName: undefined, fileSize: undefined }),
+        }),
       onFile: (file: StoredFile, controller: AbortController) => {
         inflight.set(file.id, { fileName: file.fileName, fileSize: formatBytes(file.size), controller })
         set(shownFile())
@@ -172,7 +178,7 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
     else set({ error: errorText(caught), offline: !navigator.onLine })
   } finally {
     inflight.clear()
-    set({ running: false, progress: undefined, fileName: undefined, fileSize: undefined })
+    set({ running: false, progress: undefined, detail: undefined, fileName: undefined, fileSize: undefined })
     await refreshCounts()
   }
   if (rerun) {
