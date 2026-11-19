@@ -52,6 +52,11 @@ export interface SyncOptions {
   /** Первое подключение устройства к облаку, где уже есть дневник, при своих данных на устройстве. */
   firstConnect?: 'merge' | 'replace'
   onProgress?: (text: string) => void
+  /** Файл, который передаётся сейчас. controller обрывает ожидание, не дожидаясь ответа сети. */
+  onFile?: (file: StoredFile, controller: AbortController) => void
+  onFileDone?: (id: string) => void
+  /** Файл пропущен: не считать сбой и не брать его снова, пока отметку не снимут. */
+  isFileSkipped?: (id: string) => boolean
   /** Снимок в облаке не чаще этого интервала (по умолчанию сутки). */
   snapshotIntervalMs?: number
   now?: () => Date
@@ -314,37 +319,137 @@ async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<st
   }
 }
 
+/** Ожидание передачи обрывается сразу, даже если сама сеть или чтение файла так и не ответили. */
+function untilAbort<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new DOMException('Файл пропущен', 'AbortError'))
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(new DOMException('Файл пропущен', 'AbortError'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    work.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
+}
+
+const deviceHere = (): 'телефоне' | 'планшете' | 'компьютере' => {
+  const agent = typeof navigator === 'undefined' ? '' : navigator.userAgent
+  if (/iP(hone|od)/.test(agent)) return 'телефоне'
+  if (/iPad/.test(agent)) return 'планшете'
+  return 'компьютере'
+}
+
+/** Где в дневнике прикреплён файл: запись, объект, статья или фото дачи. */
+async function fileHomes(database: DiaryDatabase): Promise<Map<string, string>> {
+  const homes = new Map<string, string>()
+  const put = (id: string | undefined, text: string) => {
+    if (id && !homes.has(id)) homes.set(id, text)
+  }
+  const plotPhotoId = (await database.settings.get('plotPhotoId'))?.value
+  if (typeof plotPhotoId === 'string') put(plotPhotoId, 'фото дачи в настройках')
+  for (const event of await database.events.toArray()) {
+    const title = [event.date, event.comment?.slice(0, 60)].filter(Boolean).join(', ')
+    const where = `${event.deletedAt ? 'корзина, ' : ''}запись дневника ${title}`
+    for (const id of [...(event.photoIds ?? []), ...(event.attachmentIds ?? [])]) put(id, where)
+  }
+  for (const object of await database.objects.toArray()) {
+    for (const id of object.photoIds ?? []) put(id, `${object.deletedAt ? 'корзина, ' : ''}объект «${object.name}»`)
+  }
+  for (const group of await database.plantGroups.toArray()) {
+    for (const id of group.photoIds ?? []) put(id, `${group.deletedAt ? 'корзина, ' : ''}группа «${group.name}»`)
+  }
+  for (const material of await database.references.toArray()) {
+    for (const id of material.fileIds ?? []) put(id, `${material.deletedAt ? 'корзина, ' : ''}статья «${material.title}»`)
+  }
+  for (const work of await database.planWorks.toArray()) {
+    for (const id of work.photoIds ?? []) put(id, `${work.deletedAt ? 'корзина, ' : ''}работа «${work.title}»`)
+  }
+  for (const draft of await database.planDrafts.toArray()) {
+    for (const id of draft.fileIds ?? []) put(id, `черновик плана «${draft.text.slice(0, 40)}»`)
+  }
+  return homes
+}
+
+/** Оригинал на этом устройстве или на другом, и адрес папки на Яндекс Диске. */
+function filePlace(file: StoredFile, hasOriginal: boolean, home?: string): string {
+  const here = deviceHere()
+  const other = here === 'телефоне' ? 'компьютере' : here === 'компьютере' ? 'телефоне' : 'другом устройстве'
+  const where = hasOriginal ? `Оригинал на этом ${here}.` : `На этом ${here} оригинала нет — он на ${other}.`
+  const address = `Адрес на Яндекс Диске: DachaBook/diary/${originalPath(file)}.`
+  const inDiary = home ? ` В программе: ${home}.` : ''
+  return `${where} ${address}${inDiary}`
+}
+
+/** Оригинал и уменьшенная копия одного файла. Содержимое уже прочитано, повторно из базы не берётся. */
+async function passFile(
+  database: DiaryDatabase,
+  cloud: CloudAdapter,
+  file: StoredFile,
+  content: { original?: Blob; thumb?: Blob } | undefined,
+  state: SyncRecord,
+  result: SyncResult,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) throw new DOMException('Файл пропущен', 'AbortError')
+  if (content?.original && !state.originalUploaded) {
+    await cloud.write(originalPath(file), content.original, signal)
+    state.originalUploaded = true
+    result.uploadedFiles++
+  }
+  if (content?.thumb && !state.thumbUploaded) {
+    await cloud.write(thumbPath(file.id), content.thumb, signal)
+    state.thumbUploaded = true
+  }
+  const checkedRecently = !!state.thumbMissingAt && Date.now() - Date.parse(state.thumbMissingAt) < 24 * 60 * 60 * 1000
+  if (!content?.thumb && file.role === 'photo' && !checkedRecently) {
+    const thumb = await cloud.read(thumbPath(file.id), signal)
+    if (thumb) {
+      await database.fileContents.put({ ...content, id: file.id, thumb: new Blob([thumb], { type: 'image/jpeg' }) })
+      state.thumbUploaded = true
+      state.thumbMissingAt = undefined
+      result.thumbs++
+    } else {
+      state.thumbMissingAt = new Date().toISOString()
+    }
+  }
+}
+
 /** Оригиналы и уменьшенные копии: отправка новых и получение уменьшенных копий, которых нет на устройстве. */
-async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: (text: string) => void): Promise<void> {
+async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: (text: string) => void, options: SyncOptions): Promise<void> {
   const files = ((await database.files.toArray()) as StoredFile[]).filter((file) => !file.deletedAt)
+  const homes = await fileHomes(database)
   let done = 0
   result.failed += await pool(files, ioParallel(Math.min(cloud.parallel ?? 3, 3)), async (file) => {
     const key = `blob/${file.id}`
     const state = (await database.syncState.get(key)) ?? { key }
-    const content = await database.fileContents.get(file.id)
-    if (content?.original && !state.originalUploaded) {
-      await cloud.write(originalPath(file), content.original)
-      state.originalUploaded = true
-      result.uploadedFiles++
+    if (state.fileSkippedAt) {
+      if (++done % 20 === 0) report(`Фото и файлы: ${done} из ${files.length}`)
+      return
     }
-    if (content?.thumb && !state.thumbUploaded) {
-      await cloud.write(thumbPath(file.id), content.thumb)
-      state.thumbUploaded = true
-    }
-    const checkedRecently = !!state.thumbMissingAt && Date.now() - Date.parse(state.thumbMissingAt) < 24 * 60 * 60 * 1000
-    if (!content?.thumb && file.role === 'photo' && !checkedRecently) {
-      const thumb = await cloud.read(thumbPath(file.id))
-      if (thumb) {
-        await database.fileContents.put({ ...content, id: file.id, thumb: new Blob([thumb], { type: 'image/jpeg' }) })
-        state.thumbUploaded = true
-        state.thumbMissingAt = undefined
-        result.thumbs++
-      } else {
-        state.thumbMissingAt = new Date().toISOString()
+    const controller = new AbortController()
+    options.onFile?.(file, controller)
+    const address = `Адрес на Яндекс Диске: DachaBook/diary/${originalPath(file)}.`
+    const inDiary = homes.get(file.id) ? ` В программе: ${homes.get(file.id)}.` : ''
+    report(`Фото и файлы: ${done} из ${files.length}, сейчас «${file.fileName}». ${address}${inDiary}`)
+    try {
+      try {
+        await untilAbort(
+          (async () => {
+            const content = await database.fileContents.get(file.id)
+            report(`Фото и файлы: ${done} из ${files.length}, сейчас «${file.fileName}». ${filePlace(file, !!content?.original, homes.get(file.id))}`)
+            await passFile(database, cloud, file, content, state, result, controller.signal)
+          })(),
+          controller.signal,
+        )
+      } catch (error) {
+        if (!options.isFileSkipped?.(file.id)) throw error
+        state.fileSkippedAt = new Date().toISOString()
+        await database.syncState.put(state)
+        report(`Пропущен «${file.fileName}». Фото и файлы: ${++done} из ${files.length}`)
+        return
       }
+      await database.syncState.put(state)
+      if (++done % 20 === 0) report(`Фото и файлы: ${done} из ${files.length}`)
+    } finally {
+      options.onFileDone?.(file.id)
     }
-    await database.syncState.put(state)
-    if (++done % 20 === 0) report(`Фото и файлы: ${done} из ${files.length}`)
   }, result.errors)
 }
 
@@ -437,7 +542,7 @@ export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, 
     result.errors.push(`Справочники: ${errorText(caught)}`)
   }
   report('Фото и файлы…')
-  await syncFiles(database, cloud, result, report)
+  await syncFiles(database, cloud, result, report, options)
 
   const interval = options.snapshotIntervalMs ?? 24 * 60 * 60 * 1000
   if (result.pushed > 0 && result.failed === 0 && (!manifest.snapshot || now().getTime() - Date.parse(manifest.snapshot.at) >= interval)) {

@@ -96,23 +96,24 @@ export class YandexCloud implements CloudAdapter {
     }
   }
 
-  async read(path: string): Promise<Blob | null> {
+  async read(path: string, signal?: AbortSignal): Promise<Blob | null> {
     try {
-      return await this.call(() => this.disk.download(this.full(path)))
+      return await this.call(() => this.disk.download(this.full(path), signal))
     } catch (error) {
       if (error instanceof YandexDiskError && error.status === 404) return null
       throw error
     }
   }
 
-  async write(path: string, data: Blob): Promise<void> {
+  async write(path: string, data: Blob, signal?: AbortSignal): Promise<void> {
     try {
-      await this.call(() => this.disk.upload(this.full(path), data), WRITE_RETRY)
+      await this.call(() => this.disk.upload(this.full(path), data, signal), WRITE_RETRY)
     } catch (error) {
+      if (signal?.aborted) throw error
       // Папки ещё нет (409 при получении ссылки загрузки) — создаём и повторяем.
       if (!(error instanceof YandexDiskError && error.status === 409)) throw error
       await this.ensureFolder(path.split('/').slice(0, -1).join('/'), true)
-      await this.call(() => this.disk.upload(this.full(path), data), WRITE_RETRY)
+      await this.call(() => this.disk.upload(this.full(path), data, signal), WRITE_RETRY)
     }
   }
 

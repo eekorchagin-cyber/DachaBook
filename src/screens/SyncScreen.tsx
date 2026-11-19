@@ -4,7 +4,7 @@ import { YandexDisk } from '../cloud/yandexDisk'
 import { errorText } from '../lib/format'
 import { db } from '../storage/db'
 import { localDataCount, MANIFEST, type DiaryManifest } from '../sync/engine'
-import { disableSync, enableSync, syncNow, syncSummary, syncTime as time, useSyncStatus } from '../sync/runner'
+import { disableSync, enableSync, retrySkippedFiles, skipCurrentSyncFile, syncNow, syncSummary, syncTime as time, useSyncStatus } from '../sync/runner'
 import { YandexCloud } from '../sync/yandexCloud'
 import { Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
@@ -79,6 +79,21 @@ export function SyncScreen() {
         {status.connected ? (
           <>
             <p className={summary.warning ? 'error' : 'notice'}>{summary.text}</p>
+            {status.fileName && (
+              <div className="actions">
+                <button type="button" className="button secondary" onClick={() => skipCurrentSyncFile()}>
+                  Пропустить «{status.fileName}»
+                </button>
+              </div>
+            )}
+            {status.skippedFiles > 0 && (
+              <p className="hint">
+                Пропущено файлов: {status.skippedFiles}. Они остаются в дневнике и не передаются.
+                <button type="button" className="sync-skip" onClick={() => void retrySkippedFiles()}>
+                  Вернуть в очередь
+                </button>
+              </p>
+            )}
             <p className="small">
               Последняя успешная синхронизация: {time(status.lastSuccessAt)}. Ожидает отправки: {status.pending}.
             </p>

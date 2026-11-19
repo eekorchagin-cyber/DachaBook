@@ -9,7 +9,7 @@ import { searchProgram, type ProgramSection } from '../domain/programSearch'
 import type { DiaryEvent } from '../domain/types'
 import { htmlToText } from '../lib/sanitize'
 import { db } from '../storage/db'
-import { syncSummary, useSyncStatus } from '../sync/runner'
+import { skipCurrentSyncFile, syncSummary, useSyncStatus } from '../sync/runner'
 import { AutoBackupWarning } from '../ui/AutoBackup'
 import { DateJump } from '../ui/DateJump'
 import { PlotPhoto } from '../ui/PlotPhoto'
@@ -229,8 +229,15 @@ function SyncLine() {
   }
   const summary = syncSummary(status)
   return (
-    <a className={summary.warning ? 'sync-line warning' : 'sync-line'} href={status.conflicts > 0 ? '#/conflicts' : '#/sync'}>
-      ☁ {summary.text}
-    </a>
+    <div className="sync-line-row">
+      <a className={summary.warning ? 'sync-line warning' : 'sync-line'} href={status.conflicts > 0 ? '#/conflicts' : '#/sync'}>
+        ☁ {summary.text}
+      </a>
+      {status.fileName && (
+        <button type="button" className="sync-skip" onClick={() => skipCurrentSyncFile()}>
+          Пропустить «{status.fileName}»
+        </button>
+      )}
+    </div>
   )
 }

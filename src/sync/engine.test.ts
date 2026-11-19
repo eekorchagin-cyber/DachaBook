@@ -254,4 +254,56 @@ describe('синхронизация двух устройств через об
     await synchronize(device('x').database, other, options('x'))
     await expect(synchronize(mac.database, other, options('Mac'))).rejects.toThrow(/другой дневник/)
   })
+
+  it('зависший файл пропускается по имени, следующий уходит, пропущенный больше не берётся', async () => {
+    const cloud = new MemoryCloud()
+    const mac = device('Mac')
+    const stuck = await mac.repo.create('files', { role: 'attachment', fileName: 'большое.mp4', mime: 'video/mp4', size: 4, sha256: 'v', uploadState: 'local' })
+    const next = await mac.repo.create('files', { role: 'attachment', fileName: 'следующее.jpg', mime: 'image/jpeg', size: 1, sha256: 'j', uploadState: 'local' })
+    await mac.database.fileContents.put({ id: stuck.id, original: new Blob([new Uint8Array([1, 2, 3, 4])]) })
+    await mac.database.fileContents.put({ id: next.id, original: new Blob([new Uint8Array([5])]) })
+    await mac.repo.create('events', event('Полив дорожки', { date: '2026-05-12', attachmentIds: [stuck.id] }))
+
+    let stuckAttempts = 0
+    const realWrite = cloud.write.bind(cloud)
+    cloud.write = (path, data, signal?: AbortSignal) => {
+      if (!path.startsWith(`files/originals/${stuck.id}`)) return realWrite(path, data)
+      stuckAttempts++
+      return new Promise((_, reject) => {
+        const fail = () => reject(new DOMException('aborted', 'AbortError'))
+        if (signal?.aborted) fail()
+        else signal?.addEventListener('abort', fail, { once: true })
+      })
+    }
+
+    const skipped = new Set<string>()
+    const progress: string[] = []
+    const result = await synchronize(
+      mac.database,
+      cloud,
+      options('Mac', {
+        onProgress: (text) => progress.push(text),
+        onFile: (file, controller) => {
+          if (file.id !== stuck.id) return
+          setTimeout(() => {
+            skipped.add(file.id)
+            controller.abort()
+          }, 20)
+        },
+        isFileSkipped: (id) => skipped.has(id),
+      }),
+    )
+
+    expect(progress.some((text) => text.includes('сейчас «большое.mp4»'))).toBe(true)
+    expect(progress.some((text) => text.includes('Оригинал на этом компьютере') && text.includes(`DachaBook/diary/files/originals/${stuck.id}.mp4`) && text.includes('запись дневника 2026-05-12, Полив дорожки'))).toBe(true)
+    expect(progress.some((text) => text.includes('Пропущен «большое.mp4»'))).toBe(true)
+    expect(result.failed).toBe(0)
+    expect(result.uploadedFiles).toBe(1)
+    expect(cloud.files.has(`files/originals/${stuck.id}.mp4`)).toBe(false)
+    expect(cloud.files.has(`files/originals/${next.id}.jpg`)).toBe(true)
+    expect((await mac.database.syncState.get(`blob/${stuck.id}`))?.fileSkippedAt).toBeTruthy()
+
+    await synchronize(mac.database, cloud, options('Mac'))
+    expect(stuckAttempts).toBe(1)
+  })
 })

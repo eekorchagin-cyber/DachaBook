@@ -21,9 +21,9 @@ export interface CloudAdapter {
   listChanges(folder: string, cursor?: string): Promise<{ entries: RemoteEntry[]; cursor?: string; complete: boolean }>
   list(folder: string): Promise<RemoteEntry[]>
   stat(path: string): Promise<RemoteEntry | null>
-  /** null — файла нет. */
-  read(path: string): Promise<Blob | null>
-  write(path: string, data: Blob): Promise<void>
+  /** null — файла нет. signal обрывает ожидание, если передачу этого файла пропустили. */
+  read(path: string, signal?: AbortSignal): Promise<Blob | null>
+  write(path: string, data: Blob, signal?: AbortSignal): Promise<void>
   remove(path: string): Promise<void>
 }
 

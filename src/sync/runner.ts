@@ -14,6 +14,10 @@ export interface SyncStatus {
   connected: boolean
   running: boolean
   progress?: string
+  /** Файл, который передаётся прямо сейчас. */
+  fileName?: string
+  /** Сколько файлов пропущено вручную и не передаётся. */
+  skippedFiles: number
   lastSuccessAt?: string
   error?: string
   /** Вход в Яндекс устарел: нужно войти снова. */
@@ -29,19 +33,50 @@ const CHANGE_DELAY_MS = 20_000
 const PERIOD_MS = 5 * 60_000
 const RESUME_GAP_MS = 60_000
 
-let status: SyncStatus = { connected: false, running: false, pending: 0, conflicts: 0 }
+let status: SyncStatus = { connected: false, running: false, pending: 0, conflicts: 0, skippedFiles: 0 }
 const listeners = new Set<() => void>()
 let cloud: { token: string; adapter: CloudAdapter } | null = null
 let changeTimer: ReturnType<typeof setTimeout> | undefined
 let rerun = false
 let lastRunAt = 0
 let failures = 0
+const inflight = new Map<string, { fileName: string; controller: AbortController }>()
+const skippedNow = new Set<string>()
 /** Повтор после сбоя: через 1, 2, 5, затем каждые 10 минут. */
 const RETRY_MS = [60_000, 120_000, 300_000, 600_000]
+
+function shownFile(): string | undefined {
+  return inflight.values().next().value?.fileName
+}
 
 function set(patch: Partial<SyncStatus>): void {
   status = { ...status, ...patch }
   for (const listener of listeners) listener()
+}
+
+/** Пропустить файл, на котором синхронизация стоит сейчас. Он остаётся в дневнике и не передаётся, пока его не вернут в очередь. */
+export function skipCurrentSyncFile(): void {
+  const named = [...inflight.entries()].find(([, item]) => item.fileName === status.fileName)
+  const oldest = named ?? inflight.entries().next().value
+  if (!oldest) return
+  const [id, item] = oldest
+  skippedNow.add(id)
+  item.controller.abort()
+  void db.syncState.get(`blob/${id}`).then((state) => db.syncState.put({ ...state, key: `blob/${id}`, fileSkippedAt: new Date().toISOString() }))
+}
+
+/** Снова передавать файлы, пропущенные вручную. */
+export async function retrySkippedFiles(): Promise<void> {
+  const rows = await db.syncState.filter((item) => !!item.fileSkippedAt).toArray()
+  skippedNow.clear()
+  await Promise.all(
+    rows.map((row) => {
+      const next = { ...row }
+      delete next.fileSkippedAt
+      return db.syncState.put(next)
+    }),
+  )
+  await syncNow()
 }
 
 export function useSyncStatus(): SyncStatus {
@@ -69,7 +104,13 @@ export async function currentCloud(): Promise<CloudAdapter | null> {
 
 async function refreshCounts(): Promise<void> {
   const meta = await readSyncMeta(db)
-  set({ pending: await pendingCount(db), conflicts: await db.conflicts.count(), lastSuccessAt: meta?.lastSuccessAt, connected: !!(await connectedProvider()) })
+  set({
+    pending: await pendingCount(db),
+    conflicts: await db.conflicts.count(),
+    skippedFiles: await db.syncState.filter((item) => !!item.fileSkippedAt).count(),
+    lastSuccessAt: meta?.lastSuccessAt,
+    connected: !!(await connectedProvider()),
+  })
 }
 
 /** Синхронизация сейчас; если уже идёт — повторится сразу после неё. */
@@ -90,14 +131,23 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
   }
   clearTimeout(changeTimer)
   lastRunAt = Date.now()
-  set({ running: true, progress: 'Синхронизация…', error: undefined, offline: false, needsLogin: false })
+  set({ running: true, progress: 'Синхронизация…', fileName: undefined, error: undefined, offline: false, needsLogin: false })
   let result: SyncResult | undefined
   try {
     const options = {
       appVersion: __APP_VERSION__,
       author: (await getSetting('authorName')) || 'Без имени',
       ...extra,
-      onProgress: (progress: string) => set({ progress }),
+      onProgress: (progress: string) => set({ progress, fileName: progress.includes('сейчас «') || progress.startsWith('Пропущен «') ? shownFile() : undefined }),
+      onFile: (file: StoredFile, controller: AbortController) => {
+        inflight.set(file.id, { fileName: file.fileName, controller })
+        set({ fileName: shownFile() })
+      },
+      onFileDone: (id: string) => {
+        inflight.delete(id)
+        set({ fileName: shownFile() })
+      },
+      isFileSkipped: (id: string) => skippedNow.has(id),
     }
     try {
       result = await synchronize(db, adapter, options)
@@ -117,7 +167,8 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
     if (caught instanceof YandexAuthError) set({ needsLogin: true, error: caught.message })
     else set({ error: errorText(caught), offline: !navigator.onLine })
   } finally {
-    set({ running: false, progress: undefined })
+    inflight.clear()
+    set({ running: false, progress: undefined, fileName: undefined })
     await refreshCounts()
   }
   if (rerun) {
@@ -154,7 +205,7 @@ export async function disableSync(): Promise<void> {
   await forgetSync(db)
   forgetToken()
   cloud = null
-  set({ connected: false, error: undefined, needsLogin: false, lastResult: undefined })
+  set({ connected: false, error: undefined, needsLogin: false, lastResult: undefined, skippedFiles: 0 })
   await refreshCounts()
 }
 

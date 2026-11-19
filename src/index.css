@@ -1461,12 +1461,35 @@ details.card[open] > summary::before {
   flex-basis: 100%;
 }
 
+.sync-line-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: -4px 0 12px;
+}
+
 .sync-line {
   display: block;
   margin: -4px 0 12px;
   font-size: 0.85rem;
   color: var(--muted);
   text-decoration: none;
+}
+
+.sync-line-row .sync-line {
+  margin: 0;
+}
+
+.sync-skip {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--warn);
+  font: inherit;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .sync-line.warning {
