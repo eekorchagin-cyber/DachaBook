@@ -235,7 +235,7 @@ function SyncLine() {
       </a>
       {status.fileName && (
         <button type="button" className="sync-skip" onClick={() => skipCurrentSyncFile()}>
-          Пропустить «{status.fileName}»
+          Пропустить «{status.fileName}»{status.fileSize ? ` (${status.fileSize})` : ''}
         </button>
       )}
     </div>

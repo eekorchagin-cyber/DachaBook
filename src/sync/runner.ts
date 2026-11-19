@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { getSetting } from '../app/store'
 import { forgetToken, getToken } from '../cloud/yandexAuth'
 import type { StoredFile } from '../domain/types'
-import { errorText, isIdbTransient } from '../lib/format'
+import { errorText, formatBytes, isIdbTransient } from '../lib/format'
 import { onLocalChange } from '../storage/changes'
 import { db } from '../storage/db'
 import { reopenDatabase } from '../storage/idb'
@@ -16,6 +16,8 @@ export interface SyncStatus {
   progress?: string
   /** Файл, который передаётся прямо сейчас. */
   fileName?: string
+  /** Размер этого файла, уже в виде «4.2 МБ». */
+  fileSize?: string
   /** Сколько файлов пропущено вручную и не передаётся. */
   skippedFiles: number
   lastSuccessAt?: string
@@ -40,13 +42,14 @@ let changeTimer: ReturnType<typeof setTimeout> | undefined
 let rerun = false
 let lastRunAt = 0
 let failures = 0
-const inflight = new Map<string, { fileName: string; controller: AbortController }>()
+const inflight = new Map<string, { fileName: string; fileSize: string; controller: AbortController }>()
 const skippedNow = new Set<string>()
 /** Повтор после сбоя: через 1, 2, 5, затем каждые 10 минут. */
 const RETRY_MS = [60_000, 120_000, 300_000, 600_000]
 
-function shownFile(): string | undefined {
-  return inflight.values().next().value?.fileName
+function shownFile(): { fileName?: string; fileSize?: string } {
+  const item = inflight.values().next().value
+  return { fileName: item?.fileName, fileSize: item?.fileSize }
 }
 
 function set(patch: Partial<SyncStatus>): void {
@@ -131,21 +134,22 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
   }
   clearTimeout(changeTimer)
   lastRunAt = Date.now()
-  set({ running: true, progress: 'Синхронизация…', fileName: undefined, error: undefined, offline: false, needsLogin: false })
+  set({ running: true, progress: 'Синхронизация…', fileName: undefined, fileSize: undefined, error: undefined, offline: false, needsLogin: false })
   let result: SyncResult | undefined
   try {
     const options = {
       appVersion: __APP_VERSION__,
       author: (await getSetting('authorName')) || 'Без имени',
       ...extra,
-      onProgress: (progress: string) => set({ progress, fileName: progress.includes('сейчас «') || progress.startsWith('Пропущен «') ? shownFile() : undefined }),
+      onProgress: (progress: string) =>
+        set({ progress, ...(progress.includes('сейчас «') || progress.startsWith('Пропущен «') ? shownFile() : { fileName: undefined, fileSize: undefined }) }),
       onFile: (file: StoredFile, controller: AbortController) => {
-        inflight.set(file.id, { fileName: file.fileName, controller })
-        set({ fileName: shownFile() })
+        inflight.set(file.id, { fileName: file.fileName, fileSize: formatBytes(file.size), controller })
+        set(shownFile())
       },
       onFileDone: (id: string) => {
         inflight.delete(id)
-        set({ fileName: shownFile() })
+        set(shownFile())
       },
       isFileSkipped: (id: string) => skippedNow.has(id),
     }
@@ -168,7 +172,7 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
     else set({ error: errorText(caught), offline: !navigator.onLine })
   } finally {
     inflight.clear()
-    set({ running: false, progress: undefined, fileName: undefined })
+    set({ running: false, progress: undefined, fileName: undefined, fileSize: undefined })
     await refreshCounts()
   }
   if (rerun) {

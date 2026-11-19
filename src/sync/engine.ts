@@ -1,7 +1,7 @@
 import SparkMD5 from 'spark-md5'
 import { strFromU8, unzipSync } from 'fflate'
 import { buildBackup } from '../backup/backup'
-import { errorText } from '../lib/format'
+import { errorText, formatBytes } from '../lib/format'
 import { createSnapshot } from '../storage/snapshots'
 import type { DocMeta, StoredFile } from '../domain/types'
 import { DOC_TABLES, type ConflictRecord, type DiaryDatabase, type SyncRecord } from '../storage/db'
@@ -367,6 +367,8 @@ async function fileHomes(database: DiaryDatabase): Promise<Map<string, string>> 
   return homes
 }
 
+const fileTitle = (file: StoredFile) => `«${file.fileName}» (${formatBytes(file.size)})`
+
 /** Оригинал на этом устройстве или на другом, и адрес папки на Яндекс Диске. */
 function filePlace(file: StoredFile, hasOriginal: boolean, home?: string): string {
   const here = deviceHere()
@@ -427,13 +429,13 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
     options.onFile?.(file, controller)
     const address = `Адрес на Яндекс Диске: DachaBook/diary/${originalPath(file)}.`
     const inDiary = homes.get(file.id) ? ` В программе: ${homes.get(file.id)}.` : ''
-    report(`Фото и файлы: ${done} из ${files.length}, сейчас «${file.fileName}». ${address}${inDiary}`)
+    report(`Фото и файлы: ${done} из ${files.length}, сейчас ${fileTitle(file)}. ${address}${inDiary}`)
     try {
       try {
         await untilAbort(
           (async () => {
             const content = await database.fileContents.get(file.id)
-            report(`Фото и файлы: ${done} из ${files.length}, сейчас «${file.fileName}». ${filePlace(file, !!content?.original, homes.get(file.id))}`)
+            report(`Фото и файлы: ${done} из ${files.length}, сейчас ${fileTitle(file)}. ${filePlace(file, !!content?.original, homes.get(file.id))}`)
             await passFile(database, cloud, file, content, state, result, controller.signal)
           })(),
           controller.signal,
@@ -442,7 +444,7 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
         if (!options.isFileSkipped?.(file.id)) throw error
         state.fileSkippedAt = new Date().toISOString()
         await database.syncState.put(state)
-        report(`Пропущен «${file.fileName}». Фото и файлы: ${++done} из ${files.length}`)
+        report(`Пропущен ${fileTitle(file)}. Фото и файлы: ${++done} из ${files.length}`)
         return
       }
       await database.syncState.put(state)

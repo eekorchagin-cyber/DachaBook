@@ -82,7 +82,7 @@ export function SyncScreen() {
             {status.fileName && (
               <div className="actions">
                 <button type="button" className="button secondary" onClick={() => skipCurrentSyncFile()}>
-                  Пропустить «{status.fileName}»
+                  Пропустить «{status.fileName}»{status.fileSize ? ` (${status.fileSize})` : ''}
                 </button>
               </div>
             )}
