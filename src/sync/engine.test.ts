@@ -124,6 +124,9 @@ describe('синхронизация двух устройств через об
     await mac.database.fileContents.put({ id: file.id, original: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' }), thumb: new Blob([new Uint8Array([9])]) })
     expect(await synchronize(mac.database, cloud, options('Mac'))).toMatchObject({ uploadedFiles: 1 })
     expect(cloud.files.has(`files/originals/${file.id}.jpg`)).toBe(true)
+    const details: string[] = []
+    await synchronize(mac.database, cloud, options('Mac', { onProgress: (_text, detail) => { if (detail) details.push(detail) } }))
+    expect(details.some((line) => line.includes('газон.JPG'))).toBe(false)
 
     await synchronize(phone.database, cloud, options('iPhone'))
     const content = await phone.database.fileContents.get(file.id)

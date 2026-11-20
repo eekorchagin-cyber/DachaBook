@@ -338,6 +338,10 @@ export async function startSync(): Promise<void> {
     if (status.running) void holdScreen()
     else if (Date.now() - lastRunAt > RESUME_GAP_MS) void syncNow()
   })
+  // iPhone отклоняет просьбу не гасить экран, если она пришла не от касания.
+  window.addEventListener('pointerdown', () => {
+    if (status.running) void holdScreen()
+  })
   window.addEventListener('online', () => {
     if (status.connected) void syncNow()
   })

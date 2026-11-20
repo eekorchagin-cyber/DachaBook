@@ -397,6 +397,13 @@ async function fileHomes(database: DiaryDatabase): Promise<Map<string, string>> 
 
 const fileTitle = (file: StoredFile) => `«${file.fileName}» (${formatBytes(file.size)})`
 
+/** Файл уже отмечен отправленным: повторный проход не открывает его и не показывает как текущий. */
+function alreadyOnDisk(file: StoredFile, state: SyncRecord | undefined): boolean {
+  if (!state?.originalUploaded) return false
+  if (file.role !== 'photo' || state.thumbUploaded) return true
+  return !!state.thumbMissingAt && Date.now() - Date.parse(state.thumbMissingAt) < 24 * 60 * 60 * 1000
+}
+
 /** Сколько байт этого файла ещё предстоит отправить: оригинал и уменьшенная копия, которые уже лежат на устройстве. */
 function pendingBytes(content: { original?: Blob; thumb?: Blob } | undefined, state: SyncRecord | undefined): number {
   let bytes = 0
@@ -457,10 +464,14 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
   if (files.length > 0) {
     report('Оцениваю фото и файлы…')
     const states = await database.syncState.bulkGet(files.map((file) => `blob/${file.id}`))
-    const contents = await database.fileContents.bulkGet(files.map((file) => file.id))
+    const pendingIds = files.flatMap((file, index) => (states[index]?.fileSkippedAt || alreadyOnDisk(file, states[index]) ? [] : [file.id]))
+    const contents = new Map<string, { original?: Blob; thumb?: Blob }>()
+    for (const item of await database.fileContents.bulkGet(pendingIds)) {
+      if (item) contents.set(item.id, item)
+    }
     for (let index = 0; index < files.length; index++) {
-      if (states[index]?.fileSkippedAt) continue
-      totalBytes += pendingBytes(contents[index], states[index])
+      if (states[index]?.fileSkippedAt || alreadyOnDisk(files[index], states[index])) continue
+      totalBytes += pendingBytes(contents.get(files[index].id), states[index])
     }
   }
   const clock = new StageClock(totalBytes, meta.fileBytesPerSecond ?? 0)
@@ -484,7 +495,7 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
       stepped = true
       done++
     }
-    if (state.fileSkippedAt) {
+    if (state.fileSkippedAt || alreadyOnDisk(file, state)) {
       step()
       if (done % 20 === 0 || done === files.length) tell()
       return
