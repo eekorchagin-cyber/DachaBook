@@ -46,6 +46,11 @@ export class StageClock {
   }
 }
 
+/** Убирает уже добавленный срок, чтобы при обновлении часов фраза не повторялась. */
+export function stageHeadline(text: string): string {
+  return text.replace(/ (?:До конца этапа|Ожидается, что этап завершится).*$/, '')
+}
+
 /** Строка этапа и срок до её конца. Просроченный или ещё неизвестный срок — «оцениваю время». */
 export function withStageTime(head: string, endsAt: number | null, now = Date.now()): string {
   if (endsAt == null || endsAt - now <= 0) return `${head} До конца этапа: оцениваю время.`
