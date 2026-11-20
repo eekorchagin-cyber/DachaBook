@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { remainingPhrase, StageClock, StageEta } from './eta'
+import { remainingPhrase, stageHeadline, StageClock, StageEta, withStageTime } from './eta'
 
 describe('оставшееся время этапа', () => {
   it('называет минуты и часы', () => {
@@ -14,6 +14,17 @@ describe('оставшееся время этапа', () => {
     expect(remainingPhrase(90 * 60_000, evening)).toBe('Ожидается, что этап завершится в 23:30.')
     expect(remainingPhrase(2 * 60 * 60_000, new Date(2026, 10, 19, 23, 30))).toBe('Ожидается, что этап завершится завтра в 1:30.')
     expect(remainingPhrase(30 * 60 * 60_000, evening)).toBe('Ожидается, что этап завершится 21 ноября в 4:00.')
+  })
+
+  it('не дописывает срок этапа второй раз', () => {
+    const head = 'Фото и файлы: 1074 из 1467.'
+    const now = new Date(2026, 10, 19, 22, 0).getTime()
+    const endsAt = now + 4 * 60 * 60_000 + 28 * 60_000
+    const line = withStageTime(head, endsAt, now)
+    expect(line).toBe('Фото и файлы: 1074 из 1467. Ожидается, что этап завершится завтра в 2:28.')
+    expect(withStageTime(stageHeadline(line), endsAt, now)).toBe(line)
+    expect(stageHeadline('Фото и файлы: 1 из 2. До конца этапа осталось около 5 минут.')).toBe('Фото и файлы: 1 из 2.')
+    expect(stageHeadline('Фото и файлы: 1 из 2. До конца этапа: оцениваю время.')).toBe('Фото и файлы: 1 из 2.')
   })
 
   it('молчит, пока этап ещё не начался, и считает по средней скорости', () => {

@@ -8,7 +8,7 @@ import { db } from '../storage/db'
 import { reopenDatabase } from '../storage/idb'
 import type { CloudAdapter } from './cloud'
 import { fetchOriginal, forgetSync, pendingCount, readSyncMeta, synchronize, type SyncOptions, type SyncResult } from './engine'
-import { withStageTime } from './eta'
+import { stageHeadline, withStageTime } from './eta'
 import { YandexAuthError, YandexCloud } from './yandexCloud'
 
 export interface SyncStatus {
@@ -117,7 +117,7 @@ function rememberStage(text: string, endsAt: number | null | undefined): void {
     stopStageClock()
     return
   }
-  stageHead = text.replace(/ До конца этапа.*$/, '')
+  stageHead = stageHeadline(text)
   stageEndsAt = endsAt
   if (!stageTimer) {
     stageTimer = setInterval(() => {

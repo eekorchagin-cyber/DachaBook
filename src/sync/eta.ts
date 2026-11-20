@@ -52,6 +52,11 @@ export function withStageTime(head: string, endsAt: number | null, now = Date.no
   return `${head} ${remainingPhrase(endsAt - now, new Date(now))}`
 }
 
+/** Убирает срок, который уже дописан к строке этапа, чтобы не показать его второй раз. */
+export function stageHeadline(text: string): string {
+  return text.replace(/ (?:До конца этапа|Ожидается, что этап завершится).*$/, '')
+}
+
 /** Сколько ещё займёт этап по средней скорости уже пройденных элементов. */
 export class StageEta {
   private total: number
