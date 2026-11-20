@@ -9,6 +9,7 @@ import { reopenDatabase } from '../storage/idb'
 import type { CloudAdapter } from './cloud'
 import { fetchOriginal, forgetSync, pendingCount, readSyncMeta, synchronize, type SyncOptions, type SyncResult } from './engine'
 import { stageHeadline, withStageTime } from './eta'
+import { holdAwake, releaseAwake } from './keepAwake'
 import { YandexAuthError, YandexCloud } from './yandexCloud'
 
 export interface SyncStatus {
@@ -50,26 +51,6 @@ const skippedNow = new Set<string>()
 let stageHead: string | undefined
 let stageEndsAt: number | null | undefined
 let stageTimer: ReturnType<typeof setInterval> | undefined
-let wakeLock: WakeLockSentinel | undefined
-let waking = false
-
-/** Пока страница на экране, не даём ему погаснуть: iPhone останавливает передачу вместе с гаснущим экраном. */
-async function holdScreen(): Promise<void> {
-  if (!('wakeLock' in navigator) || wakeLock || waking) return
-  waking = true
-  try {
-    const sentinel = await navigator.wakeLock.request('screen')
-    wakeLock = sentinel
-    sentinel.addEventListener('release', () => {
-      if (wakeLock === sentinel) wakeLock = undefined
-    })
-  } catch {
-    // Страница уже не на экране или система не разрешила держать его включённым.
-  } finally {
-    waking = false
-  }
-}
-
 let syncPaused = false
 let syncPause: Promise<void> | undefined
 let releaseSyncPause: (() => void) | undefined
@@ -91,12 +72,6 @@ export function resumeSyncTransfers(): void {
   releaseSyncPause?.()
   releaseSyncPause = undefined
   syncPause = undefined
-}
-
-function releaseScreen(): void {
-  const current = wakeLock
-  wakeLock = undefined
-  void current?.release().catch(() => undefined)
 }
 
 function stopStageClock(): void {
@@ -217,7 +192,7 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
   clearTimeout(changeTimer)
   lastRunAt = Date.now()
   set({ running: true, progress: 'Синхронизация…', detail: undefined, fileName: undefined, fileSize: undefined, error: undefined, offline: false, needsLogin: false })
-  void holdScreen()
+  holdAwake()
   let result: SyncResult | undefined
   try {
     const options = {
@@ -264,7 +239,7 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
   } finally {
     inflight.clear()
     stopStageClock()
-    releaseScreen()
+    releaseAwake()
     set({ running: false, progress: undefined, detail: undefined, fileName: undefined, fileSize: undefined })
     await refreshCounts()
   }
@@ -335,13 +310,15 @@ export async function startSync(): Promise<void> {
   })
   document.addEventListener('visibilitychange', () => {
     if (!status.connected || document.visibilityState !== 'visible') return
-    if (status.running) void holdScreen()
+    if (status.running) holdAwake()
     else if (Date.now() - lastRunAt > RESUME_GAP_MS) void syncNow()
   })
-  // iPhone отклоняет просьбу не гасить экран, если она пришла не от касания.
-  window.addEventListener('pointerdown', () => {
-    if (status.running) void holdScreen()
-  })
+  // iPhone запускает ролик, который держит экран, только после касания.
+  for (const eventName of ['pointerdown', 'touchend', 'click'] as const) {
+    window.addEventListener(eventName, () => {
+      if (status.running) holdAwake()
+    })
+  }
   window.addEventListener('online', () => {
     if (status.connected) void syncNow()
   })
