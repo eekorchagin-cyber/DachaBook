@@ -99,7 +99,7 @@ export class StageEta {
 
 const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
 
-/** До часа — длительность. Дольше — примерное время окончания: сегодня «около 14:35», после полуночи «завтра в 1:20», дальше — дата. */
+/** До часа — длительность («около 40 минут»). Дольше — момент окончания: «Ожидается, что этап завершится в 15:48», завтра или с датой. */
 export function remainingPhrase(ms: number, now = new Date()): string {
   if (ms < 60_000) return 'До конца этапа осталось меньше минуты.'
   const minutes = Math.round(ms / 60_000)
@@ -111,11 +111,11 @@ export function remainingPhrase(ms: number, now = new Date()): string {
   const time = `${end.getHours()}:${String(end.getMinutes()).padStart(2, '0')}`
   const day = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
   const days = Math.round((day(end) - day(now)) / 86_400_000)
-  if (days <= 0) return `До конца этапа около ${time}.`
-  if (days === 1) return `До конца этапа завтра в ${time}.`
+  if (days <= 0) return `Ожидается, что этап завершится в ${time}.`
+  if (days === 1) return `Ожидается, что этап завершится завтра в ${time}.`
   const date = `${end.getDate()} ${MONTHS[end.getMonth()]}`
   const year = end.getFullYear() === now.getFullYear() ? '' : ` ${end.getFullYear()}`
-  return `До конца этапа ${date}${year} в ${time}.`
+  return `Ожидается, что этап завершится ${date}${year} в ${time}.`
 }
 
 /** 1, 21 — форма единственного; остальные — множественного. */

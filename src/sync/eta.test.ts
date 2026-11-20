@@ -11,9 +11,9 @@ describe('оставшееся время этапа', () => {
     expect(remainingPhrase(21 * 60_000)).toBe('До конца этапа осталось около 21 минуты.')
     expect(remainingPhrase(60 * 60_000)).toBe('До конца этапа осталось около 1 часа.')
     const evening = new Date(2026, 10, 19, 22, 0)
-    expect(remainingPhrase(90 * 60_000, evening)).toBe('До конца этапа около 23:30.')
-    expect(remainingPhrase(2 * 60 * 60_000, new Date(2026, 10, 19, 23, 30))).toBe('До конца этапа завтра в 1:30.')
-    expect(remainingPhrase(30 * 60 * 60_000, evening)).toBe('До конца этапа 21 ноября в 4:00.')
+    expect(remainingPhrase(90 * 60_000, evening)).toBe('Ожидается, что этап завершится в 23:30.')
+    expect(remainingPhrase(2 * 60 * 60_000, new Date(2026, 10, 19, 23, 30))).toBe('Ожидается, что этап завершится завтра в 1:30.')
+    expect(remainingPhrase(30 * 60 * 60_000, evening)).toBe('Ожидается, что этап завершится 21 ноября в 4:00.')
   })
 
   it('молчит, пока этап ещё не начался, и считает по средней скорости', () => {
