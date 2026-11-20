@@ -5,6 +5,8 @@ export const YANDEX_DIARY_ROOT = 'disk:/DachaBook/diary'
 const PAGE = 200
 /** Сервер загрузки Диска обрывает соединения при частых запросах (и без заголовков CORS — браузер видит это как «нет ответа»). */
 const WRITE_RETRY: RetryOptions = { attempts: 5, delaysMs: [3000, 10000, 30000, 60000] }
+/** Крупный файл повторяется один раз: на iPhone оборванная загрузка часто ещё идёт, и вторая копия делит с ней канал. */
+const LARGE_UPLOAD_RETRY: RetryOptions = { attempts: 2, delaysMs: [15_000] }
 /** Запас по времени при получении изменений: файлы, записанные почти одновременно с прошлой проверкой, не пропускаются. */
 const OVERLAP_MS = 2 * 60 * 1000
 
@@ -106,14 +108,15 @@ export class YandexCloud implements CloudAdapter {
   }
 
   async write(path: string, data: Blob, signal?: AbortSignal): Promise<void> {
+    const retry = data.size >= 1024 * 1024 ? LARGE_UPLOAD_RETRY : WRITE_RETRY
     try {
-      await this.call(() => this.disk.upload(this.full(path), data, signal), WRITE_RETRY)
+      await this.call(() => this.disk.upload(this.full(path), data, signal), retry)
     } catch (error) {
       if (signal?.aborted) throw error
       // Папки ещё нет (409 при получении ссылки загрузки) — создаём и повторяем.
       if (!(error instanceof YandexDiskError && error.status === 409)) throw error
       await this.ensureFolder(path.split('/').slice(0, -1).join('/'), true)
-      await this.call(() => this.disk.upload(this.full(path), data, signal), WRITE_RETRY)
+      await this.call(() => this.disk.upload(this.full(path), data, signal), retry)
     }
   }
 

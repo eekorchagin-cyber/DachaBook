@@ -50,6 +50,31 @@ const skippedNow = new Set<string>()
 let stageHead: string | undefined
 let stageEndsAt: number | null | undefined
 let stageTimer: ReturnType<typeof setInterval> | undefined
+let wakeLock: WakeLockSentinel | undefined
+let waking = false
+
+/** Пока страница на экране, не даём ему погаснуть: iPhone останавливает передачу вместе с гаснущим экраном. */
+async function holdScreen(): Promise<void> {
+  if (!('wakeLock' in navigator) || wakeLock || waking) return
+  waking = true
+  try {
+    const sentinel = await navigator.wakeLock.request('screen')
+    wakeLock = sentinel
+    sentinel.addEventListener('release', () => {
+      if (wakeLock === sentinel) wakeLock = undefined
+    })
+  } catch {
+    // Страница уже не на экране или система не разрешила держать его включённым.
+  } finally {
+    waking = false
+  }
+}
+
+function releaseScreen(): void {
+  const current = wakeLock
+  wakeLock = undefined
+  void current?.release().catch(() => undefined)
+}
 
 function stopStageClock(): void {
   stageHead = undefined
@@ -169,6 +194,7 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
   clearTimeout(changeTimer)
   lastRunAt = Date.now()
   set({ running: true, progress: 'Синхронизация…', detail: undefined, fileName: undefined, fileSize: undefined, error: undefined, offline: false, needsLogin: false })
+  void holdScreen()
   let result: SyncResult | undefined
   try {
     const options = {
@@ -213,6 +239,7 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
   } finally {
     inflight.clear()
     stopStageClock()
+    releaseScreen()
     set({ running: false, progress: undefined, detail: undefined, fileName: undefined, fileSize: undefined })
     await refreshCounts()
   }
@@ -282,7 +309,9 @@ export async function startSync(): Promise<void> {
     }
   })
   document.addEventListener('visibilitychange', () => {
-    if (status.connected && document.visibilityState === 'visible' && Date.now() - lastRunAt > RESUME_GAP_MS) void syncNow()
+    if (!status.connected || document.visibilityState !== 'visible') return
+    if (status.running) void holdScreen()
+    else if (Date.now() - lastRunAt > RESUME_GAP_MS) void syncNow()
   })
   window.addEventListener('online', () => {
     if (status.connected) void syncNow()

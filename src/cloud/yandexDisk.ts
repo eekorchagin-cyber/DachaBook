@@ -44,6 +44,15 @@ async function send(url: string, init: RequestInit, purpose: string, timeoutMs =
   }
 }
 
+/** Сколько ждать одну загрузку. Мелкий файл — 2 минуты. Крупный считается от медленной отдачи 100 КБ/с, чтобы запрос не обрывался и не начинался заново. */
+export function uploadBudgetMs(bytes: number): number {
+  const floor = 2 * 60_000
+  const ceiling = 45 * 60_000
+  if (bytes < 1024 * 1024) return floor
+  const expected = Math.ceil((bytes * 1500) / (100 * 1024))
+  return Math.min(ceiling, Math.max(floor, expected))
+}
+
 export interface RetryOptions {
   attempts?: number
   delaysMs?: number[]
@@ -169,7 +178,7 @@ export class YandexDisk {
 
   async upload(path: string, data: Blob, signal?: AbortSignal): Promise<void> {
     const target = await this.request<{ href: string; method: string }>('GET', '/resources/upload', { path, overwrite: 'true' })
-    const response = await send(target.href, { method: target.method || 'PUT', body: data, signal }, 'Загрузка файла на сервер Диска', 120_000)
+    const response = await send(target.href, { method: target.method || 'PUT', body: data, signal }, 'Загрузка файла на сервер Диска', uploadBudgetMs(data.size))
     if (!response.ok) throw new YandexDiskError(response.status, `Загрузка не принята: ${response.statusText}`)
   }
 

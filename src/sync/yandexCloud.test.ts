@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { withRetry, YandexDiskError } from '../cloud/yandexDisk'
+import { uploadBudgetMs, withRetry, YandexDiskError } from '../cloud/yandexDisk'
 import { YandexAuthError, YandexCloud } from './yandexCloud'
 
 type Handler = (url: URL, init?: RequestInit) => Response | Promise<Response>
@@ -69,6 +69,12 @@ describe('адаптер Яндекс Диска', () => {
     await new YandexCloud('token').write('docs/events/a.json', new Blob(['{}']))
     expect(folderCreated).toBe(true)
     expect(uploaded).toEqual(['/put/1'])
+  })
+
+  it('крупному файлу даёт дойти одним запросом, а не обрывает его через две минуты', () => {
+    expect(uploadBudgetMs(500)).toBe(120_000)
+    expect(uploadBudgetMs(68 * 1024 * 1024)).toBe(1_044_480)
+    expect(uploadBudgetMs(200 * 1024 * 1024)).toBe(45 * 60_000)
   })
 
   it('устаревший вход — понятная ошибка с просьбой войти снова', async () => {
