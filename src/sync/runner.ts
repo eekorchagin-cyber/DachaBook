@@ -70,6 +70,29 @@ async function holdScreen(): Promise<void> {
   }
 }
 
+let syncPaused = false
+let syncPause: Promise<void> | undefined
+let releaseSyncPause: (() => void) | undefined
+
+/** Остановить текущую передачу, чтобы проверка обновления могла скачать новую версию. */
+export function pauseSyncTransfers(): void {
+  if (syncPaused) return
+  syncPaused = true
+  syncPause = new Promise((resolve) => {
+    releaseSyncPause = resolve
+  })
+  for (const item of inflight.values()) item.controller.abort()
+}
+
+/** Продолжить передачу после проверки, если страница не перезагружается. */
+export function resumeSyncTransfers(): void {
+  if (!syncPaused) return
+  syncPaused = false
+  releaseSyncPause?.()
+  releaseSyncPause = undefined
+  syncPause = undefined
+}
+
 function releaseScreen(): void {
   const current = wakeLock
   wakeLock = undefined
@@ -218,6 +241,8 @@ export async function syncNow(extra: Pick<SyncOptions, 'firstConnect'> = {}): Pr
         set(shownFile())
       },
       isFileSkipped: (id: string) => skippedNow.has(id),
+      isPaused: () => syncPaused,
+      waitIfPaused: () => syncPause ?? Promise.resolve(),
     }
     try {
       result = await synchronize(db, adapter, options)

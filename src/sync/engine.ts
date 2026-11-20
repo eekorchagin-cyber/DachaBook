@@ -61,6 +61,9 @@ export interface SyncOptions {
   onFileDone?: (id: string) => void
   /** Файл пропущен: не считать сбой и не брать его снова, пока отметку не снимут. */
   isFileSkipped?: (id: string) => boolean
+  /** Проверка обновления останавливает передачу, чтобы телефон мог скачать новую версию. */
+  isPaused?: () => boolean
+  waitIfPaused?: () => Promise<void>
   /** Снимок в облаке не чаще этого интервала (по умолчанию сутки). */
   snapshotIntervalMs?: number
   now?: () => Date
@@ -110,13 +113,14 @@ function ioParallel(requested: number): number {
   return requested
 }
 
-async function pool<T>(items: T[], size: number, work: (item: T) => Promise<void>, errors: string[]): Promise<number> {
+async function pool<T>(items: T[], size: number, work: (item: T) => Promise<void>, errors: string[], wait?: () => Promise<void>): Promise<number> {
   let next = 0
   let failed = 0
   await Promise.all(
     Array.from({ length: Math.min(size, items.length) }, async () => {
       while (next < items.length) {
         try {
+          await wait?.()
           await work(items[next++])
         } catch (error) {
           failed++
@@ -231,7 +235,7 @@ async function applySnapshot(database: DiaryDatabase, cloud: CloudAdapter, path:
 
 type Report = (text: string, detail?: string, endsAt?: number | null) => void
 
-async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta, result: SyncResult, report: Report): Promise<Map<string, Map<string, string | undefined>>> {
+async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta, result: SyncResult, report: Report, wait?: () => Promise<void>): Promise<Map<string, Map<string, string | undefined>>> {
   const listed = new Map<string, Map<string, string | undefined>>()
   const eta = new StageEta()
   eta.start()
@@ -258,7 +262,7 @@ async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta
         eta.finish()
         if (done === 1 || done % 5 === 0 || done === changed.length) report(`Получение: ${eta.progress()}.${eta.suffix()}`)
       }
-    }, result.errors)
+    }, result.errors, wait)
     // Курсор не сдвигается, если что-то не получено: при следующей синхронизации эти файлы будут прочитаны снова.
     if (cursor && failed === 0) meta.cursors[collection] = cursor
     result.failed += failed
@@ -300,7 +304,7 @@ async function pushTombstones(database: DiaryDatabase, cloud: CloudAdapter, auth
   }
 }
 
-async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<string, Map<string, string | undefined>>, result: SyncResult, report: Report): Promise<void> {
+async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<string, Map<string, string | undefined>>, result: SyncResult, report: Report, wait?: () => Promise<void>): Promise<void> {
   const conflicted = new Set((await database.conflicts.toArray()).map((item) => item.key))
   const eta = new StageEta()
   eta.start()
@@ -339,7 +343,7 @@ async function push(database: DiaryDatabase, cloud: CloudAdapter, listed: Map<st
         eta.finish()
         if (done === 1 || done % 5 === 0 || done === dirty.length) report(`Отправка: ${eta.progress()}.${eta.suffix()}`)
       }
-    }, result.errors)
+    }, result.errors, wait)
   }
 }
 
@@ -480,62 +484,73 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
       stepped = true
       done++
     }
-    let planned = 0
-    let settled = false
-    let sent = 0
-    const settle = () => {
-      if (settled) return
-      settled = true
-      clock.settle(planned, sent)
-      const rate = clock.rate()
-      if (rate) meta.fileBytesPerSecond = rate
-    }
     if (state.fileSkippedAt) {
       step()
       if (done % 20 === 0 || done === files.length) tell()
       return
     }
-    const controller = new AbortController()
-    options.onFile?.(file, controller)
     const address = `Адрес на Яндекс Диске: DachaBook/diary/${originalPath(file)}.`
     const inDiary = homes.get(file.id) ? ` В программе: ${homes.get(file.id)}.` : ''
-    tell(`Сейчас ${fileTitle(file)}. ${address}${inDiary}`)
-    try {
+    for (;;) {
+      await options.waitIfPaused?.()
+      let planned = 0
+      let settled = false
+      let sent = 0
+      let pausedAbort = false
+      const settle = () => {
+        if (settled) return
+        settled = true
+        clock.settle(planned, sent)
+        const rate = clock.rate()
+        if (rate) meta.fileBytesPerSecond = rate
+      }
+      const controller = new AbortController()
+      options.onFile?.(file, controller)
+      tell(`Сейчас ${fileTitle(file)}. ${address}${inDiary}`)
       try {
-        await untilAbort(
-          (async () => {
-            const content = await database.fileContents.get(file.id)
-            const hadOriginal = !!state.originalUploaded
-            const hadThumb = !!state.thumbUploaded
-            planned = pendingBytes(content, state)
-            if (planned > 0) clock.markStart()
-            tell(`Сейчас ${fileTitle(file)}. ${filePlace(file, !!content?.original, homes.get(file.id))}`)
-            await passFile(database, cloud, file, content, state, result, controller.signal)
-            if (!hadOriginal && state.originalUploaded && content?.original) sent += content.original.size
-            if (!hadThumb && state.thumbUploaded && content?.thumb) sent += content.thumb.size
-          })(),
-          controller.signal,
-        )
-      } catch (error) {
-        if (!options.isFileSkipped?.(file.id)) throw error
-        state.fileSkippedAt = new Date().toISOString()
+        try {
+          await untilAbort(
+            (async () => {
+              const content = await database.fileContents.get(file.id)
+              const hadOriginal = !!state.originalUploaded
+              const hadThumb = !!state.thumbUploaded
+              planned = pendingBytes(content, state)
+              if (planned > 0) clock.markStart()
+              tell(`Сейчас ${fileTitle(file)}. ${filePlace(file, !!content?.original, homes.get(file.id))}`)
+              await passFile(database, cloud, file, content, state, result, controller.signal)
+              if (!hadOriginal && state.originalUploaded && content?.original) sent += content.original.size
+              if (!hadThumb && state.thumbUploaded && content?.thumb) sent += content.thumb.size
+            })(),
+            controller.signal,
+          )
+        } catch (error) {
+          if (options.isPaused?.()) pausedAbort = true
+          else if (!options.isFileSkipped?.(file.id)) throw error
+          else {
+            state.fileSkippedAt = new Date().toISOString()
+            await database.syncState.put(state)
+            settle()
+            step()
+            const line = stageLine()
+            report(`Пропущен ${fileTitle(file)}. ${line.text}`, undefined, line.endsAt)
+            return
+          }
+        }
+        if (pausedAbort) continue
         await database.syncState.put(state)
         settle()
         step()
-        const line = stageLine()
-        report(`Пропущен ${fileTitle(file)}. ${line.text}`, undefined, line.endsAt)
+        if (done % 20 === 0 || done === files.length) tell()
         return
+      } finally {
+        if (!pausedAbort) {
+          settle()
+          step()
+        }
+        options.onFileDone?.(file.id)
       }
-      await database.syncState.put(state)
-      settle()
-      step()
-      if (done % 20 === 0 || done === files.length) tell()
-    } finally {
-      settle()
-      step()
-      options.onFileDone?.(file.id)
     }
-  }, result.errors)
+  }, result.errors, () => options.waitIfPaused?.() ?? Promise.resolve())
 }
 
 /** Оригинал, которого нет на устройстве, скачивается из облака при открытии и остаётся на устройстве. */
@@ -614,10 +629,11 @@ export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, 
   }
 
   report('Получение изменений…')
-  const listed = await pull(database, cloud, meta, result, report)
+  const wait = () => options.waitIfPaused?.() ?? Promise.resolve()
+  const listed = await pull(database, cloud, meta, result, report, wait)
   await writeSyncMeta(database, meta)
   report('Отправка изменений…')
-  await push(database, cloud, listed, result, report)
+  await push(database, cloud, listed, result, report, wait)
   await pushTombstones(database, cloud, options.author, result)
   try {
     report('Справочники…')

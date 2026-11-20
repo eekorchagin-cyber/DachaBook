@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { pauseSyncTransfers, resumeSyncTransfers } from '../sync/runner'
 
 export type SwState =
   | { kind: 'unsupported' }
@@ -94,28 +95,38 @@ export function useServiceWorkerState(): SwState {
   )
 }
 
-/** Проверяет version.json; если вышла новая версия — обновляет офлайн-кэш и перезапускает страницу. */
+function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms)
+    work.then(resolve, reject).finally(() => clearTimeout(timer))
+  })
+}
+
+/** Проверяет version.json; если вышла новая версия — обновляет офлайн-кэш и перезапускает страницу. Передача файлов на это время останавливается. */
 export async function updateApp(): Promise<'latest' | 'reloading'> {
-  let response: Response
+  pauseSyncTransfers()
+  let resume = true
   try {
-    response = await fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store' })
-  } catch {
-    throw new Error('Нет связи, чтобы проверить обновление.')
-  }
-  if (!response.ok) throw new Error('Не удалось проверить обновление. Проверьте интернет и откройте DachaBook с ярлыка.')
-  let version: string | undefined
-  try {
-    version = ((await response.json()) as { version?: string }).version
-  } catch {
-    throw new Error('Не удалось прочитать номер версии. Откройте DachaBook с ярлыка и повторите.')
-  }
-  if (!version) throw new Error('Не удалось прочитать номер версии.')
-  if (version === __APP_VERSION__) return 'latest'
-  const registration = await navigator.serviceWorker?.getRegistration()
-  if (registration) {
-    await registration.update()
-    const worker = registration.waiting ?? (await installedWorker(registration))
-    if (worker) {
+    let response: Response
+    try {
+      response = await fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store', signal: AbortSignal.timeout(15_000) })
+    } catch {
+      throw new Error('Нет связи, чтобы проверить обновление.')
+    }
+    if (!response.ok) throw new Error('Не удалось проверить обновление. Проверьте интернет и откройте DachaBook с ярлыка.')
+    let version: string | undefined
+    try {
+      version = ((await response.json()) as { version?: string }).version
+    } catch {
+      throw new Error('Не удалось прочитать номер версии. Откройте DachaBook с ярлыка и повторите.')
+    }
+    if (!version) throw new Error('Не удалось прочитать номер версии.')
+    if (version === __APP_VERSION__) return 'latest'
+    const registration = await navigator.serviceWorker?.getRegistration()
+    if (registration) {
+      await withTimeout(registration.update(), 20_000, 'Не удалось скачать обновление. Оставьте программу на экране и повторите.')
+      const worker = registration.waiting ?? (await installedWorker(registration))
+      if (!worker) throw new Error('Новая версия не скачалась. Оставьте программу на экране и повторите.')
       const switched = new Promise<void>((resolve) => {
         navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })
         setTimeout(resolve, 10_000)
@@ -123,17 +134,20 @@ export async function updateApp(): Promise<'latest' | 'reloading'> {
       worker.postMessage('skip-waiting')
       await switched
     }
+    resume = false
+    location.reload()
+    return 'reloading'
+  } finally {
+    if (resume) resumeSyncTransfers()
   }
-  location.reload()
-  return 'reloading'
 }
 
-/** Ждёт, пока скачанная новая версия закончит установку (до 30 секунд). */
+/** Ждёт, пока скачанная новая версия закончит установку (до 60 секунд). */
 function installedWorker(registration: ServiceWorkerRegistration): Promise<ServiceWorker | null> {
   const worker = registration.installing
   if (!worker) return Promise.resolve(registration.waiting)
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(registration.waiting), 30_000)
+    const timer = setTimeout(() => resolve(registration.waiting), 60_000)
     worker.addEventListener('statechange', () => {
       if (worker.state === 'installed' || worker.state === 'redundant') {
         clearTimeout(timer)

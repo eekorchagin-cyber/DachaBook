@@ -336,4 +336,44 @@ describe('синхронизация двух устройств через об
     expect(seen[0]?.text).toContain('До конца этапа осталось меньше минуты')
     expect(seen[0]?.endsAt).toBeGreaterThan(Date.now() - 60_000)
   })
+
+  it('пауза обрывает передачу файла и продолжает её после снятия', async () => {
+    const cloud = new MemoryCloud()
+    const mac = device('Mac')
+    const file = await mac.repo.create('files', { role: 'attachment', fileName: 'архив.zip', mime: 'application/zip', size: 4, sha256: 'p', uploadState: 'local' })
+    await mac.database.fileContents.put({ id: file.id, original: new Blob([new Uint8Array(4)]) })
+    let paused = false
+    let attempts = 0
+    const realWrite = cloud.write.bind(cloud)
+    cloud.write = (path, data, signal?: AbortSignal) => {
+      if (!path.startsWith(`files/originals/${file.id}`)) return realWrite(path, data)
+      attempts++
+      if (attempts > 1) return realWrite(path, data)
+      return new Promise((_, reject) => {
+        const fail = () => reject(new DOMException('aborted', 'AbortError'))
+        if (signal?.aborted) fail()
+        else signal?.addEventListener('abort', fail, { once: true })
+      })
+    }
+    const result = await synchronize(
+      mac.database,
+      cloud,
+      options('Mac', {
+        onFile: (_file, controller) => {
+          if (attempts === 0) {
+            paused = true
+            setTimeout(() => controller.abort(), 20)
+          }
+        },
+        isPaused: () => paused,
+        waitIfPaused: async () => {
+          if (!paused) return
+          paused = false
+        },
+      }),
+    )
+    expect(attempts).toBe(2)
+    expect(result.uploadedFiles).toBe(1)
+    expect(cloud.files.has(`files/originals/${file.id}.zip`)).toBe(true)
+  })
 })

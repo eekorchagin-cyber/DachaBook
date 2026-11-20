@@ -169,7 +169,7 @@ function UpdateCheck() {
   const check = async () => {
     setBusy(true)
     setFailed(false)
-    setMessage('')
+    setMessage('Останавливаю передачу и проверяю обновление…')
     try {
       const result = await updateApp()
       if (result === 'latest') setMessage('Установлена последняя версия.')
