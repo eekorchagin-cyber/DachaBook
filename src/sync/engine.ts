@@ -437,6 +437,8 @@ async function passFile(
     await cloud.write(originalPath(file), content.original, signal)
     state.originalUploaded = true
     result.uploadedFiles++
+    // Отметка сразу, чтобы перезагрузка во время следующих шагов не отправила оригинал ещё раз.
+    await database.syncState.put(state)
   }
   if (content?.thumb && !state.thumbUploaded) {
     await cloud.write(thumbPath(file.id), content.thumb, signal)
@@ -456,26 +458,31 @@ async function passFile(
   }
 }
 
-/** Оригиналы и уменьшенные копии: сначала срок всего объёма, потом передача. */
+/** Оригинал уже лежит на Диске с тем же размером: отметка на телефоне могла не сохраниться после обрыва. */
+async function markIfAlreadyStored(database: DiaryDatabase, cloud: CloudAdapter, file: StoredFile, state: SyncRecord): Promise<void> {
+  if (state.originalUploaded || file.size <= 0) return
+  const remote = await cloud.stat(originalPath(file))
+  if (remote?.size !== file.size) return
+  state.originalUploaded = true
+  await database.syncState.put(state)
+}
+
+/** Оригиналы и уменьшенные копии: сначала срок всего объёма, потом передача. Уже отправленные в счётчик входят сразу и повторно не открываются. */
 async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: Report, options: SyncOptions, meta: SyncMeta): Promise<void> {
   const files = ((await database.files.toArray()) as StoredFile[]).filter((file) => !file.deletedAt)
   const homes = await fileHomes(database)
+  const states = files.length > 0 ? await database.syncState.bulkGet(files.map((file) => `blob/${file.id}`)) : []
+  const pending = files.filter((file, index) => !states[index]?.fileSkippedAt && !alreadyOnDisk(file, states[index]))
   let totalBytes = 0
   if (files.length > 0) {
     report('Оцениваю фото и файлы…')
-    const states = await database.syncState.bulkGet(files.map((file) => `blob/${file.id}`))
-    const pendingIds = files.flatMap((file, index) => (states[index]?.fileSkippedAt || alreadyOnDisk(file, states[index]) ? [] : [file.id]))
-    const contents = new Map<string, { original?: Blob; thumb?: Blob }>()
-    for (const item of await database.fileContents.bulkGet(pendingIds)) {
-      if (item) contents.set(item.id, item)
-    }
     for (let index = 0; index < files.length; index++) {
-      if (states[index]?.fileSkippedAt || alreadyOnDisk(files[index], states[index])) continue
-      totalBytes += pendingBytes(contents.get(files[index].id), states[index])
+      if (states[index]?.fileSkippedAt || alreadyOnDisk(files[index], states[index]) || states[index]?.originalUploaded) continue
+      totalBytes += files[index].size
     }
   }
   const clock = new StageClock(totalBytes, meta.fileBytesPerSecond ?? 0)
-  let done = 0
+  let done = files.length - pending.length
   const stageLine = () => {
     const head = `Фото и файлы: ${done} из ${files.length}.`
     const endsAt = clock.endsAt()
@@ -486,7 +493,7 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
     report(line.text, detail, line.endsAt)
   }
   if (files.length > 0) tell()
-  result.failed += await pool(files, ioParallel(Math.min(cloud.parallel ?? 3, 3)), async (file) => {
+  result.failed += await pool(pending, ioParallel(Math.min(cloud.parallel ?? 3, 3)), async (file) => {
     const key = `blob/${file.id}`
     const state = (await database.syncState.get(key)) ?? { key }
     let stepped = false
@@ -495,9 +502,10 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
       stepped = true
       done++
     }
+    if (!state.fileSkippedAt) await markIfAlreadyStored(database, cloud, file, state)
     if (state.fileSkippedAt || alreadyOnDisk(file, state)) {
       step()
-      if (done % 20 === 0 || done === files.length) tell()
+      tell()
       return
     }
     const address = `Адрес на Яндекс Диске: DachaBook/diary/${originalPath(file)}.`
@@ -513,7 +521,10 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
         settled = true
         clock.settle(planned, sent)
         const rate = clock.rate()
-        if (rate) meta.fileBytesPerSecond = rate
+        if (rate) {
+          meta.fileBytesPerSecond = rate
+          void writeSyncMeta(database, meta).catch(() => undefined)
+        }
       }
       const controller = new AbortController()
       options.onFile?.(file, controller)
@@ -551,7 +562,7 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
         await database.syncState.put(state)
         settle()
         step()
-        if (done % 20 === 0 || done === files.length) tell()
+        tell()
         return
       } finally {
         if (!pausedAbort) {

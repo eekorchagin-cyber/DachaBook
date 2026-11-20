@@ -379,4 +379,28 @@ describe('синхронизация двух устройств через об
     expect(result.uploadedFiles).toBe(1)
     expect(cloud.files.has(`files/originals/${file.id}.zip`)).toBe(true)
   })
+
+  it('файл того же размера уже на Диске не отправляется снова, если отметка на устройстве потерялась', async () => {
+    const cloud = new MemoryCloud()
+    const mac = device('Mac')
+    const file = await mac.repo.create('files', { role: 'attachment', fileName: 'видео.mov', mime: 'video/quicktime', size: 4, sha256: 'v', uploadState: 'local' })
+    await mac.database.fileContents.put({ id: file.id, original: new Blob([new Uint8Array([1, 2, 3, 4])]) })
+    await synchronize(mac.database, cloud, options('Mac'))
+    const key = `blob/${file.id}`
+    const saved = await mac.database.syncState.get(key)
+    await mac.database.syncState.put({ ...saved!, key, originalUploaded: false })
+
+    let resent = 0
+    const realWrite = cloud.write.bind(cloud)
+    cloud.write = (path, data) => {
+      if (path.startsWith(`files/originals/${file.id}`)) resent++
+      return realWrite(path, data)
+    }
+    const lines: string[] = []
+    await synchronize(mac.database, cloud, options('Mac', { onProgress: (text) => { if (text.startsWith('Фото и файлы')) lines.push(text) } }))
+
+    expect(resent).toBe(0)
+    expect((await mac.database.syncState.get(key))?.originalUploaded).toBe(true)
+    expect(lines.some((line) => line.startsWith('Фото и файлы: 1 из 1'))).toBe(true)
+  })
 })
