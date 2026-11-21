@@ -31,27 +31,15 @@ export function DiaryScreen({ settings, initialFilter }: { settings: AppSettings
   const activeFilters = [filter.from, filter.to, filter.objectId, filter.plantGroupId, filter.workKind, filter.type].filter(Boolean).length
 
   return (
-    <Screen
-      title="Дневник"
-      help="diary"
-      tab="/diary"
-      actions={
-        <>
-          <a className="button small secondary" href="#/diary/book">
-            PDF
-          </a>
-          <a className="button small secondary" href="#/diary/album">
-            Альбом
-          </a>
-          <a className="button small secondary" href={`#/diary/day?date=${filter.from && filter.from === filter.to ? filter.from : todayAtSite().date}`}>
-            В этот день
-          </a>
-          <a className="button small" href="#/diary/new">
-            + Запись
-          </a>
-        </>
-      }
-    >
+    <Screen title="Дневник" help="diary" tab="/diary" add={{ href: '#/diary/new', label: 'Новая запись' }}>
+      <div className="jump-row" role="group" aria-label="Разделы дневника">
+        <a className="chip" href="#/diary/album">
+          Альбом
+        </a>
+        <a className="chip" href={`#/diary/day?date=${filter.from && filter.from === filter.to ? filter.from : todayAtSite().date}`}>
+          В этот день
+        </a>
+      </div>
       <div className="search-row">
         <SearchButton query={filter.text ?? ''} label="Поиск по дневнику" placeholder="Например: редис" onFind={(value) => set({ text: value || undefined })} />
         <button type="button" className="button secondary small" onClick={() => setShowFilters((value) => !value)}>
@@ -120,7 +108,7 @@ export function DiaryScreen({ settings, initialFilter }: { settings: AppSettings
       )}
       {events && found.length === 0 && (
         <EmptyState>
-          {events.length === 0 ? 'В дневнике пока нет записей. Нажмите «+ Запись» или импортируйте дневник из Evernote в разделе «Ещё».' : 'Ничего не найдено — измените поиск или фильтры.'}
+          {events.length === 0 ? 'В дневнике пока нет записей. Нажмите «+» справа вверху или импортируйте дневник из Evernote в разделе «Ещё».' : 'Ничего не найдено — измените поиск или фильтры.'}
         </EmptyState>
       )}
       {(filter.from || filter.to) && (

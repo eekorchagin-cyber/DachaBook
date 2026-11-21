@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mergeShoppingDraft, shoppingQuantityText } from './shopping'
 
-describe('список Возьми', () => {
+describe('список Купить', () => {
   it('создаёт позицию к покупке и не дублирует материал', () => {
     const draft = { consumableId: 'lime', name: 'Известь', quantity: 2, unit: 'уп.', workId: 'w1' }
     expect(mergeShoppingDraft(undefined, draft)).toMatchObject({

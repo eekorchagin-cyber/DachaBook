@@ -38,7 +38,7 @@ export function DiaryBookScreen({ settings }: { settings: AppSettings }) {
   }
 
   return (
-    <Screen title="Дневник в PDF" help="book" tab="/diary" back="/diary">
+    <Screen title="Дневник в PDF" help="book" tab="/more" back="/more/service">
       <div className="no-print">
         <p className="hint">
           Книга дневника: главы — годы, параграфы — месяцы. На iPhone после «Сохранить PDF» откроется «Поделиться» — выберите «Сохранить в Файлы». На компьютере файл

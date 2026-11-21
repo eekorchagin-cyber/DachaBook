@@ -33,16 +33,7 @@ export function LibraryScreen() {
     .sort((a, b) => a.material.title.localeCompare(b.material.title, 'ru'))
 
   return (
-    <Screen
-      title="Статьи"
-      help="library"
-      tab="/library"
-      actions={
-        <a className="button small" href="#/library/new">
-          + Статья
-        </a>
-      }
-    >
+    <Screen title="Статьи" help="library" tab="/library" add={{ href: '#/library/new', label: 'Новая статья' }}>
       <div className="actions">
         <SearchButton query={query} label="Поиск по статьям" placeholder="Например: мульча" onFind={setQuery} />
       </div>

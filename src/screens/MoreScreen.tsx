@@ -11,6 +11,8 @@ import { ActionButton } from '../ui/Section'
 
 const TOP = [
   { href: '#/guide', title: 'Как пользоваться DachaBook' },
+  { href: '#/shopping', title: 'Купить' },
+  { href: '#/climate', title: 'Климат участка' },
   { href: '#/more/works', title: 'Настройки работ' },
   { href: '#/dictionaries', title: 'Справочники' },
   { href: '#/more/program', title: 'Настройки программы' },
@@ -20,8 +22,6 @@ const TOP = [
 
 const WORKS = [
   { href: '#/works', title: 'План работ' },
-  { href: '#/shopping', title: 'Возьми' },
-  { href: '#/climate', title: 'Климат участка' },
   { href: '#/watering', title: 'Полив' },
 ]
 
@@ -42,7 +42,7 @@ const CLOUD = [
 
 const SERVICE = [
   { href: '#/share', title: 'Фото в дневник' },
-  { href: '#/diary/book', title: 'Дневник в PDF' },
+  { href: '#/diary/book', title: 'PDF' },
   { href: '#/more/evernote', title: 'Evernote' },
   { href: '#/import/dayone', title: 'Импорт из Day One' },
   { href: '#/lab', title: 'Лаборатория проверок (служебная)' },

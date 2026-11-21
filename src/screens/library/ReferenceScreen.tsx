@@ -32,17 +32,12 @@ export function ReferenceView({ id }: { id: string }) {
   }
   const links = [...material.objectIds.map((item) => objects.find((o) => o.id === item)?.name), ...material.plantGroupIds.map((item) => groups.find((g) => g.id === item)?.name)].filter(Boolean)
   return (
-    <Screen
-      title={material.title}
-      help="library"
-      back="/library"
-      tab="/library"
-      actions={
-        <a className="button small secondary" href={`#/library/${material.id}/edit`}>
+    <Screen title={material.title} help="library" back="/library" tab="/library">
+      <div className="actions">
+        <a className="button secondary" href={`#/library/${material.id}/edit`}>
           Изменить
         </a>
-      }
-    >
+      </div>
       {(material.tags.length > 0 || links.length > 0) && (
         <p className="muted small">{[material.tags.join(', '), links.join(', ')].filter(Boolean).join(' · ')}</p>
       )}

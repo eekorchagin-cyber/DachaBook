@@ -50,6 +50,15 @@ function rememberHashChange(nextHash?: string): void {
     currentHashPath = next
     return
   }
+  // Тот же экран, другие параметры (дата «В этот день», вкладка настроек) — не новый уровень «назад».
+  if (pageRoot(next) === pageRoot(currentHashPath)) {
+    while (backStack.length > 0 && pageRoot(backStack[backStack.length - 1]!) === pageRoot(next)) {
+      backStack.pop()
+    }
+    if (isTabRoot(next)) backStack = []
+    currentHashPath = next
+    return
+  }
   // Возврат на экран, с которого открыли текущий — снимаем его со стека, не записываем «вниз» обратно.
   if (backStack.length > 0 && routeKey(next) === routeKey(backStack[backStack.length - 1]!)) {
     backStack.pop()

@@ -332,7 +332,7 @@ export interface WateringZone extends DocMeta {
   active: boolean
 }
 
-/** Строка списка «Возьми»: рассчитанная покупка материала. */
+/** Строка списка «Купить»: рассчитанная покупка материала. */
 export type ShoppingStatus = 'toBuy' | 'bought'
 
 export interface ShoppingItem extends DocMeta {

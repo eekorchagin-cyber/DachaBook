@@ -383,11 +383,14 @@ export function ConsumablesScreen() {
   const showPlaces = placeGroups.some((group) => group.place)
 
   return (
-    <Screen title="Расходные материалы" help="consumables" back="/dictionaries" tab="/more">
+    <Screen
+      title="Расходные материалы"
+      help="consumables"
+      back="/dictionaries"
+      tab="/more"
+      add={{ label: 'Добавить материал', onClick: () => setEditing({}) }}
+    >
       <div className="actions">
-        <button type="button" className="button" onClick={() => setEditing({})}>
-          + Добавить материал
-        </button>
         <SearchButton query={query} label="Поиск по материалам" placeholder="Например: уксус" onFind={setQuery} />
       </div>
       <SearchQuery query={query} onClear={() => setQuery('')} />

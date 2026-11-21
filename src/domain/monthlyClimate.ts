@@ -68,4 +68,31 @@ export function monthlyClimate(daily: DailyClimateSeries): YearClimate[] {
     }))
 }
 
+/** Средние по месяцам за все годы ряда: норма температуры и типичная сумма осадков. */
+export function averageClimate(years: YearClimate[]): YearClimate {
+  const months = emptyMonths().map((month, index) => {
+    const tAvg: number[] = []
+    const tMin: number[] = []
+    const tMax: number[] = []
+    const precip: number[] = []
+    for (const year of years) {
+      const cell = year.months[index]
+      if (!cell) continue
+      if (cell.tAvg !== null) tAvg.push(cell.tAvg)
+      if (cell.tMin !== null) tMin.push(cell.tMin)
+      if (cell.tMax !== null) tMax.push(cell.tMax)
+      if (cell.precipMm !== null) precip.push(cell.precipMm)
+    }
+    const mean = (values: number[]) => (values.length ? round1(values.reduce((sum, value) => sum + value, 0) / values.length) : null)
+    return {
+      month: month.month,
+      tAvg: mean(tAvg),
+      tMin: mean(tMin),
+      tMax: mean(tMax),
+      precipMm: mean(precip),
+    }
+  })
+  return { year: 0, months }
+}
+
 export const monthLabel = (month: number) => MONTH_NAMES[month - 1]?.slice(0, 3) ?? String(month)

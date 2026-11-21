@@ -62,4 +62,19 @@ describe('возврат на предыдущий экран', () => {
     expect(previousPath()).toBeUndefined()
     expect(resolveBack(undefined)).toBeUndefined()
   })
+
+  it('смена даты или фильтра на том же экране не зацикливает «назад»', () => {
+    resetNavigationForTests('/diary', [])
+    rememberNavigationForTests('/diary/day?date=2026-11-20')
+    rememberNavigationForTests('/diary/day?date=2026-11-19')
+    rememberNavigationForTests('/diary/day?date=2026-11-21')
+    expect(previousPath()).toBe('/diary')
+    expect(resolveBack('/diary')).toBe('/diary')
+
+    resetNavigationForTests('/more/program', [])
+    rememberNavigationForTests('/settings?part=account')
+    rememberNavigationForTests('/settings?part=plot')
+    expect(previousPath()).toBe('/more/program')
+    expect(resolveBack('/more/program')).toBe('/more/program')
+  })
 })

@@ -12,8 +12,20 @@ const TABS = [
   { path: '/more', label: 'Ещё', icon: '⋯' },
 ]
 
-/** back — запасной путь, если неясно, откуда пришли; onBack — закрыть карточку без смены адреса. Стрелка ведёт на экран, с которого открыли текущий. */
-export function Screen(props: { title: string; help?: string; back?: string; onBack?: () => void; actions?: ReactNode; children: ReactNode; tab: string }) {
+/** Круглый «+» справа: ссылка или действие без смены адреса. */
+export type ScreenAdd = { label: string; href: string } | { label: string; onClick: () => void }
+
+/** back — запасной путь; onBack — закрыть карточку. Справа: доп. кнопки, «?», затем «+». */
+export function Screen(props: {
+  title: string
+  help?: string
+  back?: string
+  onBack?: () => void
+  actions?: ReactNode
+  add?: ScreenAdd
+  children: ReactNode
+  tab: string
+}) {
   const tabbar = useRef<HTMLElement>(null)
   const back = useBackTarget(props.back)
 
@@ -46,12 +58,22 @@ export function Screen(props: { title: string; help?: string; back?: string; onB
             ←
           </a>
         ) : (
-          <span className="topbar-spacer" />
+          <span className="topbar-spacer" aria-hidden="true" />
         )}
         <h1>{props.title}</h1>
         <div className="topbar-actions">
           {props.actions}
           {props.help && <HelpButton topic={props.help} />}
+          {props.add &&
+            ('href' in props.add ? (
+              <a className="icon-button add" href={props.add.href} aria-label={props.add.label}>
+                +
+              </a>
+            ) : (
+              <button type="button" className="icon-button add" aria-label={props.add.label} onClick={props.add.onClick}>
+                +
+              </button>
+            ))}
         </div>
       </header>
       <UpdateBanner />

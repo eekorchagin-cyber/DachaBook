@@ -68,8 +68,8 @@ export function ShoppingScreen() {
   const bought = list.filter((item) => item.status === 'bought')
 
   return (
-    <Screen title="Возьми" help="shopping" back="/more/works" tab="/more">
-      <p className="hint">Рассчитанные покупки из плана. Один материал — одна строка. Статус «к покупке» снимается, когда отметили «Куплено».</p>
+    <Screen title="Купить" help="shopping" back="/more" tab="/more">
+      <p className="hint">Рассчитанные покупки из плана. Один материал — одна строка. Нажмите название в «К покупке», чтобы перенести в «Куплено».</p>
       <div className="actions">
         <ActionButton
           onRun={async () => {
@@ -95,37 +95,24 @@ export function ShoppingScreen() {
         </ActionButton>
       </div>
       {error && <p className="error">{error}</p>}
-      {items && list.length === 0 && <EmptyState>Список пуст. В карточке работы нажмите «В «Возьми»» или добавьте рассчитанные здесь.</EmptyState>}
+      {items && list.length === 0 && <EmptyState>Список пуст. В карточке работы нажмите «В «Купить»» или добавьте рассчитанные здесь.</EmptyState>}
       {open.length > 0 && (
         <section>
           <h2 className="section-title">К покупке</h2>
           <ul className="list">
             {open.map((item) => (
               <li key={item.id} className="list-row">
-                <span>
-                  <strong>{item.name}</strong>{' '}
+                <button
+                  type="button"
+                  className="button-link"
+                  onClick={() => void repo.update('shoppingItems', item.id, { status: 'bought' }, item.revision)}
+                >
+                  {item.name}
                   <span className="muted">
+                    {' '}
                     {shoppingQuantityText(item)} · {SHOPPING_STATUS[item.status]}
                   </span>
-                </span>
-                <span className="actions">
-                  <ActionButton
-                    onRun={async () => {
-                      await repo.update('shoppingItems', item.id, { status: 'bought' }, item.revision)
-                    }}
-                  >
-                    Куплено
-                  </ActionButton>
-                  <ActionButton
-                    secondary
-                    onRun={async () => {
-                      if (!confirm(`Убрать «${item.name}» из списка?`)) return
-                      await repo.remove('shoppingItems', item.id, item.revision)
-                    }}
-                  >
-                    Убрать
-                  </ActionButton>
-                </span>
+                </button>
               </li>
             ))}
           </ul>

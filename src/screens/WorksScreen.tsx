@@ -459,12 +459,12 @@ function WorkMaterials({
               const result = await addToShoppingList(drafts)
               alert(
                 result.added + result.updated > 0
-                  ? `В «Возьми»: ${[result.added ? `добавлено ${result.added}` : '', result.updated ? `обновлено ${result.updated}` : ''].filter(Boolean).join(', ')}.`
-                  : 'Эти покупки уже есть в «Возьми».',
+                  ? `В «Купить»: ${[result.added ? `добавлено ${result.added}` : '', result.updated ? `обновлено ${result.updated}` : ''].filter(Boolean).join(', ')}.`
+                  : 'Эти покупки уже есть в «Купить».',
               )
             }}
           >
-            В «Возьми»
+            В «Купить»
           </ActionButton>
           <a className="button secondary" href="#/shopping">
             Открыть список
@@ -1106,15 +1106,12 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
   const visible = groups.length + suggestions.length + closed.length + archived.length
 
   return (
-    <Screen title="План работ" help="works" back="/more/works" tab="/more">
+    <Screen title="План работ" help="works" back="/more/works" tab="/more" add={{ label: 'Новая работа', onClick: () => setEditing({}) }}>
       <div className="actions plan-actions">
-        <button type="button" className="button" onClick={() => setEditing({})}>
-          + Работа
-        </button>
+        <SearchButton query={query} label="Поиск по плану работ" placeholder="Например: гортензии" onFind={setQuery} />
         <a className="button secondary" href="#/plan">
           Из черновика Evernote
         </a>
-        <SearchButton query={query} label="Поиск по плану работ" placeholder="Например: гортензии" onFind={setQuery} />
       </div>
       <SearchQuery query={query} onClear={() => setQuery('')} />
       {!settings.plotLocation && (

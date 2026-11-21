@@ -175,12 +175,9 @@ export function FolkSignsScreen() {
   const ordered = [...(signs ?? [])].filter((sign) => includesAllWords(query, `${sign.title} ${sign.text}`)).sort(byUpcoming(today))
 
   return (
-    <Screen title="Народные приметы" help="signs" back="/" tab="/">
+    <Screen title="Народные приметы" help="signs" back="/" tab="/" add={{ label: 'Добавить примету', onClick: () => setEditing({}) }}>
       {signs && <TodaySignCard signs={signs} />}
       <div className="actions">
-        <button type="button" className="button" onClick={() => setEditing({})}>
-          + Добавить примету
-        </button>
         <SearchButton query={query} label="Поиск по приметам" placeholder="Например: дождь" onFind={setQuery} />
         <label className="button secondary">
           Загрузить из файла .md

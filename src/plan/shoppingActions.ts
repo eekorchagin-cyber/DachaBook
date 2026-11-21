@@ -3,12 +3,12 @@ import type { ShoppingItem } from '../domain/types'
 import { repo } from '../app/store'
 import { db } from '../storage/db'
 
-/** Находит действующую строку «Возьми» по материалу. */
+/** Находит действующую строку «Купить» по материалу. */
 export async function shoppingByConsumable(consumableId: string): Promise<ShoppingItem | undefined> {
   return (await db.shoppingItems.toArray()).find((item) => !item.deletedAt && item.consumableId === consumableId)
 }
 
-/** Переносит рассчитанные покупки в «Возьми» без дублей материала. */
+/** Переносит рассчитанные покупки в «Купить» без дублей материала. */
 export async function addToShoppingList(drafts: ShoppingDraft[]): Promise<{ added: number; updated: number; skipped: number }> {
   let added = 0
   let updated = 0

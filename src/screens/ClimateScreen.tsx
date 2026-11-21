@@ -2,15 +2,15 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
 import { getSetting } from '../app/store'
 import type { YearClimate } from '../domain/monthlyClimate'
-import { monthLabel } from '../domain/monthlyClimate'
+import { averageClimate, monthLabel } from '../domain/monthlyClimate'
 import { errorText } from '../lib/format'
 import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
 import { MONTHLY_CLIMATE_YEARS, readMonthlyClimate, refreshMonthlyClimate, type StoredMonthlyClimate } from '../weather/monthlyClimate'
 import { useForecast } from '../weather/service'
 
-/** Столбцы осадков и линия средней температуры по месяцам выбранного года. */
-function ClimateChart({ year }: { year: YearClimate }) {
+/** Столбцы осадков и линия средней температуры по месяцам; пунктир — 0 °C. */
+function ClimateChart({ year, title }: { year: YearClimate; title: string }) {
   const width = 360
   const height = 200
   const pad = { top: 16, right: 36, bottom: 28, left: 36 }
@@ -24,14 +24,18 @@ function ClimateChart({ year }: { year: YearClimate }) {
   const x = (index: number) => pad.left + ((index + 0.5) / 12) * innerW
   const yTemp = (value: number) => pad.top + ((tMax - value) / (tMax - tMin || 1)) * innerH
   const barW = innerW / 12 - 4
+  const zeroY = yTemp(0)
   const points = year.months
     .map((month, index) => (month.tAvg === null ? null : `${x(index)},${yTemp(month.tAvg)}`))
     .filter(Boolean)
     .join(' ')
 
   return (
-    <svg className="climate-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Климат ${year.year}`}>
-      <line x1={pad.left} y1={yTemp(0)} x2={width - pad.right} y2={yTemp(0)} className="climate-zero" />
+    <svg className="climate-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
+      <line x1={pad.left} y1={zeroY} x2={width - pad.right} y2={zeroY} className="climate-zero" />
+      <text className="climate-zero-label" x={width - pad.right + 4} y={zeroY + 3}>
+        0°
+      </text>
       {year.months.map((month, index) => {
         const precip = month.precipMm ?? 0
         const barH = (precip / pMax) * innerH * 0.85
@@ -69,7 +73,9 @@ function ClimateChart({ year }: { year: YearClimate }) {
   )
 }
 
-/** Пять лет температуры и осадков по месяцам для координат участка. */
+type YearChoice = number | 'all'
+
+/** Пять лет температуры и осадков по месяцам; «Все годы» — средние за период. */
 export function ClimateScreen() {
   const { location } = useForecast()
   const plot = useLiveQuery(() => getSetting('plotLocation'), [])
@@ -78,8 +84,14 @@ export function ClimateScreen() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const years = stored?.years ?? []
-  const [year, setYear] = useState<number | null>(null)
-  const selected = useMemo(() => years.find((item) => item.year === year) ?? years.at(-1), [years, year])
+  const [choice, setChoice] = useState<YearChoice | null>(null)
+  const average = useMemo(() => (years.length ? averageClimate(years) : null), [years])
+  const selected = useMemo(() => {
+    if (choice === 'all') return average
+    if (typeof choice === 'number') return years.find((item) => item.year === choice) ?? years.at(-1) ?? null
+    return years.at(-1) ?? null
+  }, [average, choice, years])
+  const selectedTitle = choice === 'all' || selected?.year === 0 ? 'Все годы' : String(selected?.year ?? '')
 
   useEffect(() => {
     let alive = true
@@ -92,8 +104,10 @@ export function ClimateScreen() {
   }, [place?.latitude, place?.longitude])
 
   useEffect(() => {
-    if (years.length && (year === null || !years.some((item) => item.year === year))) setYear(years.at(-1)!.year)
-  }, [years, year])
+    if (!years.length) return
+    if (choice === 'all') return
+    if (choice === null || !years.some((item) => item.year === choice)) setChoice(years.at(-1)!.year)
+  }, [years, choice])
 
   const load = async () => {
     setError('')
@@ -101,7 +115,7 @@ export function ClimateScreen() {
     try {
       const next = await refreshMonthlyClimate()
       setStored(next)
-      if (next?.years.length) setYear(next.years.at(-1)!.year)
+      if (next?.years.length) setChoice(next.years.at(-1)!.year)
     } catch (caught) {
       setError(errorText(caught))
     } finally {
@@ -115,9 +129,10 @@ export function ClimateScreen() {
   }, [place, stored])
 
   return (
-    <Screen title="Климат участка" help="climate" back="/more/works" tab="/more">
+    <Screen title="Климат участка" help="climate" back="/more" tab="/more">
       <p className="hint">
-        Средняя температура и сумма осадков по месяцам за {MONTHLY_CLIMATE_YEARS} полных лет. Данные Open-Meteo для координат участка — модельная оценка, не измерение на грядке.
+        Средняя температура и сумма осадков по месяцам за {MONTHLY_CLIMATE_YEARS} полных лет. «Все годы» — средние за весь период. Данные Open-Meteo для координат
+        участка — модельная оценка, не измерение на грядке.
       </p>
       {!place && (
         <p className="hint">
@@ -139,14 +154,17 @@ export function ClimateScreen() {
       )}
       {years.length > 0 && (
         <div className="jump-row" role="group" aria-label="Год">
+          <button type="button" className={choice === 'all' ? 'chip active' : 'chip'} onClick={() => setChoice('all')}>
+            Все годы
+          </button>
           {years.map((item) => (
-            <button key={item.year} type="button" className={item.year === selected?.year ? 'chip active' : 'chip'} onClick={() => setYear(item.year)}>
+            <button key={item.year} type="button" className={choice === item.year ? 'chip active' : 'chip'} onClick={() => setChoice(item.year)}>
               {item.year}
             </button>
           ))}
         </div>
       )}
-      {selected && <ClimateChart year={selected} />}
+      {selected && <ClimateChart year={selected} title={`Климат: ${selectedTitle}`} />}
       {selected && (
         <ul className="climate-legend">
           <li>
@@ -155,12 +173,15 @@ export function ClimateScreen() {
           <li>
             <span className="climate-swatch precip" /> осадки за месяц, мм
           </li>
+          <li>
+            <span className="climate-swatch zero" /> отметка 0 °C
+          </li>
         </ul>
       )}
       {selected && (
         <details className="card">
           <summary>
-            <strong>Цифры {selected.year}</strong>
+            <strong>Цифры: {selectedTitle}</strong>
           </summary>
           <table className="climate-table">
             <thead>

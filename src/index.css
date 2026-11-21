@@ -423,13 +423,16 @@ textarea::placeholder {
 }
 
 .topbar-spacer {
-  width: 8px;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
 }
 
 .topbar-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .content {
@@ -484,16 +487,34 @@ textarea::placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  min-height: 40px;
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--text);
   font: inherit;
+  font-size: 1.25rem;
   font-weight: 600;
+  line-height: 1;
   text-decoration: none;
   cursor: pointer;
+}
+
+.icon-button.add {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  font-size: 1.85rem;
+  font-weight: 500;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
 }
 
 .button.small {
@@ -848,8 +869,15 @@ textarea::placeholder {
 }
 
 .climate-zero {
-  stroke: var(--border);
-  stroke-dasharray: 4 4;
+  stroke: color-mix(in srgb, var(--text) 45%, var(--border));
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.climate-zero-label {
+  fill: color-mix(in srgb, var(--text) 55%, var(--muted));
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .climate-label,
@@ -884,6 +912,14 @@ textarea::placeholder {
 
 .climate-swatch.precip {
   background: color-mix(in srgb, #4a7eb5 70%, white);
+}
+
+.climate-swatch.zero {
+  height: 0;
+  border-top: 2px dashed color-mix(in srgb, var(--text) 45%, var(--border));
+  border-radius: 0;
+  background: transparent;
+  vertical-align: 0.15rem;
 }
 
 .climate-table {
@@ -1938,10 +1974,12 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
   gap: 6px 10px;
 }
 
-.jump-row button.chip {
+.jump-row button.chip,
+.jump-row a.chip {
   background: var(--card);
   color: var(--text);
   font-family: inherit;
+  text-decoration: none;
 }
 
 .jump-row button.chip.active {

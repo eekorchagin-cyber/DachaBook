@@ -1,7 +1,7 @@
 import type { DocInput, ShoppingItem } from './types'
 import { quantityText } from './consumables'
 
-/** Позиция, которую можно перенести в «Возьми». */
+/** Позиция, которую можно перенести в «Купить». */
 export interface ShoppingDraft {
   consumableId: string
   name: string

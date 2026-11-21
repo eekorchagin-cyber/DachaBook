@@ -257,7 +257,17 @@ export function ObjectsScreen({
   }
 
   return (
-    <Screen title="Объекты и растения" help="objects" back={fromDictionaries ? '/dictionaries' : undefined} tab={fromDictionaries ? '/more' : '/objects'}>
+    <Screen
+      title="Объекты и растения"
+      help="objects"
+      back={fromDictionaries ? '/dictionaries' : undefined}
+      tab={fromDictionaries ? '/more' : '/objects'}
+      add={
+        view === 'objects'
+          ? { label: 'Добавить объект', onClick: () => setEditing({ kind: 'object' }) }
+          : { label: 'Добавить группу', onClick: () => setEditing({ kind: 'group' }) }
+      }
+    >
       <div className="segmented" role="tablist" aria-label="Что показать">
         <button type="button" role="tab" aria-selected={view === 'objects'} className={view === 'objects' ? 'active' : ''} onClick={() => setView('objects')}>
           Объекты ухода ({active.length})
@@ -270,9 +280,6 @@ export function ObjectsScreen({
       {view === 'objects' ? (
         <>
           <div className="actions">
-            <button type="button" className="button" onClick={() => setEditing({ kind: 'object' })}>
-              + Добавить объект
-            </button>
             <SearchButton query={query} label="Поиск по объектам" placeholder="Например: газон" onFind={setQuery} />
           </div>
           <SearchQuery query={query} onClear={() => setQuery('')} />
@@ -312,9 +319,6 @@ export function ObjectsScreen({
       ) : (
         <>
           <div className="actions">
-            <button type="button" className="button" onClick={() => setEditing({ kind: 'group' })}>
-              + Добавить группу
-            </button>
             <SearchButton query={query} label="Поиск по группам растений" placeholder="Например: хвойные" onFind={setQuery} />
           </div>
           <SearchQuery query={query} onClear={() => setQuery('')} />
