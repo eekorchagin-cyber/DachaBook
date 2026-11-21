@@ -131,10 +131,29 @@ function title(doc: Record<string, unknown>): string {
  * Импорт копии с объединением: новые записи добавляются, одинаковые пропускаются, ничего не удаляется.
  * Если запись по-разному изменена здесь и в копии, остаётся местная версия, а расхождение попадает в отчёт.
  */
+/** Имя из восстановленных записей — чтобы на экране «Как вас зовут?» не начинать с пустого поля. */
+export async function suggestAuthorFromData(database: DiaryDatabase): Promise<string | undefined> {
+  const counts = new Map<string, number>()
+  const skip = new Set(['', 'DachaBook', 'Без имени'])
+  for (const event of await database.events.toArray()) {
+    for (const name of [event.createdBy, event.updatedBy]) {
+      const value = name?.trim() ?? ''
+      if (skip.has(value)) continue
+      counts.set(value, (counts.get(value) ?? 0) + 1)
+    }
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ru'))[0]?.[0]
+}
+
 export async function restoreBackup(database: DiaryDatabase, data: ArrayBuffer): Promise<RestoreResult> {
+  if (data.byteLength < 4) throw new Error('Файл пустой или не прочитался. Выберите ZIP-копию ещё раз из «Файлы».')
+  const bytes = new Uint8Array(data)
+  if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
+    throw new Error('Это не ZIP-архив DachaBook. Нужен файл dachabook-backup-….zip, а не папка и не распакованные файлы.')
+  }
   let entries: Record<string, Uint8Array>
   try {
-    entries = unzipSync(new Uint8Array(data))
+    entries = unzipSync(bytes)
   } catch {
     throw new Error('Файл не похож на резервную копию DachaBook: это не ZIP-архив или он повреждён')
   }

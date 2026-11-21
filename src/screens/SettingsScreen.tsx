@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useState, type ReactNode } from 'react'
 import { useRoute } from '../app/router'
 import { ensureSeeded } from '../app/seed'
-import { restoreBackup, type RestoreResult } from '../backup/backup'
+import { restoreBackup, suggestAuthorFromData, type RestoreResult } from '../backup/backup'
 import { setSetting, type AppSettings, type ThemeSetting } from '../app/store'
 import { versionLabel } from '../app/version'
 import { labelProgramTarget } from '../domain/labelProgram'
@@ -321,6 +321,9 @@ function MissingWeather() {
 
 export function WelcomeScreen() {
   const [name, setName] = useState('')
+  const start = () => {
+    if (name.trim()) void setSetting('authorName', name.trim()).then(() => ensureSeeded())
+  }
   return (
     <main className="screen">
       <header className="screen-header">
@@ -331,11 +334,11 @@ export function WelcomeScreen() {
         className="card"
         onSubmit={(event) => {
           event.preventDefault()
-          if (name.trim()) void setSetting('authorName', name.trim()).then(() => ensureSeeded())
+          start()
         }}
       >
         <h2>Как вас зовут?</h2>
-        <p className="hint">Имя подписывает записи: в общем дневнике будет видно, кто что добавил и изменил.</p>
+        <p className="hint">Имя подписывает записи. Если восстанавливаете копию — сначала выберите ZIP ниже, имя подставится само, затем нажмите «Начать».</p>
         <label className="field">
           Имя
           <input value={name} autoFocus onChange={(event) => setName(event.target.value)} />
@@ -346,24 +349,34 @@ export function WelcomeScreen() {
           </button>
         </div>
       </form>
-      <RestoreOnWelcome />
+      <RestoreOnWelcome onSuggestName={setName} />
     </main>
   )
 }
 
 /** Новый браузер или ярлык открывает DachaBook с пустым хранилищем — отсюда данные можно вернуть из резервной копии. */
-function RestoreOnWelcome() {
-  const events = useLiveQuery(() => db.events.count(), [])
+function RestoreOnWelcome({ onSuggestName }: { onSuggestName: (name: string) => void }) {
+  const events = useLiveQuery(() => db.events.filter((item) => !item.deletedAt).count(), [])
   const [restored, setRestored] = useState<RestoreResult | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const restore = async (file: File | undefined) => {
+  const restore = async (file: File | undefined, input: HTMLInputElement) => {
     if (!file) return
     setError(null)
-    setBusy(true)
+    setRestored(null)
     try {
-      setRestored(await restoreBackup(db, await file.arrayBuffer()))
+      // На iPhone файл нужно прочитать сразу: после подтверждений и пауз содержимое может стать пустым.
+      const data = await file.arrayBuffer()
+      input.value = ''
+      setBusy(true)
+      const result = await restoreBackup(db, data)
+      setRestored(result)
+      const suggested = await suggestAuthorFromData(db)
+      if (suggested) onSuggestName(suggested)
+      if (result.added + result.updated + result.same + result.files === 0) {
+        setError('В архиве не нашлось записей для добавления. Убедитесь, что выбран файл dachabook-backup-….zip.')
+      }
     } catch (caught) {
       setError(errorText(caught))
     } finally {
@@ -375,21 +388,31 @@ function RestoreOnWelcome() {
     <section className="card">
       <h2>Уже пользовались DachaBook?</h2>
       <p className="hint">
-        Данные хранятся в том браузере, где вы вели дневник. Safari, Chrome и приложение, добавленное в Dock или на экран «Домой», хранят данные отдельно
-        друг от друга, поэтому в новом месте DachaBook открывается пустым. Откройте его там, где вели записи, или восстановите данные из резервной копии —
-        файла dachabook-backup-….zip.
+        После очистки данных сайта дневник на этом телефоне пустой — так устроен Safari. Верните его из файла{' '}
+        <strong>dachabook-backup-….zip</strong> (из «Файлы» или Яндекс Диска). Не выбирайте папку и не распаковывайте архив заранее.
       </p>
-      {!!events && <p className="small">В этом браузере уже есть записей дневника: {events}. Введите имя, чтобы продолжить.</p>}
+      {!!events && <p className="small">Уже загружено записей дневника: {events}. Проверьте имя выше и нажмите «Начать».</p>}
       <div className="actions">
         <label className={`button secondary${busy ? ' disabled' : ''}`}>
           {busy ? 'Восстановление…' : 'Восстановить из резервной копии'}
-          <input type="file" accept=".zip,application/zip" hidden disabled={busy} onChange={(event) => void restore(event.target.files?.[0])} />
+          <input
+            type="file"
+            accept=".zip,application/zip,application/x-zip-compressed,application/octet-stream"
+            hidden
+            disabled={busy}
+            onChange={(event) => {
+              const input = event.currentTarget
+              void restore(input.files?.[0], input)
+            }}
+          />
         </label>
       </div>
       {restored && (
         <div className="notice">
           <p>
-            Восстановлено: добавлено {restored.added}, без изменений {restored.same}, файлов {restored.files}. Введите имя выше и нажмите «Начать».
+            Готово: добавлено {restored.added}
+            {restored.updated ? `, обновлено ${restored.updated}` : ''}, без изменений {restored.same}, файлов {restored.files}. Имя выше можно поправить —
+            затем нажмите «Начать».
           </p>
           {restored.corrupted.length > 0 && <p className="error">Повреждены и не загружены: {restored.corrupted.join('; ')}</p>}
         </div>
