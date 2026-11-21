@@ -116,6 +116,17 @@ describe('синхронизация двух устройств через об
     expect((await mac.database.events.get(third.id))?.comment).toBe('Спорная, дополнил')
   })
 
+  it('в ходе синхронизации виден номер этапа и сколько этапов всего', async () => {
+    const cloud = new MemoryCloud()
+    const mac = device('Mac')
+    await mac.repo.create('events', event('Для этапов'))
+    const lines: string[] = []
+    await synchronize(mac.database, cloud, options('Mac', { onProgress: (text) => lines.push(text) }))
+    expect(lines.some((line) => line.startsWith('Этап 1 из 5.'))).toBe(true)
+    expect(lines.some((line) => /^Этап 5 из [56]\. /.test(line) && line.includes('Фото'))).toBe(true)
+    expect(lines.at(-1)).toBe('Готово')
+  })
+
   it('фото: оригинал и уменьшенная копия в облаке, на другом устройстве — копия сразу, оригинал по запросу', async () => {
     const cloud = new MemoryCloud()
     const mac = device('Mac')
@@ -124,6 +135,9 @@ describe('синхронизация двух устройств через об
     await mac.database.fileContents.put({ id: file.id, original: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' }), thumb: new Blob([new Uint8Array([9])]) })
     expect(await synchronize(mac.database, cloud, options('Mac'))).toMatchObject({ uploadedFiles: 1 })
     expect(cloud.files.has(`files/originals/${file.id}.jpg`)).toBe(true)
+    // После выгрузки на устройстве-источнике остаётся только уменьшенная копия.
+    expect((await mac.database.fileContents.get(file.id))?.original).toBeUndefined()
+    expect((await mac.database.fileContents.get(file.id))?.thumb).toBeTruthy()
     const details: string[] = []
     await synchronize(mac.database, cloud, options('Mac', { onProgress: (_text, detail) => { if (detail) details.push(detail) } }))
     expect(details.some((line) => line.includes('газон.JPG'))).toBe(false)
@@ -349,7 +363,7 @@ describe('синхронизация двух устройств через об
       cloud,
       options('Mac', {
         onProgress: (text, _detail, endsAt) => {
-          if (text.startsWith('Фото и файлы') && originals === 0) seen.push({ text, endsAt })
+          if (text.includes('Фото и файлы:') && text.includes('До конца этапа') && originals === 0) seen.push({ text, endsAt })
         },
       }),
     )
@@ -415,10 +429,10 @@ describe('синхронизация двух устройств через об
       return realWrite(path, data)
     }
     const lines: string[] = []
-    await synchronize(mac.database, cloud, options('Mac', { onProgress: (text) => { if (text.startsWith('Фото и файлы')) lines.push(text) } }))
+    await synchronize(mac.database, cloud, options('Mac', { onProgress: (text) => { if (text.includes('Фото и файлы')) lines.push(text) } }))
 
     expect(resent).toBe(0)
     expect((await mac.database.syncState.get(key))?.originalUploaded).toBe(true)
-    expect(lines.some((line) => line.startsWith('Фото и файлы: 1 из 1'))).toBe(true)
+    expect(lines.some((line) => /Фото и файлы: 1 из 1/.test(line))).toBe(true)
   })
 })

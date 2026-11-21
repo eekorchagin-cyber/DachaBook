@@ -247,6 +247,32 @@ async function applySnapshot(database: DiaryDatabase, cloud: CloudAdapter, path:
 
 type Report = (text: string, detail?: string, endsAt?: number | null) => void
 
+const STAGE_PREFIX = /^Этап \d+ из \d+\.\s*/
+
+/** Убирает прежний номер этапа, чтобы при смене этапа или обновлении счётчика не было «Этап 2 из 5. Этап 2 из 5. …». */
+export function stripStagePrefix(text: string): string {
+  return text.replace(STAGE_PREFIX, '')
+}
+
+/** План этапов синхронизации: в строке хода всегда видно «Этап N из M». */
+function createStagePlan(total: number, report: Report) {
+  let index = 0
+  let active: Report = (text, detail, endsAt) => report(text, detail, endsAt)
+  return {
+    /** Когда заранее неизвестный этап всё же нужен (снимок в облаке) — увеличиваем M. */
+    grow(by = 1) {
+      total += by
+    },
+    enter(label: string): Report {
+      index++
+      const prefix = `Этап ${index} из ${total}. `
+      active = (text, detail, endsAt) => report(`${prefix}${stripStagePrefix(text)}`, detail, endsAt)
+      active(label)
+      return active
+    },
+  }
+}
+
 async function pull(database: DiaryDatabase, cloud: CloudAdapter, meta: SyncMeta, result: SyncResult, report: Report, wait?: () => Promise<void>): Promise<Map<string, Map<string, string | undefined>>> {
   const listed = new Map<string, Map<string, string | undefined>>()
   const eta = new StageEta()
@@ -479,6 +505,22 @@ async function markIfAlreadyStored(database: DiaryDatabase, cloud: CloudAdapter,
   await database.syncState.put(state)
 }
 
+/**
+ * После успешной выгрузки в облако на устройстве оставляем уменьшенную копию фото.
+ * Оригинал можно снова скачать из облака при просмотре.
+ */
+export async function releaseUploadedPhotoOriginal(
+  database: DiaryDatabase,
+  file: Pick<StoredFile, 'id' | 'role'>,
+  state: SyncRecord | undefined,
+): Promise<boolean> {
+  if (file.role !== 'photo' || !state?.originalUploaded) return false
+  const content = await database.fileContents.get(file.id)
+  if (!content?.original) return false
+  await database.fileContents.put({ id: file.id, thumb: content.thumb })
+  return true
+}
+
 /** Оригиналы и уменьшенные копии: сначала срок всего объёма, потом передача. Уже отправленные в счётчик входят сразу и повторно не открываются. */
 async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: SyncResult, report: Report, options: SyncOptions, meta: SyncMeta): Promise<void> {
   const files = ((await database.files.toArray()) as StoredFile[]).filter((file) => !file.deletedAt)
@@ -489,6 +531,8 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
   if (files.length > 0) {
     report('Оцениваю фото и файлы…')
     for (let index = 0; index < files.length; index++) {
+      // Уже выгруженные фото: оригинал с телефона/компьютера убираем, оставляем уменьшенную копию.
+      await releaseUploadedPhotoOriginal(database, files[index], states[index])
       if (states[index]?.fileSkippedAt || alreadyOnDisk(files[index], states[index]) || states[index]?.originalUploaded) continue
       totalBytes += files[index].size
     }
@@ -572,6 +616,7 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
         }
         if (pausedAbort) continue
         await database.syncState.put(state)
+        await releaseUploadedPhotoOriginal(database, file, state)
         settle()
         step()
         tell()
@@ -587,7 +632,7 @@ async function syncFiles(database: DiaryDatabase, cloud: CloudAdapter, result: S
   }, result.errors, () => options.waitIfPaused?.() ?? Promise.resolve())
 }
 
-/** Оригинал, которого нет на устройстве, скачивается из облака при открытии и остаётся на устройстве. */
+/** Оригинал по запросу: скачивается из облака и сохраняется на устройстве, пока его снова не освободят при синхронизации. */
 export async function fetchOriginal(database: DiaryDatabase, cloud: CloudAdapter, file: StoredFile): Promise<Blob | null> {
   const blob = await cloud.read(originalPath(file))
   if (!blob) return null
@@ -630,6 +675,7 @@ export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, 
   const now = () => options.now?.() ?? new Date()
   const result: SyncResult = { pulled: 0, pushed: 0, conflicts: 0, thumbs: 0, uploadedFiles: 0, bootstrapped: false, failed: 0, errors: [] }
 
+  // Сначала читаем описание дневника — от него зависит, будет ли этап загрузки снимка.
   report('Проверка облака…')
   await ensureLayout(cloud)
   let manifest = await readJson<DiaryManifest>(cloud, MANIFEST)
@@ -643,6 +689,11 @@ export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, 
     manifest = { app: 'dachabook', format: FORMAT, diaryId: crypto.randomUUID(), createdAt: now().toISOString() }
     await cloud.write(MANIFEST, new Blob([docText(manifest)], { type: 'application/json' }))
   }
+
+  const needBootstrap = !meta && !!manifest.snapshot
+  const stages = createStagePlan(5 + (needBootstrap ? 1 : 0), report)
+  let stage = stages.enter('Проверка облака…')
+
   if (!meta) {
     meta = { diaryId: manifest.diaryId, cursors: {} }
     if (options.firstConnect === 'replace') {
@@ -653,7 +704,7 @@ export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, 
       })
     }
     if (manifest.snapshot) {
-      report('Загрузка снимка дневника…')
+      stage = stages.enter('Загрузка снимка дневника…')
       try {
         result.bootstrapped = await applySnapshot(database, cloud, manifest.snapshot.path, result)
       } catch (caught) {
@@ -664,32 +715,34 @@ export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, 
         const since = new Date(Date.parse(manifest.snapshot.at) - SNAPSHOT_OVERLAP_MS).toISOString()
         for (const name of DOC_TABLES) meta.cursors[name] = since
       } else {
-        // Убираем указатель на битый снимок, чтобы следующее устройство не спотыкалось о том же файл.
+        // Убираем указатель на битый снимок, чтобы следующее устройство не спотыкалось о тот же файл.
         manifest = { app: manifest.app, format: manifest.format, diaryId: manifest.diaryId, createdAt: manifest.createdAt }
         await cloud.write(MANIFEST, new Blob([docText(manifest)], { type: 'application/json' }))
       }
     }
   }
 
-  report('Получение изменений…')
+  stage = stages.enter('Получение изменений…')
   const wait = () => options.waitIfPaused?.() ?? Promise.resolve()
-  const listed = await pull(database, cloud, meta, result, report, wait)
+  const listed = await pull(database, cloud, meta, result, stage, wait)
   await writeSyncMeta(database, meta)
-  report('Отправка изменений…')
-  await push(database, cloud, listed, result, report, wait)
+  stage = stages.enter('Отправка изменений…')
+  await push(database, cloud, listed, result, stage, wait)
   await pushTombstones(database, cloud, options.author, result)
+  stage = stages.enter('Справочники…')
   try {
-    report('Справочники…')
     await syncDictionaries(database, cloud, now())
   } catch (caught) {
     result.failed++
     result.errors.push(`Справочники: ${errorText(caught)}`)
   }
-  await syncFiles(database, cloud, result, report, options, meta)
+  stage = stages.enter('Фото и файлы…')
+  await syncFiles(database, cloud, result, stage, options, meta)
 
   const interval = options.snapshotIntervalMs ?? 24 * 60 * 60 * 1000
   if (result.pushed > 0 && result.failed === 0 && (!manifest.snapshot || now().getTime() - Date.parse(manifest.snapshot.at) >= interval)) {
-    report('Снимок дневника в облаке…')
+    stages.grow(1)
+    stage = stages.enter('Снимок дневника в облаке…')
     await uploadSnapshot(database, cloud, manifest, options)
   }
   if (result.failed === 0) meta.lastSuccessAt = now().toISOString()

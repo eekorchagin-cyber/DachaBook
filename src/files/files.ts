@@ -78,14 +78,12 @@ async function keepOriginal(id: string, blob: Blob): Promise<void> {
   await db.fileContents.put({ ...content, id, original: blob })
 }
 
-/** Временный адрес содержимого файла для <img> или открытия; освобождается при размонтировании. */
+/**
+ * Временный адрес содержимого для <img> или открытия; освобождается при размонтировании.
+ * Оригинал сам из облака не качается — только по requestOriginal / openFile / кнопке в просмотрщике.
+ */
 export function useFileUrl(id: string | undefined, variant: 'thumb' | 'original'): string | undefined {
   const content = useLiveQuery(async () => (id ? ((await db.fileContents.get(id)) ?? null) : null), [id])
-  const missingOriginal = variant === 'original' && !!id && content !== undefined && !content?.original
-  // Оригинала нет на устройстве (пришла только уменьшенная копия) — скачать из облака.
-  useEffect(() => {
-    if (missingOriginal && id) void requestOriginal(id)
-  }, [missingOriginal, id])
   const blob = variant === 'thumb' ? (content?.thumb ?? content?.original) : content?.original
   const url = useMemo(() => (blob ? URL.createObjectURL(blob) : undefined), [blob])
   useEffect(() => () => {

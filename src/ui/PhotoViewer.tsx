@@ -1,14 +1,27 @@
+import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useState } from 'react'
 import { useFileUrl } from '../files/files'
+import { formatBytes } from '../lib/format'
+import { db } from '../storage/db'
+import { requestOriginal } from '../sync/runner'
 
-/** Просмотр фото внутри приложения (в том числе в режиме программы), с пояснением и листанием. */
+/** Просмотр фото внутри приложения: сначала уменьшенная копия, оригинал — по кнопке из облака. */
 export function PhotoViewer(props: { ids: string[]; index: number; notes?: Record<string, string>; onIndex: (index: number) => void; onClose: () => void }) {
   const id = props.ids[props.index]
   const url = useFileUrl(id, 'original')
   const thumb = useFileUrl(id, 'thumb')
+  const file = useLiveQuery(() => db.files.get(id), [id])
   const count = props.ids.length
   const [broken, setBroken] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { onIndex, onClose, index } = props
+
+  useEffect(() => {
+    setBroken(null)
+    setError(null)
+    setLoading(false)
+  }, [id])
 
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
@@ -19,6 +32,19 @@ export function PhotoViewer(props: { ids: string[]; index: number; notes?: Recor
     window.addEventListener('keydown', keys)
     return () => window.removeEventListener('keydown', keys)
   }, [index, count, onIndex, onClose])
+
+  const download = async () => {
+    setError(null)
+    setLoading(true)
+    try {
+      await requestOriginal(id)
+      if (!(await db.fileContents.get(id))?.original) setError('Не удалось скачать оригинал. Проверьте сеть и Яндекс Диск.')
+    } catch {
+      setError('Не удалось скачать оригинал. Проверьте сеть и Яндекс Диск.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="viewer" role="dialog" aria-modal="true" aria-label="Просмотр фото" onClick={onClose}>
@@ -38,6 +64,14 @@ export function PhotoViewer(props: { ids: string[]; index: number; notes?: Recor
         )
       )}
       {props.notes?.[id] && <p className="viewer-caption">{props.notes[id]}</p>}
+      {!url && !broken && (
+        <div className="viewer-nav" onClick={(event) => event.stopPropagation()}>
+          <button type="button" className="button secondary" disabled={loading} onClick={() => void download()}>
+            {loading ? 'Скачивание…' : file?.size ? `Скачать оригинал (${formatBytes(file.size)})` : 'Скачать оригинал'}
+          </button>
+          {error && <p className="error">{error}</p>}
+        </div>
+      )}
       {count > 1 && (
         <div className="viewer-nav" onClick={(event) => event.stopPropagation()}>
           <button type="button" className="button secondary" disabled={index === 0} onClick={() => onIndex(index - 1)}>
