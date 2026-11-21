@@ -24,8 +24,9 @@ export function registerServiceWorker(timeoutMs = 15_000): void {
   const timer = setTimeout(() => {
     if (state.kind === 'registering') setState({ kind: 'timeout' })
   }, timeoutMs)
+  // updateViaCache: 'none' — иначе Safari на iPhone долго отдаёт старый sw.js из HTTP-кэша.
   navigator.serviceWorker
-    .register('./sw.js', { scope: './' })
+    .register('./sw.js', { scope: './', updateViaCache: 'none' })
     .then((registration) => {
       watchForUpdates(registration)
       return navigator.serviceWorker.ready
@@ -102,6 +103,42 @@ function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<
   })
 }
 
+/** Снимает офлайн-кэш приложения, чтобы следующая загрузка взяла файлы с сайта. */
+async function clearAppCaches(): Promise<void> {
+  if (!('caches' in window)) return
+  const keys = await caches.keys()
+  await Promise.all(keys.filter((key) => key.startsWith('dachabook-')).map((key) => caches.delete(key)))
+}
+
+/**
+ * Ищет новый SW после update(): waiting, installing или короткое ожидание updatefound.
+ * На iPhone update() иногда завершается без waiting, если sw.js отдал HTTP-кэш.
+ */
+async function findUpdatedWorker(registration: ServiceWorkerRegistration): Promise<ServiceWorker | null> {
+  if (registration.waiting) return registration.waiting
+  if (registration.installing) return installedWorker(registration)
+  return new Promise((resolve) => {
+    const finish = () => resolve(registration.waiting)
+    const timer = setTimeout(finish, 12_000)
+    registration.addEventListener(
+      'updatefound',
+      () => {
+        void installedWorker(registration).then((worker) => {
+          clearTimeout(timer)
+          resolve(worker)
+        })
+      },
+      { once: true },
+    )
+  })
+}
+
+/** version.json новее, а SW не обновился — снимаем регистрацию и кэш, страница перезагрузится с сети. */
+async function forceNetworkReload(registration: ServiceWorkerRegistration): Promise<void> {
+  await clearAppCaches()
+  await registration.unregister().catch(() => undefined)
+}
+
 /** Проверяет version.json; если вышла новая версия — обновляет офлайн-кэш и перезапускает страницу. Передача файлов на это время останавливается. */
 export async function updateApp(): Promise<'latest' | 'reloading'> {
   pauseSyncTransfers()
@@ -125,14 +162,18 @@ export async function updateApp(): Promise<'latest' | 'reloading'> {
     const registration = await navigator.serviceWorker?.getRegistration()
     if (registration) {
       await withTimeout(registration.update(), 20_000, 'Не удалось скачать обновление. Оставьте программу на экране и повторите.')
-      const worker = registration.waiting ?? (await installedWorker(registration))
-      if (!worker) throw new Error('Новая версия не скачалась. Оставьте программу на экране и повторите.')
-      const switched = new Promise<void>((resolve) => {
-        navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })
-        setTimeout(resolve, 10_000)
-      })
-      worker.postMessage('skip-waiting')
-      await switched
+      const worker = await findUpdatedWorker(registration)
+      if (worker) {
+        const switched = new Promise<void>((resolve) => {
+          navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })
+          setTimeout(resolve, 10_000)
+        })
+        worker.postMessage('skip-waiting')
+        await switched
+      } else {
+        // Safari часто не ставит новый SW из кэша — принудительно берём сборку с сайта.
+        await forceNetworkReload(registration)
+      }
     }
     resume = false
     location.reload()
