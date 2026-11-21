@@ -66,7 +66,7 @@ export function ShareScreen() {
   }
 
   return (
-    <Screen title="Фото в дневник" help="share" tab="/diary" back="/diary">
+    <Screen title="Импорт фото" help="share" tab="/more" back="/more/service">
       <p className="hint">
         Выберите снимки в Медиатеке и добавьте их к записи этого дня или создайте новую. На iPhone DachaBook не появляется в «Поделиться» Медиатеки: Apple показывает там только программы из App Store, кнопка ниже открывает ту же Медиатеку. На Windows в установленном Chrome или Edge приложение будет в системном «Поделиться».
       </p>

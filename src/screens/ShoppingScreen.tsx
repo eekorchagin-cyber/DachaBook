@@ -68,7 +68,7 @@ export function ShoppingScreen() {
   const bought = list.filter((item) => item.status === 'bought')
 
   return (
-    <Screen title="Купить" help="shopping" back="/more" tab="/more">
+    <Screen title="Список покупок" help="shopping" back="/more" tab="/more">
       <p className="hint">Рассчитанные покупки из плана. Один материал — одна строка. Нажмите название в «К покупке», чтобы перенести в «Куплено».</p>
       <div className="actions">
         <ActionButton

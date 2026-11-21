@@ -73,10 +73,13 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
   )
   const pages: Record<string, { title: string; back: string; body: ReactNode }> = {
     account: { title: 'Учётная запись', back: '/more/program', body: account },
-    plot: { title: 'Участок', back: '/more/program', body: <PlotSection settings={settings} /> },
+    plot: { title: 'Участок', back: '/more/plot', body: <PlotSection settings={settings} focus="all" /> },
+    'plot-photo': { title: 'Фото участка', back: '/more/plot', body: <PlotSection settings={settings} focus="photo" /> },
+    'plot-address': { title: 'Адрес участка', back: '/more/plot', body: <PlotSection settings={settings} focus="address" /> },
+    'plot-location': { title: 'Координаты для погоды', back: '/more/plot', body: <PlotSection settings={settings} focus="location" /> },
     appearance: { title: 'Внешний вид программы', back: '/more/program', body: appearance },
-    labels: { title: 'Печать меток', back: '/more/program', body: <LabelProgramSection settings={settings} /> },
-    updates: { title: 'Проверка обновлений', back: '/more/service', body: updates },
+    labels: { title: 'Печать меток', back: '/more/service', body: <LabelProgramSection settings={settings} /> },
+    updates: { title: 'Проверка обновлений', back: '/more', body: updates },
   }
   const page = part ? pages[part] : undefined
   if (page) {
@@ -87,9 +90,9 @@ export function SettingsScreen({ settings }: { settings: AppSettings }) {
     )
   }
   return (
-    <Screen title="Настройки" help="settings" back="/more/program" tab="/more">
+    <Screen title="Настройки" help="settings" back="/more" tab="/more">
       {account}
-      <PlotSection settings={settings} />
+      <PlotSection settings={settings} focus="all" />
       {appearance}
       <LabelProgramSection settings={settings} />
     </Screen>
@@ -194,10 +197,13 @@ function UpdateCheck() {
   )
 }
 
-function PlotSection({ settings }: { settings: AppSettings }) {
+function PlotSection({ settings, focus }: { settings: AppSettings; focus: 'all' | 'photo' | 'address' | 'location' }) {
   const [address, setAddress] = useState(settings.plotAddress)
   const [coordinates, setCoordinates] = useState(settings.plotLocation ? locationText(settings.plotLocation) : '')
   const [message, setMessage] = useState('')
+  const showPhoto = focus === 'all' || focus === 'photo'
+  const showAddress = focus === 'all' || focus === 'address'
+  const showLocation = focus === 'all' || focus === 'location'
 
   const saveLocation = (location: PlotLocation) => {
     setCoordinates(locationText(location))
@@ -231,60 +237,73 @@ function PlotSection({ settings }: { settings: AppSettings }) {
 
   return (
     <section className="card" id="plot">
-      <h2>Участок</h2>
-      {settings.plotPhotoId && (
-        <div className="plot-hero">
-          <PlotPhoto id={settings.plotPhotoId} />
-        </div>
+      {focus === 'all' && <h2>Участок</h2>}
+      {showPhoto && (
+        <>
+          {settings.plotPhotoId && (
+            <div className="plot-hero">
+              <PlotPhoto id={settings.plotPhotoId} />
+            </div>
+          )}
+          <div className="actions">
+            <label className="button secondary">
+              {settings.plotPhotoId ? 'Заменить фото участка' : 'Добавить фото участка'}
+              <input
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (!file || !isImageFile(file)) return
+                  void addPhoto(file, file.name || 'dacha.jpg').then((stored) => setSetting('plotPhotoId', stored.id))
+                }}
+              />
+            </label>
+            {settings.plotPhotoId && (
+              <button type="button" className="button secondary" onClick={() => void setSetting('plotPhotoId', '')}>
+                Убрать фото
+              </button>
+            )}
+          </div>
+          <p className="hint">Фото показывается вверху главной. Нажмите на него там — откроются эти настройки.</p>
+        </>
       )}
-      <div className="actions">
-        <label className="button secondary">
-          {settings.plotPhotoId ? 'Заменить фото дачи' : 'Добавить фото дачи'}
-          <input
-            type="file"
-            accept="image/*"
-            hidden
+      {showAddress && (
+        <label className="field">
+          Адрес участка
+          <textarea
+            rows={2}
+            value={address}
             onChange={(event) => {
-              const file = event.target.files?.[0]
-              event.target.value = ''
-              if (!file || !isImageFile(file)) return
-              void addPhoto(file, file.name || 'dacha.jpg').then((stored) => setSetting('plotPhotoId', stored.id))
+              setAddress(event.target.value)
+              void setSetting('plotAddress', event.target.value.trim())
             }}
           />
         </label>
-        {settings.plotPhotoId && (
-          <button type="button" className="button secondary" onClick={() => void setSetting('plotPhotoId', '')}>
-            Убрать фото
-          </button>
-        )}
-      </div>
-      <p className="hint">Фото показывается вверху главной. Нажмите на него там — откроются эти настройки.</p>
-      <label className="field">
-        Адрес дачи
-        <textarea
-          rows={2}
-          value={address}
-          onChange={(event) => {
-            setAddress(event.target.value)
-            void setSetting('plotAddress', event.target.value.trim())
-          }}
-        />
-      </label>
-      <label className="field">
-        Координаты для погоды
-        <input value={coordinates} inputMode="decimal" placeholder="55.75, 37.62" onChange={(event) => setCoordinates(event.target.value)} onBlur={saveCoordinates} />
-      </label>
-      <div className="actions">
-        <button type="button" className="button secondary" onClick={locate}>
-          Определить по месту
-        </button>
-      </div>
-      {message && <p className="hint">{message}</p>}
-      <p className="hint">
-        Адрес и координаты хранятся только на ваших устройствах и в ваших резервных копиях — в коде приложения и на GitHub их нет. «Определить по месту» нажимайте, находясь на участке.
-        Для погоды сервису Open-Meteo передаются только округлённые координаты.
-      </p>
-      {settings.plotLocation && <MissingWeather />}
+      )}
+      {showLocation && (
+        <>
+          <label className="field">
+            Координаты для погоды
+            <input value={coordinates} inputMode="decimal" placeholder="55.75, 37.62" onChange={(event) => setCoordinates(event.target.value)} onBlur={saveCoordinates} />
+          </label>
+          <div className="actions">
+            <button type="button" className="button secondary" onClick={locate}>
+              Определить по месту
+            </button>
+          </div>
+          {message && <p className="hint">{message}</p>}
+          <p className="hint">
+            Координаты хранятся только на ваших устройствах и в резервных копиях — в коде приложения и на GitHub их нет. «Определить по месту»
+            нажимайте, находясь на участке. Для погоды сервису Open-Meteo передаются только округлённые координаты.
+          </p>
+          {settings.plotLocation && <MissingWeather />}
+        </>
+      )}
+      {showAddress && !showLocation && (
+        <p className="hint">Адрес хранится только на ваших устройствах и в резервных копиях — в коде приложения и на GitHub его нет.</p>
+      )}
     </section>
   )
 }

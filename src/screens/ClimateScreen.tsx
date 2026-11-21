@@ -129,14 +129,14 @@ export function ClimateScreen() {
   }, [place, stored])
 
   return (
-    <Screen title="Климат участка" help="climate" back="/more" tab="/more">
+    <Screen title="Климат участка" help="climate" back="/more/plot" tab="/more">
       <p className="hint">
         Средняя температура и сумма осадков по месяцам за {MONTHLY_CLIMATE_YEARS} полных лет. «Все годы» — средние за весь период. Данные Open-Meteo для координат
         участка — модельная оценка, не измерение на грядке.
       </p>
       {!place && (
         <p className="hint">
-          Укажите координаты участка: <a href="#/settings?part=plot">«Ещё → Настройки программы → Участок»</a>.
+          Укажите координаты участка: <a href="#/settings?part=plot-location">«Ещё → Участок → Координаты для погоды»</a>.
         </p>
       )}
       {place && (

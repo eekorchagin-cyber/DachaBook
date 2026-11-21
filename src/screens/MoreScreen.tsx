@@ -10,28 +10,35 @@ import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
 
 const TOP = [
-  { href: '#/guide', title: 'Как пользоваться DachaBook' },
-  { href: '#/shopping', title: 'Купить' },
-  { href: '#/climate', title: 'Климат участка' },
-  { href: '#/more/works', title: 'Настройки работ' },
+  { href: '#/more/plot', title: 'Участок' },
+  { href: '#/more/works', title: 'Работы' },
+  { href: '#/shopping', title: 'Список покупок' },
   { href: '#/dictionaries', title: 'Справочники' },
   { href: '#/more/program', title: 'Настройки программы' },
   { href: '#/more/service', title: 'Сервис' },
+  { href: '#/more/cloud', title: 'Облако и резервное копирование' },
+  { href: '#/more/help', title: 'Справка' },
+  { href: '#/settings?part=updates', title: 'Проверка обновлений' },
+  { href: '#/lab', title: 'Лаборатория проверок (служебная)' },
   { href: '#/trash', title: 'Корзина' },
+]
+
+const PLOT = [
+  { href: '#/settings?part=plot-photo', title: 'Фото участка' },
+  { href: '#/settings?part=plot-address', title: 'Адрес участка' },
+  { href: '#/settings?part=plot-location', title: 'Координаты для погоды' },
+  { href: '#/climate', title: 'Климат участка' },
 ]
 
 const WORKS = [
   { href: '#/works', title: 'План работ' },
-  { href: '#/watering', title: 'Полив' },
+  { href: '#/watering', title: 'План полива' },
 ]
 
 const PROGRAM = [
   { href: '#/settings?part=account', title: 'Учётная запись' },
-  { href: '#/settings?part=plot', title: 'Участок' },
   { href: '#/more/users', title: 'Пользователи' },
   { href: '#/settings?part=appearance', title: 'Внешний вид программы' },
-  { href: '#/settings?part=labels', title: 'Печать меток' },
-  { href: '#/more/cloud', title: 'Облако и резервное копирование' },
 ]
 
 const CLOUD = [
@@ -41,13 +48,14 @@ const CLOUD = [
 ]
 
 const SERVICE = [
-  { href: '#/share', title: 'Фото в дневник' },
-  { href: '#/diary/book', title: 'PDF' },
-  { href: '#/more/evernote', title: 'Evernote' },
+  { href: '#/settings?part=labels', title: 'Печать меток' },
+  { href: '#/share', title: 'Импорт фото' },
+  { href: '#/more/evernote', title: 'Импорт из Evernote' },
   { href: '#/import/dayone', title: 'Импорт из Day One' },
-  { href: '#/lab', title: 'Лаборатория проверок (служебная)' },
-  { href: '#/settings?part=updates', title: 'Проверка обновлений' },
+  { href: '#/diary/book', title: 'Экспорт в PDF' },
 ]
+
+const HELP = [{ href: '#/guide', title: 'Как пользоваться DachaBook' }]
 
 const EVERNOTE = [
   { href: '#/import', title: 'Импорт из Evernote' },
@@ -78,11 +86,13 @@ function Menu({ title, back, items }: { title: string; back: string; items: { hr
 }
 
 export function MoreScreen({ page }: { page?: string }) {
-  if (page === 'works') return <Menu title="Настройки работ" back="/more" items={WORKS} />
+  if (page === 'plot') return <Menu title="Участок" back="/more" items={PLOT} />
+  if (page === 'works') return <Menu title="Работы" back="/more" items={WORKS} />
   if (page === 'program') return <Menu title="Настройки программы" back="/more" items={PROGRAM} />
-  if (page === 'cloud') return <Menu title="Облако и резервное копирование" back="/more/program" items={CLOUD} />
+  if (page === 'cloud') return <Menu title="Облако и резервное копирование" back="/more" items={CLOUD} />
   if (page === 'service') return <Menu title="Сервис" back="/more" items={SERVICE} />
-  if (page === 'evernote') return <Menu title="Evernote" back="/more/service" items={EVERNOTE} />
+  if (page === 'help') return <Menu title="Справка" back="/more" items={HELP} />
+  if (page === 'evernote') return <Menu title="Импорт из Evernote" back="/more/service" items={EVERNOTE} />
   if (page === 'users') {
     return (
       <Screen title="Пользователи" help="more" back="/more/program" tab="/more">

@@ -275,7 +275,7 @@ export function WateringScreen({ settings }: { settings: AppSettings }) {
 
   if (editing) {
     return (
-      <Screen title="Полив" help="watering" onBack={() => setEditing(null)} tab="/more">
+      <Screen title="План полива" help="watering" onBack={() => setEditing(null)} tab="/more">
         <ZoneForm key={editing.id ?? 'new'} zone={zones?.find((item) => item.id === editing.id)} objects={objects} onClose={() => setEditing(null)} />
       </Screen>
     )
@@ -293,7 +293,7 @@ export function WateringScreen({ settings }: { settings: AppSettings }) {
 
   return (
     <Screen
-      title="Полив"
+      title="План полива"
       help="watering"
       back="/more/works"
       tab="/more"
@@ -302,7 +302,7 @@ export function WateringScreen({ settings }: { settings: AppSettings }) {
     >
       <p className="hint">
         Три независимые зоны — газон, сад и грядки. Рекомендация смотрит на расписание и осадки Open-Meteo. «Полито» открывает запись дневника. Координаты
-        участка: {settings.plotLocation ? 'заданы' : 'не заданы — «Ещё → Настройки программы → Участок»'}.
+        участка: {settings.plotLocation ? 'заданы' : 'не заданы — «Ещё → Участок → Координаты для погоды»'}.
       </p>
       <SearchQuery query={query} onClear={() => setQuery('')} />
       {zones && active.length === 0 && <EmptyState>Зон пока нет. Добавьте газон, сад или грядки.</EmptyState>}

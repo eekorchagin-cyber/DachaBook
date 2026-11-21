@@ -35,7 +35,7 @@ export function GuideScreen({ section }: { section?: string }) {
   }, [])
 
   return (
-    <Screen title="Как пользоваться" back="/more" tab="/more">
+    <Screen title="Как пользоваться" back="/more/help" tab="/more">
       <article ref={ref} className="card guide" dangerouslySetInnerHTML={{ __html: guideHtml }} />
     </Screen>
   )

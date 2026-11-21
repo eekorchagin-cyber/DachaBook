@@ -1122,7 +1122,7 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
       <SearchQuery query={query} onClear={() => setQuery('')} />
       {!settings.plotLocation && (
         <p className="hint">
-          Для работ, зависящих от заморозков, нужны координаты участка: <a href="#/settings?part=plot">«Ещё → Настройки программы → Участок»</a>.
+          Для работ, зависящих от заморозков, нужны координаты участка: <a href="#/settings?part=plot-location">«Ещё → Участок → Координаты для погоды»</a>.
         </p>
       )}
       <ClimateNote />
