@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
-import { useBackTarget } from '../app/router'
+import { goBack, useBackTarget } from '../app/router'
 import { WorkBadge } from '../plan/WorkBadge'
 import { HelpButton } from './HelpButton'
 import { UpdateBanner } from './UpdateBanner'
@@ -53,9 +53,9 @@ export function Screen(props: {
             ←
           </button>
         ) : back ? (
-          <a className="icon-button" href={`#${back}`} aria-label="Назад">
+          <button type="button" className="icon-button" aria-label="Назад" onClick={() => goBack(props.back)}>
             ←
-          </a>
+          </button>
         ) : (
           <span className="topbar-spacer" aria-hidden="true" />
         )}

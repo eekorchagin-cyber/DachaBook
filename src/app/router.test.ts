@@ -77,4 +77,25 @@ describe('возврат на предыдущий экран', () => {
     expect(previousPath()).toBe('/more/program')
     expect(resolveBack('/more/program')).toBe('/more/program')
   })
+
+  it('из проверки обновлений поднимается в сервис, затем в ещё — без возврата вниз', () => {
+    resetNavigationForTests('/more', [])
+    rememberNavigationForTests('/more/service')
+    rememberNavigationForTests('/settings?part=updates')
+    expect(resolveBack('/more/service')).toBe('/more/service')
+
+    rememberNavigationForTests('/more/service')
+    expect(previousPath()).toBe('/more')
+    expect(resolveBack('/more')).toBe('/more')
+
+    rememberNavigationForTests('/more')
+    expect(previousPath()).toBeUndefined()
+  })
+
+  it('если закрытый экран ошибочно снова попал в стек, возврат всё равно срезает его', () => {
+    resetNavigationForTests('/settings?part=updates', ['/more', '/more/service', '/settings?part=updates'])
+    rememberNavigationForTests('/more/service')
+    expect(previousPath()).toBe('/more')
+    expect(resolveBack('/more')).toBe('/more')
+  })
 })

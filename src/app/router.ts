@@ -43,9 +43,24 @@ function parse(): Route {
 let currentHashPath = pathFromHash(typeof location === 'undefined' ? '' : location.hash)
 /** Экраны, с которых заходили глубже: стрелка «назад» снимает верхний, а не прыгает туда-сюда. */
 let backStack: string[] = []
+/** Следующая смена hash уже учтена в goBack/navigate — повторно стек не трогаем. */
+let ignoreHashOnce: string | null = null
+
+function truncateStackTo(next: string): boolean {
+  const key = routeKey(next)
+  const index = backStack.findIndex((item) => routeKey(item) === key)
+  if (index < 0) return false
+  backStack = backStack.slice(0, index)
+  return true
+}
 
 function rememberHashChange(nextHash?: string): void {
   const next = pathFromHash(nextHash)
+  if (ignoreHashOnce !== null && routeKey(next) === routeKey(ignoreHashOnce)) {
+    ignoreHashOnce = null
+    currentHashPath = next
+    return
+  }
   if (routeKey(next) === routeKey(currentHashPath)) {
     currentHashPath = next
     return
@@ -59,9 +74,13 @@ function rememberHashChange(nextHash?: string): void {
     currentHashPath = next
     return
   }
-  // Возврат на экран, с которого открыли текущий — снимаем его со стека, не записываем «вниз» обратно.
+  // Возврат на экран из истории (верх или глубже) — срезаем стек, не пушим текущий обратно.
   if (backStack.length > 0 && routeKey(next) === routeKey(backStack[backStack.length - 1]!)) {
     backStack.pop()
+    currentHashPath = next
+    return
+  }
+  if (truncateStackTo(next)) {
     currentHashPath = next
     return
   }
@@ -84,6 +103,7 @@ export function previousPath(): string | undefined {
 export function resetNavigationForTests(current = '/', stack: string[] = []): void {
   currentHashPath = current
   backStack = [...stack]
+  ignoreHashOnce = null
 }
 
 /** Только для проверок: как при смене hash. */
@@ -107,7 +127,30 @@ export function useRoute(): Route {
 export function navigate(path: string): void {
   const next = path.startsWith('#') ? path : `#${path}`
   rememberHashChange(next)
+  ignoreHashOnce = pathFromHash(next)
   location.hash = next
+}
+
+/**
+ * Стрелка «назад»: снимает уровень со стека и открывает цель.
+ * Не через «вперёд» по ссылке — иначе закрытый экран снова попадает в историю и зацикливает возврат.
+ */
+export function goBack(fallback?: string): void {
+  const target = resolveBack(fallback)
+  if (!target) return
+  if (backStack.length > 0 && routeKey(backStack[backStack.length - 1]!) === routeKey(target)) {
+    backStack.pop()
+  } else {
+    truncateStackTo(target)
+  }
+  currentHashPath = target
+  ignoreHashOnce = target
+  const hash = target.startsWith('#') ? target : `#${target}`
+  if (pathFromHash(location.hash) === pathFromHash(hash)) {
+    ignoreHashOnce = null
+    return
+  }
+  location.hash = hash
 }
 
 /** Обратная ссылка только внутри приложения: чужой адрес в адресе страницы не открываем. */
