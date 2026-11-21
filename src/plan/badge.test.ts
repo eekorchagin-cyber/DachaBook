@@ -19,7 +19,7 @@ describe('значок невыполненных работ', () => {
   it('ставит число на значок и снимает его, когда таких работ нет', async () => {
     const calls: unknown[] = []
     const badge = {
-      setAppBadge: async (count: number) => {
+      setAppBadge: async (count?: number) => {
         calls.push(['set', count])
       },
       clearAppBadge: async () => {
@@ -28,7 +28,20 @@ describe('значок невыполненных работ', () => {
     }
     await applyWorkBadge(3, badge)
     await applyWorkBadge(0, badge)
-    expect(calls).toEqual([['set', 3], ['clear']])
+    expect(calls).toEqual([
+      ['set', 3],
+      ['clear'],
+    ])
     await applyWorkBadge(1, {})
+  })
+
+  it('без clearAppBadge снимает значок нулём', async () => {
+    const calls: unknown[] = []
+    await applyWorkBadge(0, {
+      setAppBadge: async (count?: number) => {
+        calls.push(count)
+      },
+    })
+    expect(calls).toEqual([0])
   })
 })

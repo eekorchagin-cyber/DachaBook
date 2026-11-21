@@ -975,6 +975,42 @@ textarea::placeholder {
   cursor: pointer;
 }
 
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.dialog h2 {
+  margin: 0 0 10px;
+  font-size: 1.15rem;
+}
+
+.dialog p {
+  margin: 0 0 12px;
+  line-height: 1.45;
+}
+
+.dialog-actions {
+  margin-top: 4px;
+}
+
 .sheet-backdrop {
   position: fixed;
   inset: 0;
@@ -1065,6 +1101,25 @@ textarea::placeholder {
 .chips > button.chip.active {
   background: var(--accent);
   color: var(--accent-text);
+}
+
+.badge-permission-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.badge-permission-banner p {
+  margin: 0;
+  flex: 1 1 200px;
+  font-size: 0.9rem;
+  line-height: 1.35;
 }
 
 .update-banner {

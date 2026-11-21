@@ -267,6 +267,13 @@ export function ObjectsScreen({
           ? { label: 'Добавить объект', onClick: () => setEditing({ kind: 'object' }) }
           : { label: 'Добавить группу', onClick: () => setEditing({ kind: 'group' }) }
       }
+      actions={
+        view === 'objects' ? (
+          <SearchButton query={query} label="Поиск по объектам" placeholder="Например: газон" onFind={setQuery} />
+        ) : (
+          <SearchButton query={query} label="Поиск по группам растений" placeholder="Например: хвойные" onFind={setQuery} />
+        )
+      }
     >
       <div className="segmented" role="tablist" aria-label="Что показать">
         <button type="button" role="tab" aria-selected={view === 'objects'} className={view === 'objects' ? 'active' : ''} onClick={() => setView('objects')}>
@@ -279,9 +286,6 @@ export function ObjectsScreen({
 
       {view === 'objects' ? (
         <>
-          <div className="actions">
-            <SearchButton query={query} label="Поиск по объектам" placeholder="Например: газон" onFind={setQuery} />
-          </div>
           <SearchQuery query={query} onClear={() => setQuery('')} />
           <p className="hint">Газон, сад, грядки и места на участке. Нажмите на объект, чтобы изменить его или убрать в архив.</p>
           {active.length === 0 && <EmptyState>Добавьте газон, сад, грядки или место на участке.</EmptyState>}
@@ -318,9 +322,6 @@ export function ObjectsScreen({
         </>
       ) : (
         <>
-          <div className="actions">
-            <SearchButton query={query} label="Поиск по группам растений" placeholder="Например: хвойные" onFind={setQuery} />
-          </div>
           <SearchQuery query={query} onClear={() => setQuery('')} />
           <p className="hint">Группы растений («Хвойные», «Ягодные кусты», «Гортензии») привязываются к объектам. Площадь и связка с видом работ и материалом дают количество удобрения.</p>
           {groups.length === 0 && <EmptyState>Групп растений пока нет.</EmptyState>}

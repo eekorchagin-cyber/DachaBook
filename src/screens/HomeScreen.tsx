@@ -90,7 +90,7 @@ function HomeLookup({ events }: { events: DiaryEvent[] }) {
   const [text, setText] = useState('')
   return (
     <>
-      <button type="button" className="icon-button" aria-label="Поиск и переход к дате" onClick={() => setOpen(true)}>
+      <button type="button" className="icon-button search-button" aria-label="Поиск и переход к дате" onClick={() => setOpen(true)}>
         <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="11" cy="11" r="7" />
           <path d="M20 20l-3.5-3.5" />

@@ -1106,9 +1106,15 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
   const visible = groups.length + suggestions.length + closed.length + archived.length
 
   return (
-    <Screen title="План работ" help="works" back="/more/works" tab="/more" add={{ label: 'Новая работа', onClick: () => setEditing({}) }}>
+    <Screen
+      title="План работ"
+      help="works"
+      back="/more/works"
+      tab="/more"
+      add={{ label: 'Новая работа', onClick: () => setEditing({}) }}
+      actions={<SearchButton query={query} label="Поиск по плану работ" placeholder="Например: гортензии" onFind={setQuery} />}
+    >
       <div className="actions plan-actions">
-        <SearchButton query={query} label="Поиск по плану работ" placeholder="Например: гортензии" onFind={setQuery} />
         <a className="button secondary" href="#/plan">
           Из черновика Evernote
         </a>

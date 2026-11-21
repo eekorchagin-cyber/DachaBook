@@ -175,10 +175,16 @@ export function FolkSignsScreen() {
   const ordered = [...(signs ?? [])].filter((sign) => includesAllWords(query, `${sign.title} ${sign.text}`)).sort(byUpcoming(today))
 
   return (
-    <Screen title="Народные приметы" help="signs" back="/" tab="/" add={{ label: 'Добавить примету', onClick: () => setEditing({}) }}>
+    <Screen
+      title="Народные приметы"
+      help="signs"
+      back="/"
+      tab="/"
+      add={{ label: 'Добавить примету', onClick: () => setEditing({}) }}
+      actions={<SearchButton query={query} label="Поиск по приметам" placeholder="Например: дождь" onFind={setQuery} />}
+    >
       {signs && <TodaySignCard signs={signs} />}
       <div className="actions">
-        <SearchButton query={query} label="Поиск по приметам" placeholder="Например: дождь" onFind={setQuery} />
         <label className="button secondary">
           Загрузить из файла .md
           <input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden onChange={(event) => void importFile(event.target.files?.[0])} />

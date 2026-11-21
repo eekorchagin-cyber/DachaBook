@@ -47,7 +47,6 @@ export function Screen(props: {
 
   return (
     <div className="app">
-      <WorkBadge />
       <header className="topbar">
         {props.onBack ? (
           <button type="button" className="icon-button" aria-label="Назад" onClick={props.onBack}>
@@ -77,6 +76,7 @@ export function Screen(props: {
         </div>
       </header>
       <UpdateBanner />
+      <WorkBadge />
       <main className="content">{props.children}</main>
       <nav ref={tabbar} className="tabbar" aria-label="Разделы">
         {TABS.map((tab) => (

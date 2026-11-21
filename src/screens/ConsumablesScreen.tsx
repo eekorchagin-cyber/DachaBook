@@ -389,10 +389,8 @@ export function ConsumablesScreen() {
       back="/dictionaries"
       tab="/more"
       add={{ label: 'Добавить материал', onClick: () => setEditing({}) }}
+      actions={<SearchButton query={query} label="Поиск по материалам" placeholder="Например: уксус" onFind={setQuery} />}
     >
-      <div className="actions">
-        <SearchButton query={query} label="Поиск по материалам" placeholder="Например: уксус" onFind={setQuery} />
-      </div>
       <SearchQuery query={query} onClear={() => setQuery('')} />
       <p className="hint">
         Удобрения, средства защиты, семена, мульча. Здесь — само вещество: единица, фасовка и норма на м². Сколько внести за сезон считается в работе плана, где материал выбран.

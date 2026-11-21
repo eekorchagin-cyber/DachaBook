@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useEffectEvent, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { navigate } from '../../app/router'
 import { repo, type AppSettings } from '../../app/store'
 import { todayAtSite } from '../../domain/dates'
@@ -205,6 +206,8 @@ function EventForm({
   const [splitParts, setSplitParts] = useState<PartDraft[] | null>(null)
   const [viewer, setViewer] = useState<number | null>(null)
   const [processing, setProcessing] = useState(0)
+  const [planOffer, setPlanOffer] = useState<{ event: DiaryEvent; input: DocInput<PlanWork> } | null>(null)
+  const [planBusy, setPlanBusy] = useState(false)
 
   const dirty = useMemo(() => JSON.stringify(draft) !== initial, [draft, initial])
 
@@ -244,11 +247,9 @@ function EventForm({
       if (!event && saved.type === 'work' && !plan) {
         const input = planInputFromEvent(saved)
         const already = input ? planAlreadyHas(await db.planWorks.toArray(), input.title) : true
-        if (input && !already && confirm(`Этой работы нет в плане. Создать повторяющуюся «${input.title}» и открыть её карточку? Срок возьмётся из даты записи, условие можно задать в карточке.`)) {
-          const created = await repo.create('planWorks', input)
-          await attachPlanWork([saved.id], created.id)
+        if (input && !already) {
           setInitial(JSON.stringify(draft))
-          navigate(`/works?work=${created.id}`)
+          setPlanOffer({ event: saved, input })
           return
         }
       }
@@ -256,6 +257,46 @@ function EventForm({
       navigate(plan && !event ? '/works' : zone && !event ? '/watering' : '/diary')
     } catch (caught) {
       setError(caught instanceof ConflictError ? 'Запись изменили в другом месте. Откройте её заново, чтобы не потерять чужую правку.' : errorText(caught))
+    }
+  }
+
+  const acceptPlanOffer = async () => {
+    if (!planOffer || planBusy) return
+    setPlanBusy(true)
+    setError(null)
+    try {
+      const created = await repo.create('planWorks', planOffer.input)
+      await attachPlanWork([planOffer.event.id], created.id)
+      setPlanOffer(null)
+      navigate(`/works?work=${created.id}`)
+    } catch (caught) {
+      setError(errorText(caught))
+    } finally {
+      setPlanBusy(false)
+    }
+  }
+
+  /** Не вносить в план: запись уже сохранена, уходим в дневник. */
+  const declinePlanOffer = () => {
+    if (planBusy) return
+    setPlanOffer(null)
+    navigate('/diary')
+  }
+
+  /** Отменить сохранение: запись убирается, форма остаётся для правок. */
+  const cancelPlanOffer = async () => {
+    if (!planOffer || planBusy) return
+    setPlanBusy(true)
+    setError(null)
+    try {
+      const current = (await db.events.get(planOffer.event.id)) ?? planOffer.event
+      await repo.remove('events', current.id, current.revision)
+      setPlanOffer(null)
+      setInitial('')
+    } catch (caught) {
+      setError(errorText(caught))
+    } finally {
+      setPlanBusy(false)
     }
   }
 
@@ -544,7 +585,7 @@ function EventForm({
       {missing.length > 0 && <p className="hint">Чтобы сохранить: {missing.join(', ')}.</p>}
       {error && <p className="error">{error}</p>}
       <div className="actions">
-        <ActionButton disabled={missing.length > 0 || !dirty || processing > 0} onRun={save}>
+        <ActionButton disabled={missing.length > 0 || !dirty || processing > 0 || !!planOffer} onRun={save}>
           Сохранить
         </ActionButton>
         {processing > 0 && <span className="hint">Обрабатываются файлы ({processing})…</span>}
@@ -574,6 +615,31 @@ function EventForm({
           </ActionButton>
         )}
       </div>
+      {planOffer &&
+        createPortal(
+          <div className="dialog-backdrop" role="presentation">
+            <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="plan-offer-title">
+              <h2 id="plan-offer-title">Добавить в план работ?</h2>
+              <p>
+                Этой работы нет в плане. Создать повторяющуюся «{planOffer.input.title}» и открыть её карточку? Срок возьмётся из даты записи, условие можно задать в
+                карточке.
+              </p>
+              <div className="actions dialog-actions">
+                <button type="button" className="button" disabled={planBusy} onClick={() => void acceptPlanOffer()}>
+                  {planBusy ? 'Выполняется…' : 'Создать'}
+                </button>
+                <button type="button" className="button secondary" disabled={planBusy} onClick={declinePlanOffer}>
+                  Нет
+                </button>
+                <button type="button" className="button secondary" disabled={planBusy} onClick={() => void cancelPlanOffer()}>
+                  Отменить
+                </button>
+              </div>
+              <p className="hint">«Нет» — запись останется в дневнике без плана. «Отменить» — отменит сохранение, можно править дальше.</p>
+            </div>
+          </div>,
+          document.body,
+        )}
     </Screen>
   )
 }

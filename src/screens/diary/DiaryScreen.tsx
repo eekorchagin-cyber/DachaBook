@@ -5,7 +5,7 @@ import { rangeText, todayAtSite } from '../../domain/dates'
 import { filterEvents, type DiaryFilter } from '../../domain/diaryFilter'
 import { db } from '../../storage/db'
 import { EmptyState, Screen } from '../../ui/Screen'
-import { SearchButton, SearchQuery } from '../../ui/SearchDialog'
+import { FilterButton, SearchButton, SearchQuery } from '../../ui/SearchDialog'
 import { EventCard } from './EventCard'
 
 const PAGE = 50
@@ -31,7 +31,18 @@ export function DiaryScreen({ settings, initialFilter }: { settings: AppSettings
   const activeFilters = [filter.from, filter.to, filter.objectId, filter.plantGroupId, filter.workKind, filter.type].filter(Boolean).length
 
   return (
-    <Screen title="Дневник" help="diary" tab="/diary" add={{ href: '#/diary/new', label: 'Новая запись' }}>
+    <Screen
+      title="Дневник"
+      help="diary"
+      tab="/diary"
+      add={{ href: '#/diary/new', label: 'Новая запись' }}
+      actions={
+        <>
+          <FilterButton open={showFilters} active={activeFilters > 0} onToggle={() => setShowFilters((value) => !value)} />
+          <SearchButton query={filter.text ?? ''} label="Поиск по дневнику" placeholder="Например: редис" onFind={(value) => set({ text: value || undefined })} />
+        </>
+      }
+    >
       <div className="jump-row" role="group" aria-label="Разделы дневника">
         <a className="chip" href="#/diary/album">
           Альбом
@@ -39,12 +50,6 @@ export function DiaryScreen({ settings, initialFilter }: { settings: AppSettings
         <a className="chip" href={`#/diary/day?date=${filter.from && filter.from === filter.to ? filter.from : todayAtSite().date}`}>
           В этот день
         </a>
-      </div>
-      <div className="search-row">
-        <SearchButton query={filter.text ?? ''} label="Поиск по дневнику" placeholder="Например: редис" onFind={(value) => set({ text: value || undefined })} />
-        <button type="button" className="button secondary small" onClick={() => setShowFilters((value) => !value)}>
-          Фильтры{activeFilters > 0 && ` (${activeFilters})`}
-        </button>
       </div>
       <SearchQuery query={filter.text ?? ''} onClear={() => set({ text: undefined })} />
       {showFilters && (

@@ -33,20 +33,31 @@ export function LibraryScreen() {
     .sort((a, b) => a.material.title.localeCompare(b.material.title, 'ru'))
 
   return (
-    <Screen title="Статьи" help="library" tab="/library" add={{ href: '#/library/new', label: 'Новая статья' }}>
-      <div className="actions">
-        <SearchButton query={query} label="Поиск по статьям" placeholder="Например: мульча" onFind={setQuery} />
-      </div>
-      <SearchQuery query={query} onClear={() => setQuery('')} />
-      {tags.length > 0 && (
-        <div className="chips">
-          {tags.map((item) => (
-            <button key={item} type="button" className={tag === item ? 'chip active' : 'chip'} onClick={() => setTag(tag === item ? null : item)}>
-              {item}
-            </button>
-          ))}
-        </div>
-      )}
+    <Screen
+      title="Статьи"
+      help="library"
+      tab="/library"
+      add={{ href: '#/library/new', label: 'Новая статья' }}
+      actions={
+        <SearchButton
+          query={query}
+          tag={tag}
+          tags={tags}
+          label="Поиск по статьям"
+          placeholder="Например: мульча"
+          onFind={setQuery}
+          onTag={setTag}
+        />
+      }
+    >
+      <SearchQuery
+        query={query}
+        tag={tag}
+        onClear={() => {
+          setQuery('')
+          setTag(null)
+        }}
+      />
       {materials && found.length === 0 && (
         <EmptyState>
           {materials.length === 0 ? 'Статей пока нет. Добавьте свою или импортируйте заметки из Evernote (раздел «Ещё»).' : 'Ничего не найдено.'}
