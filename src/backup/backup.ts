@@ -8,7 +8,23 @@ import { createSnapshot } from '../storage/snapshots'
 
 export const BACKUP_FORMAT = 1
 
-const COLLECTIONS = ['objects', 'plantGroups', 'events', 'references', 'planDrafts', 'importArchive', 'consumables', 'folkSigns', 'planWorks', 'wateringZones', 'shoppingItems', 'files'] as const
+const COLLECTIONS = [
+  'objects',
+  'plantGroups',
+  'events',
+  'references',
+  'planDrafts',
+  'importArchive',
+  'consumables',
+  'folkSigns',
+  'planWorks',
+  'wateringZones',
+  'shoppingItems',
+  'planTemplates',
+  'utilityMeters',
+  'utilityReadings',
+  'files',
+] as const
 type Collection = (typeof COLLECTIONS)[number]
 
 export interface BackupManifest {
@@ -36,6 +52,9 @@ folkSigns/ — народные приметы по дням года.
 planWorks/ — плановые работы: сроки, условия, отметки о выполнении по сезонам.
 wateringZones/ — зоны полива: расписание, длительность, порог дождя.
 shoppingItems/ — список «Купить»: рассчитанные покупки со статусом «к покупке» или «куплено».
+planTemplates/ — шаблоны плана по культурам: снимок работ без сезонных отметок.
+utilityMeters/ — счётчики воды, электричества, газа.
+utilityReadings/ — показания счётчиков (нарастающий итог на дату).
 files/ — описания фото и вложений; files/originals/ — оригиналы без изменений; files/thumbs/ — уменьшенные копии.
 settings/shared.json — общие настройки дневника (справочники видов работ и единиц, адрес, координаты и фото участка).
 

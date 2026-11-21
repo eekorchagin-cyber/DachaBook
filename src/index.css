@@ -886,6 +886,20 @@ textarea::placeholder {
   font-size: 10px;
 }
 
+.climate-icon.snow line {
+  stroke: color-mix(in srgb, #6a8fb8 80%, var(--text));
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+
+.climate-icon.rain path {
+  fill: color-mix(in srgb, #4a7eb5 75%, var(--text));
+}
+
+.climate-month-hit:focus {
+  outline: none;
+}
+
 .climate-legend {
   list-style: none;
   padding: 0;

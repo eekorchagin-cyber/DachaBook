@@ -6,11 +6,14 @@ import type {
   FolkSign,
   ImportArchiveItem,
   PlanDraftItem,
+  PlanTemplate,
   PlanWork,
   PlantGroup,
   ReferenceMaterial,
   ShoppingItem,
   StoredFile,
+  UtilityMeter,
+  UtilityReading,
   WateringZone,
 } from '../domain/types'
 
@@ -76,6 +79,9 @@ export class DiaryDatabase extends Dexie {
   planWorks!: EntityTable<PlanWork, 'id'>
   wateringZones!: EntityTable<WateringZone, 'id'>
   shoppingItems!: EntityTable<ShoppingItem, 'id'>
+  planTemplates!: EntityTable<PlanTemplate, 'id'>
+  utilityMeters!: EntityTable<UtilityMeter, 'id'>
+  utilityReadings!: EntityTable<UtilityReading, 'id'>
   settings!: EntityTable<SettingRow, 'key'>
   snapshots!: EntityTable<Snapshot, 'id'>
   syncState!: EntityTable<SyncRecord, 'key'>
@@ -100,10 +106,31 @@ export class DiaryDatabase extends Dexie {
     this.version(5).stores({ planWorks: 'id, active, deletedAt' })
     this.version(6).stores({ wateringZones: 'id, active, deletedAt' })
     this.version(7).stores({ shoppingItems: 'id, consumableId, status, deletedAt' })
+    this.version(8).stores({
+      planTemplates: 'id, active, deletedAt',
+      utilityMeters: 'id, kind, active, deletedAt',
+      utilityReadings: 'id, meterId, date, deletedAt',
+    })
   }
 }
 
 /** Таблицы документов: всё, что входит в резервную копию и меняется пользователем. */
-export const DOC_TABLES = ['objects', 'plantGroups', 'events', 'files', 'references', 'planDrafts', 'importArchive', 'consumables', 'folkSigns', 'planWorks', 'wateringZones', 'shoppingItems'] as const
+export const DOC_TABLES = [
+  'objects',
+  'plantGroups',
+  'events',
+  'files',
+  'references',
+  'planDrafts',
+  'importArchive',
+  'consumables',
+  'folkSigns',
+  'planWorks',
+  'wateringZones',
+  'shoppingItems',
+  'planTemplates',
+  'utilityMeters',
+  'utilityReadings',
+] as const
 
 export const db = new DiaryDatabase()

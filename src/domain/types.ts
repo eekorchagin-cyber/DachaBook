@@ -346,6 +346,45 @@ export interface ShoppingItem extends DocMeta {
   workIds: string[]
 }
 
+/** Снимок плановой работы в шаблоне: без сезонных отметок и без привязки к id группы. */
+export interface PlanTemplateItem {
+  title: string
+  workKind?: string
+  note?: string
+  recurrence: PlanWork['recurrence']
+  periods: PlanPeriod[]
+  condition?: WorkCondition
+  seasonSchedule?: SeasonSchedule
+  historyWords?: string[][]
+  /** Нормы материалов по названию — id на другом участке могут отличаться. */
+  consumableRatesByName?: Record<string, { quantity: number; unit?: string }>
+}
+
+/** Шаблон плана по культуре: набор работ, который можно применить к группе растений. */
+export interface PlanTemplate extends DocMeta {
+  name: string
+  items: PlanTemplateItem[]
+  active: boolean
+}
+
+export type UtilityKind = 'water' | 'electricity' | 'gas' | 'other'
+
+/** Счётчик воды, электричества, газа или другой. */
+export interface UtilityMeter extends DocMeta {
+  name: string
+  kind: UtilityKind
+  unit: string
+  active: boolean
+}
+
+/** Показание счётчика на дату (нарастающий итог). */
+export interface UtilityReading extends DocMeta {
+  meterId: string
+  date: string
+  value: number
+  note?: string
+}
+
 export interface Collections {
   objects: CareObject
   plantGroups: PlantGroup
@@ -359,6 +398,9 @@ export interface Collections {
   planWorks: PlanWork
   wateringZones: WateringZone
   shoppingItems: ShoppingItem
+  planTemplates: PlanTemplate
+  utilityMeters: UtilityMeter
+  utilityReadings: UtilityReading
 }
 
 export type CollectionName = keyof Collections

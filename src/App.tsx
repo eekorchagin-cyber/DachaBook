@@ -28,7 +28,9 @@ import { FolkSignsScreen } from './screens/FolkSignsScreen'
 import { MoreScreen, TrashScreen } from './screens/MoreScreen'
 import { ObjectsScreen } from './screens/ObjectsScreen'
 import { WateringScreen } from './screens/WateringScreen'
+import { MetersScreen } from './screens/MetersScreen'
 import { ShoppingScreen } from './screens/ShoppingScreen'
+import { TemplatesScreen } from './screens/TemplatesScreen'
 import { WorksScreen } from './screens/WorksScreen'
 import { SettingsScreen, WelcomeScreen } from './screens/SettingsScreen'
 import { SyncScreen } from './screens/SyncScreen'
@@ -118,6 +120,10 @@ export default function App() {
       return <WorksScreen settings={settings} />
     case 'shopping':
       return <ShoppingScreen />
+    case 'templates':
+      return <TemplatesScreen />
+    case 'meters':
+      return <MetersScreen />
     case 'climate':
       return <ClimateScreen />
     case 'watering':

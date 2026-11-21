@@ -18,6 +18,7 @@ const TOP = [
   { href: '#/more/service', title: 'Сервис' },
   { href: '#/more/cloud', title: 'Облако и резервное копирование' },
   { href: '#/more/help', title: 'Справка' },
+  { href: '#/meters', title: 'Счётчики воды, электричества, газа' },
   { href: '#/settings?part=updates', title: 'Проверка обновлений' },
   { href: '#/lab', title: 'Лаборатория проверок (служебная)' },
   { href: '#/trash', title: 'Корзина' },
@@ -33,6 +34,7 @@ const PLOT = [
 const WORKS = [
   { href: '#/works', title: 'План работ' },
   { href: '#/watering', title: 'План полива' },
+  { href: '#/templates', title: 'Шаблоны плана по культурам' },
 ]
 
 const PROGRAM = [
