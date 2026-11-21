@@ -1,12 +1,19 @@
 /**
  * Срок этапа «фото и файлы» по всему объёму, а не по каждому файлу.
- * До первой передачи берётся уже известная скорость. Дальше — скорость этого этапа и оставшиеся байты.
+ * Оценка ставится до передачи (по уже известной скорости) или после первой измеримой передачи
+ * и дальше держится. Пересчёт — только если фактическая скорость заметно отстаёт от плана.
  */
 export class StageClock {
   private totalBytes: number
   private priorBytesPerSecond: number
   private doneBytes = 0
   private transferStartedAt: number | undefined
+  /** Зафиксированный момент окончания этапа. */
+  private plannedEndsAt: number | null | undefined
+  /** Доля отставания от плана, при которой срок пересчитывается. */
+  private static LAG_RATIO = 0.25
+  /** Минимальное отставание: мелкие колебания скорости срок не двигают. */
+  private static LAG_MS = 2 * 60_000
 
   constructor(totalBytes: number, priorBytesPerSecond = 0) {
     this.totalBytes = totalBytes
@@ -36,13 +43,35 @@ export class StageClock {
     return this.doneBytes / seconds
   }
 
-  /** Когда закончится весь оставшийся объём. null — скорость ещё неизвестна, undefined — передавать нечего. */
-  endsAt(now = Date.now()): number | null | undefined {
+  private project(now: number): number | null | undefined {
     const left = this.pending()
     if (left <= 0) return undefined
     const rate = this.rate(now) ?? (this.priorBytesPerSecond > 0 ? this.priorBytesPerSecond : undefined)
     if (rate == null) return null
     return now + (left / rate) * 1000
+  }
+
+  /** Когда закончится весь оставшийся объём. null — скорость ещё неизвестна, undefined — передавать нечего. */
+  endsAt(now = Date.now()): number | null | undefined {
+    const projected = this.project(now)
+    if (projected === undefined) {
+      this.plannedEndsAt = undefined
+      return undefined
+    }
+    if (projected === null) {
+      this.plannedEndsAt = null
+      return null
+    }
+    if (this.plannedEndsAt == null) {
+      this.plannedEndsAt = projected
+      return this.plannedEndsAt
+    }
+    const lag = projected - this.plannedEndsAt
+    const plannedSpan = Math.max(0, this.plannedEndsAt - (this.transferStartedAt ?? now))
+    if (lag >= StageClock.LAG_MS && lag >= plannedSpan * StageClock.LAG_RATIO) {
+      this.plannedEndsAt = projected
+    }
+    return this.plannedEndsAt
   }
 }
 

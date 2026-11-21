@@ -1,4 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { useBackTarget } from '../app/router'
+import { WorkBadge } from '../plan/WorkBadge'
 import { HelpButton } from './HelpButton'
 import { UpdateBanner } from './UpdateBanner'
 
@@ -10,9 +12,10 @@ const TABS = [
   { path: '/more', label: 'Ещё', icon: '⋯' },
 ]
 
-/** back — куда ведёт стрелка «назад»; onBack — вместо перехода закрыть открытую карточку и вернуться к списку. */
+/** back — запасной путь, если неясно, откуда пришли; onBack — закрыть карточку без смены адреса. Стрелка ведёт на экран, с которого открыли текущий. */
 export function Screen(props: { title: string; help?: string; back?: string; onBack?: () => void; actions?: ReactNode; children: ReactNode; tab: string }) {
   const tabbar = useRef<HTMLElement>(null)
+  const back = useBackTarget(props.back)
 
   // Высота нижнего меню зависит от размера текста и отступа под полоску жеста iPhone: запас внизу страницы — по факту.
   useEffect(() => {
@@ -32,13 +35,14 @@ export function Screen(props: { title: string; help?: string; back?: string; onB
 
   return (
     <div className="app">
+      <WorkBadge />
       <header className="topbar">
         {props.onBack ? (
           <button type="button" className="icon-button" aria-label="Назад" onClick={props.onBack}>
             ←
           </button>
-        ) : props.back ? (
-          <a className="icon-button" href={`#${props.back}`} aria-label="Назад">
+        ) : back ? (
+          <a className="icon-button" href={`#${back}`} aria-label="Назад">
             ←
           </a>
         ) : (

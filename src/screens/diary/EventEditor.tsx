@@ -6,7 +6,8 @@ import { todayAtSite } from '../../domain/dates'
 import { findConsumable, resolveUses, rowProblems, type ConsumableRow } from '../../domain/consumables'
 import { suggestStorage } from '../../domain/placeSuggestion'
 import type { Consumable, ConsumableUse, DiaryEvent, DocInput, EventType, PlanWork, WateringZone } from '../../domain/types'
-import { setSeason } from '../../plan/actions'
+import { attachPlanWork, setSeason } from '../../plan/actions'
+import { planAlreadyHas, planInputFromEvent } from '../../plan/fromEvent'
 import { addAttachment, addPhoto, isImageFile } from '../../files/files'
 import { moonPhase } from '../../domain/moon'
 import { NoteField } from '../../ui/NoteField'
@@ -239,6 +240,17 @@ function EventForm({
       if (needsWeather(saved)) {
         await queueWeather(saved.id)
         void processWeatherQueue()
+      }
+      if (!event && saved.type === 'work' && !plan) {
+        const input = planInputFromEvent(saved)
+        const already = input ? planAlreadyHas(await db.planWorks.toArray(), input.title) : true
+        if (input && !already && confirm(`Этой работы нет в плане. Создать повторяющуюся «${input.title}» и открыть её карточку? Срок возьмётся из даты записи, условие можно задать в карточке.`)) {
+          const created = await repo.create('planWorks', input)
+          await attachPlanWork([saved.id], created.id)
+          setInitial(JSON.stringify(draft))
+          navigate(`/works?work=${created.id}`)
+          return
+        }
       }
       setInitial(JSON.stringify(draft))
       navigate(plan && !event ? '/works' : zone && !event ? '/watering' : '/diary')

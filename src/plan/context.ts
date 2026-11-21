@@ -6,6 +6,7 @@ import { db } from '../storage/db'
 import { fetchDailyMinimums } from '../weather/openMeteo'
 import { useForecast } from '../weather/service'
 import { frostStats, frostYears, type FrostYear } from './frost'
+import { ensureFrostObservations } from './frostEvents'
 import type { WorkContext } from './status'
 
 /** Многолетние даты заморозков по архиву для координат участка; хранятся на устройстве, обновляются раз в год. */
@@ -45,16 +46,26 @@ export function refreshClimate(): Promise<StoredClimate | null> {
 export function useWorkContext(): WorkContext & { climateYears?: FrostYear[]; climateRange?: string } {
   const { forecast, location } = useForecast()
   const climate = useLiveQuery(async () => (await db.settings.get(CLIMATE_KEY))?.value as StoredClimate | undefined, [])
+  const observations = useLiveQuery(() => db.events.filter((event) => !event.deletedAt && event.type === 'observation').toArray(), [])
   const hasLocation = !!location
+  const today = todayAtSite().date
+  const daily = forecast?.daily ? { time: forecast.daily.time, temperature_2m_min: forecast.daily.temperature_2m_min } : undefined
+  const matches = climate && location && climate.latitude === location.latitude && climate.longitude === location.longitude
+  const climateStamp = matches ? `${climate.latitude}:${climate.longitude}:${climate.toYear}:${climate.years.length}` : ''
+  const forecastStamp = forecast?.fetchedAt ?? ''
   useEffect(() => {
     if (hasLocation) void refreshClimate().catch(() => undefined)
   }, [hasLocation])
-  const matches = climate && location && climate.latitude === location.latitude && climate.longitude === location.longitude
+  useEffect(() => {
+    if (!matches || !climate) return
+    void ensureFrostObservations(db, climate.years, daily, today).catch(() => undefined)
+  }, [matches, climateStamp, forecastStamp, today])
   return {
-    today: todayAtSite().date,
-    forecast: forecast?.daily ? { time: forecast.daily.time, temperature_2m_min: forecast.daily.temperature_2m_min } : undefined,
+    today,
+    forecast: daily,
     climate: matches ? frostStats(climate.years) : undefined,
     climateYears: matches ? climate.years : undefined,
     climateRange: matches ? `${climate.fromYear}–${climate.toYear}` : undefined,
+    observations: observations ?? [],
   }
 }

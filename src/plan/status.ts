@@ -30,6 +30,8 @@ export interface WorkContext {
   today: string
   forecast?: DailyMinimums
   climate?: FrostStats
+  /** Наблюдения дневника: для условий «снег сошёл» и подобных. */
+  observations?: Pick<DiaryEvent, 'type' | 'date' | 'comment' | 'deletedAt'>[]
 }
 
 const SOON_DAYS = 14

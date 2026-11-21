@@ -5,7 +5,10 @@ import { repo, type AppSettings } from '../app/store'
 import { workTimes } from '../domain/applications'
 import { parseNonNegative, parseQuantity } from '../domain/consumables'
 import { MONTH_NAMES, todayAtSite } from '../domain/dates'
+import { isObservationHint, OBSERVATION_HINTS } from '../domain/observations'
 import { buyPackages, packagesFromStore, packagesToStore, purchasePlan, rateAreas } from '../domain/purchases'
+import type { ShoppingDraft } from '../domain/shopping'
+import { addToShoppingList } from '../plan/shoppingActions'
 import { excerptAround, includesAllWords, normalizeText } from '../domain/diaryFilter'
 import { periodText, scheduleText } from '../domain/labels'
 import { errorText } from '../lib/format'
@@ -32,7 +35,7 @@ const GROUPS: { title: string; states: WorkStatus['state'][] }[] = [
 const conditionText = (condition?: WorkCondition) =>
   !condition
     ? ''
-    : condition.type === 'label'
+    : condition.type === 'label' || condition.type === 'observation'
       ? condition.text
       : condition.type === 'beforeAutumnFrost'
         ? `за ${condition.leadDays} дн. до первых осенних заморозков`
@@ -381,6 +384,7 @@ const stockText = (value: number | undefined) =>
   value === undefined ? '' : value.toLocaleString('ru-RU', { maximumFractionDigits: 3, useGrouping: false })
 
 function WorkMaterials({
+  workId,
   consumableIds,
   stocks,
   times,
@@ -397,6 +401,7 @@ function WorkMaterials({
   onRate,
   onRateUnit,
 }: {
+  workId?: string
   consumableIds: string[]
   stocks: Record<string, string>
   times: number
@@ -419,6 +424,11 @@ function WorkMaterials({
     .filter((item): item is Consumable => !!item)
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
   const available = consumables.filter((item) => item.active && !consumableIds.includes(item.id)).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  const drafts: ShoppingDraft[] = selected.flatMap((item) => {
+    const { buy } = materialBuy(item, stocks[item.id] ?? '', times, areas, areaKind)
+    if (!(buy && buy > 0)) return []
+    return [{ consumableId: item.id, name: item.name, quantity: buy, unit: 'уп.', workId }]
+  })
   return (
     <fieldset className="periods">
       <legend>Материалы</legend>
@@ -442,6 +452,25 @@ function WorkMaterials({
           onRateUnit={(value) => onRateUnit(item.id, value)}
         />
       ))}
+      {drafts.length > 0 && (
+        <div className="actions">
+          <ActionButton
+            onRun={async () => {
+              const result = await addToShoppingList(drafts)
+              alert(
+                result.added + result.updated > 0
+                  ? `В «Возьми»: ${[result.added ? `добавлено ${result.added}` : '', result.updated ? `обновлено ${result.updated}` : ''].filter(Boolean).join(', ')}.`
+                  : 'Эти покупки уже есть в «Возьми».',
+              )
+            }}
+          >
+            В «Возьми»
+          </ActionButton>
+          <a className="button secondary" href="#/shopping">
+            Открыть список
+          </a>
+        </div>
+      )}
       {available.length > 0 && (
         <label className="field">
           Добавить материал
@@ -465,6 +494,29 @@ function WorkMaterials({
       {consumables.length === 0 && <p className="hint">В справочнике пока нет материалов.</p>}
     </fieldset>
   )
+}
+
+function materialBuy(
+  item: Consumable,
+  stock: string,
+  times: number,
+  areas: { name: string; areaM2?: number }[],
+  areaKind: 'objects' | 'groups',
+): { packs?: number; buy?: number; planNeed?: number; measureUnit: string } {
+  const plan = purchasePlan({
+    unit: item.unit,
+    ratePerM2: item.ratePerM2,
+    rateUnit: item.rateUnit,
+    applications: times,
+    packQuantity: item.packQuantity,
+    packUnit: item.packUnit,
+    areas,
+    areaKind,
+    usedThisYear: 0,
+    pastUsage: [],
+  })
+  const packs = item.packQuantity ? plan.unitsNeed : undefined
+  return { packs, buy: buyPackages(packs, parseNonNegative(stock)), planNeed: plan.need, measureUnit: plan.measureUnit || item.unit }
 }
 
 function MaterialNeed({
@@ -622,7 +674,9 @@ function WorkForm({
   const [schedule, setSchedule] = useState<SeasonSchedule>(work?.seasonSchedule ?? defaultSchedule(suggestion?.lastDate))
   const [rhythm, setRhythm] = useState<'weeks' | 'days'>(work?.seasonSchedule?.weekdays?.length ? 'days' : 'weeks')
   const [conditionType, setConditionType] = useState<'' | WorkCondition['type']>(work?.condition?.type ?? '')
-  const [conditionLabel, setConditionLabel] = useState(work?.condition?.type === 'label' ? work.condition.text : '')
+  const [conditionLabel, setConditionLabel] = useState(
+    work?.condition?.type === 'label' || work?.condition?.type === 'observation' ? work.condition.text : '',
+  )
   const [leadDays, setLeadDays] = useState(String(work?.condition?.type === 'beforeAutumnFrost' ? work.condition.leadDays : 7))
   const [note, setNote] = useState(work?.note ?? '')
   const [consumableIds, setConsumableIds] = useState<string[]>(work?.consumableIds ?? [])
@@ -690,9 +744,11 @@ function WorkForm({
         ? { type: 'beforeAutumnFrost', leadDays: Math.max(1, Number(leadDays) || 7) }
         : recurrence === 'yearly' && conditionType === 'afterSpringFrost'
           ? { type: 'afterSpringFrost', weekday: 6, calmDays: 3 }
-          : recurrence === 'yearly' && conditionType === 'label' && conditionLabel
-            ? { type: 'label', text: conditionLabel }
-            : undefined
+          : recurrence === 'yearly' && conditionType === 'observation' && conditionLabel
+            ? { type: 'observation', text: conditionLabel }
+            : recurrence === 'yearly' && conditionType === 'label' && conditionLabel
+              ? { type: 'label', text: conditionLabel }
+              : undefined
     const seasonSchedule: SeasonSchedule | undefined =
       recurrence === 'season'
         ? {
@@ -845,6 +901,7 @@ function WorkForm({
         <PeriodsEditor periods={periods} onChange={setPeriods} />
       )}
       <WorkMaterials
+        workId={workId}
         consumableIds={consumableIds}
         stocks={Object.fromEntries(consumableIds.map((id) => [id, stockOf(id)]))}
         times={times}
@@ -865,9 +922,14 @@ function WorkForm({
       <label className="field">
         Условие
         <select
-          value={conditionType === 'label' ? `label:${conditionLabel}` : conditionType}
+          value={conditionType === 'observation' || conditionType === 'label' ? `${conditionType}:${conditionLabel}` : conditionType}
           onChange={(event) => {
             const value = event.target.value
+            if (value.startsWith('observation:')) {
+              setConditionType('observation')
+              setConditionLabel(value.slice('observation:'.length))
+              return
+            }
             if (value.startsWith('label:')) {
               setConditionType('label')
               setConditionLabel(value.slice('label:'.length))
@@ -880,8 +942,13 @@ function WorkForm({
           <option value="">Без условия — по срокам</option>
           <option value="beforeAutumnFrost">До первых осенних заморозков</option>
           <option value="afterSpringFrost">После весенних заморозков, в ближайшую субботу</option>
-          {[...new Set([...(conditionLabel ? [conditionLabel] : []), ...settings.workConditions])].map((text) => (
-            <option key={text} value={`label:${text}`}>
+          {[...new Set([...OBSERVATION_HINTS, ...(conditionType === 'observation' && conditionLabel ? [conditionLabel] : [])])].map((text) => (
+            <option key={`observation:${text}`} value={`observation:${text}`}>
+              {text}
+            </option>
+          ))}
+          {[...new Set([...(conditionType === 'label' && conditionLabel ? [conditionLabel] : []), ...settings.workConditions.filter((text) => !isObservationHint(text))])].map((text) => (
+            <option key={`label:${text}`} value={`label:${text}`}>
               {text}
             </option>
           ))}
@@ -890,6 +957,9 @@ function WorkForm({
       )}
       {recurrence === 'yearly' && conditionType === 'afterSpringFrost' && (
         <p className="hint">После весенних заморозков, в ближайшую субботу.</p>
+      )}
+      {recurrence === 'yearly' && conditionType === 'observation' && conditionLabel && (
+        <p className="hint">Работа станет готовой, когда в дневнике этого года появится наблюдение «{conditionLabel}».</p>
       )}
       {recurrence === 'yearly' && conditionType === 'label' && conditionLabel && <p className="hint">{conditionLabel}</p>}
       {recurrence === 'yearly' && conditionType === 'beforeAutumnFrost' && (
@@ -945,7 +1015,7 @@ function ClimateNote() {
           </li>
         ))}
       </ul>
-      <p className="small muted">По архиву Open-Meteo для координат участка: заморозок — сутки, когда воздух на высоте 2 м остывал ниже 0 °C. Это модельная оценка, а не измерение на участке.</p>
+      <p className="small muted">По архиву Open-Meteo для координат участка: заморозок — сутки, когда воздух на высоте 2 м остывал ниже 0 °C. Это модельная оценка, а не измерение на участке. Такие дни сами появляются в дневнике как наблюдения.</p>
     </details>
   )
 }

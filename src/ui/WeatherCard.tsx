@@ -102,9 +102,14 @@ export function WeatherCard() {
                 : `Прогноз Open-Meteo для координат участка, обновлён ${age(forecast.fetchedAt, now)}${stale ? ' — откройте приложение с интернетом, чтобы обновить' : ''}. Это модельная оценка, а не измерение на участке.`}
             </p>
           )}
-          <button type="button" className="button secondary small" disabled={loading} onClick={() => refresh()}>
-            {loading ? 'Обновляю…' : 'Обновить прогноз'}
-          </button>
+          <div className="actions">
+            <button type="button" className="button secondary small" disabled={loading} onClick={() => refresh()}>
+              {loading ? 'Обновляю…' : 'Обновить прогноз'}
+            </button>
+            <a className="button secondary small" href="#/climate">
+              Климат за 5 лет
+            </a>
+          </div>
         </>
       )}
     </section>

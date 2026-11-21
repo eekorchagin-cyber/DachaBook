@@ -20,8 +20,13 @@ async function renameConsumableKind(from: string, to: string): Promise<boolean> 
 }
 
 async function renameWorkCondition(from: string, to: string): Promise<boolean> {
-  const works = await db.planWorks.filter((work) => work.condition?.type === 'label' && work.condition.text === from).toArray()
-  for (const work of works) await repo.update('planWorks', work.id, { condition: { type: 'label', text: to } }, work.revision)
+  const works = await db.planWorks
+    .filter((work) => (work.condition?.type === 'label' || work.condition?.type === 'observation') && work.condition.text === from)
+    .toArray()
+  for (const work of works) {
+    const type = work.condition?.type === 'observation' ? 'observation' : 'label'
+    await repo.update('planWorks', work.id, { condition: { type, text: to } }, work.revision)
+  }
   await setSetting('workConditions', (await getSetting('workConditions')).map((item) => (item === from ? to : item)))
   return true
 }
@@ -36,7 +41,7 @@ export function DictionariesScreen({ settings }: { settings: AppSettings }) {
     { href: '#/dictionaries/consumable-kinds', title: 'Виды расходных материалов', text: 'Удобрение, горюче-смазочные, бытовая химия — без остатков и норм', count: settings.consumableKinds.length },
     { href: '#/dictionaries/units', title: 'Единицы измерения расходных материалов', text: 'кг, л, шт. — для норм и расхода материалов', count: settings.consumableUnits.length },
     { href: '#/consumables', title: 'Расходные материалы', text: 'Удобрения, средства, масло, уксус: нормы и описания', count: counts?.consumables },
-    { href: '#/dictionaries/work-conditions', title: 'Условия для проведения работ', text: 'Подпись к работе. День сама не назначает', count: settings.workConditions.length },
+    { href: '#/dictionaries/work-conditions', title: 'Условия для проведения работ', text: '«Снег сошёл» и «Почва просохла» сами открывают работу; остальные — подпись', count: settings.workConditions.length },
   ].sort((a, b) => a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }))
   return (
     <Screen title="Справочники" help="dictionaries" back="/more" tab="/more">
@@ -111,8 +116,7 @@ export function DictionaryScreen({ kind, settings, query }: { kind: string; sett
     return (
       <Screen title="Условия для проведения работ" help="dictionaries" back="/dictionaries" tab="/more">
         <p className="hint">
-          Текст, который можно выбрать в годовой работе. «Как только просохнет почва после таяния снега» остаётся подписью: программа не назначает день, пока для такого условия нет правила погоды.
-          Заморозки по-прежнему считаются отдельно, в карточке работы.
+          «Снег сошёл» и «Почва просохла» открывают работу сами, когда такая запись появляется в дневнике. Остальные фразы — подпись: день не назначается. Заморозки по-прежнему в карточке работы отдельно.
         </p>
         <ListEditor
           label="Условия для проведения работ"

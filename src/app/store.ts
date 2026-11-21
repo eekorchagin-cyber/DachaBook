@@ -59,7 +59,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   workKindRenames: {},
   consumableUnits: UNITS,
   consumableKinds: ['Удобрение', 'Средство защиты', 'Семена и посадочный материал', 'Горюче-смазочные', 'Бытовая химия'],
-  workConditions: ['Как только просохнет почва после таяния снега'],
+  workConditions: ['Снег сошёл', 'Почва просохла', 'Как только просохнет почва после таяния снега'],
   plotAddress: '',
   plotLocation: null,
   plotPhotoId: '',

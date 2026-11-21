@@ -32,13 +32,23 @@ describe('оставшееся время этапа', () => {
     expect(eta.suffix(20_000)).toBe(' До конца этапа осталось около 1 минуты.')
   })
 
-  it('до копирования называет срок всего объёма, а не одного файла', () => {
+  it('до копирования называет срок всего объёма и держит его после файлов, пока нет заметного отставания', () => {
     const clock = new StageClock(1000, 100)
     expect(clock.endsAt(1_000)).toBe(11_000)
     clock.markStart(1_000)
-    expect(clock.endsAt(6_000)).toBe(16_000)
     clock.settle(500, 500)
+    // Половина уже ушла быстрее плана — момент окончания не сдвигается вперёд после каждого файла.
+    expect(clock.endsAt(3_000)).toBe(11_000)
     expect(clock.endsAt(6_000)).toBe(11_000)
+  })
+
+  it('пересчитывает срок только при заметном отставании от плана', () => {
+    const clock = new StageClock(1_000_000, 1000)
+    expect(clock.endsAt(0)).toBe(1_000_000)
+    clock.markStart(0)
+    // За 10 минут ушло только 100 КБ при плане 1000 Б/с — сильно отстаём.
+    clock.settle(100_000, 100_000)
+    expect(clock.endsAt(600_000)).toBeGreaterThan(1_000_000)
   })
 
   it('без известной скорости ждёт первой передачи и вычитает байты, которые передавать не пришлось', () => {
@@ -48,9 +58,11 @@ describe('оставшееся время этапа', () => {
     unknown.settle(250, 250)
     expect(unknown.endsAt(5_000)).toBe(20_000)
     const skipped = new StageClock(1000, 10)
+    expect(skipped.endsAt(0)).toBe(100_000)
     skipped.settle(400, 0)
     expect(skipped.pending()).toBe(600)
-    expect(skipped.endsAt(0)).toBe(60_000)
+    // Пропуск без отставания срок не двигает.
+    expect(skipped.endsAt(1_000)).toBe(100_000)
   })
 
   it('добирает объём этапа по мере того, как становятся известны порции', () => {

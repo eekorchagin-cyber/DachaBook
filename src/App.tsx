@@ -7,6 +7,9 @@ import { setWorkKinds } from './import/suggest'
 import { LabScreen } from './lab/LabScreen'
 import { DiaryBookScreen } from './screens/diary/DiaryBookScreen'
 import { DiaryScreen } from './screens/diary/DiaryScreen'
+import { AlbumScreen } from './screens/diary/AlbumScreen'
+import { SameDayScreen } from './screens/diary/SameDayScreen'
+import { ClimateScreen } from './screens/ClimateScreen'
 import { EventEditor } from './screens/diary/EventEditor'
 import { ShareScreen } from './screens/ShareScreen'
 import { GuideScreen } from './screens/GuideScreen'
@@ -25,6 +28,7 @@ import { FolkSignsScreen } from './screens/FolkSignsScreen'
 import { MoreScreen, TrashScreen } from './screens/MoreScreen'
 import { ObjectsScreen } from './screens/ObjectsScreen'
 import { WateringScreen } from './screens/WateringScreen'
+import { ShoppingScreen } from './screens/ShoppingScreen'
 import { WorksScreen } from './screens/WorksScreen'
 import { SettingsScreen, WelcomeScreen } from './screens/SettingsScreen'
 import { SyncScreen } from './screens/SyncScreen'
@@ -66,6 +70,8 @@ export default function App() {
       return <ShareScreen />
     case 'diary':
       if (param === 'book') return <DiaryBookScreen settings={settings} />
+      if (param === 'album') return <AlbumScreen />
+      if (param === 'day') return <SameDayScreen settings={settings} date={route.query.get('date') ?? undefined} />
       if (param) {
         return (
           <EventEditor
@@ -110,6 +116,10 @@ export default function App() {
       return <PlanScreen />
     case 'works':
       return <WorksScreen settings={settings} />
+    case 'shopping':
+      return <ShoppingScreen />
+    case 'climate':
+      return <ClimateScreen />
     case 'watering':
       return <WateringScreen settings={settings} />
     case 'import':

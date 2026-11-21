@@ -20,6 +20,8 @@ const TOP = [
 
 const WORKS = [
   { href: '#/works', title: 'План работ' },
+  { href: '#/shopping', title: 'Возьми' },
+  { href: '#/climate', title: 'Климат участка' },
   { href: '#/watering', title: 'Полив' },
 ]
 

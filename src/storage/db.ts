@@ -9,6 +9,7 @@ import type {
   PlanWork,
   PlantGroup,
   ReferenceMaterial,
+  ShoppingItem,
   StoredFile,
   WateringZone,
 } from '../domain/types'
@@ -74,6 +75,7 @@ export class DiaryDatabase extends Dexie {
   folkSigns!: EntityTable<FolkSign, 'id'>
   planWorks!: EntityTable<PlanWork, 'id'>
   wateringZones!: EntityTable<WateringZone, 'id'>
+  shoppingItems!: EntityTable<ShoppingItem, 'id'>
   settings!: EntityTable<SettingRow, 'key'>
   snapshots!: EntityTable<Snapshot, 'id'>
   syncState!: EntityTable<SyncRecord, 'key'>
@@ -97,10 +99,11 @@ export class DiaryDatabase extends Dexie {
     this.version(4).stores({ syncState: 'key', conflicts: 'id, &key' })
     this.version(5).stores({ planWorks: 'id, active, deletedAt' })
     this.version(6).stores({ wateringZones: 'id, active, deletedAt' })
+    this.version(7).stores({ shoppingItems: 'id, consumableId, status, deletedAt' })
   }
 }
 
 /** Таблицы документов: всё, что входит в резервную копию и меняется пользователем. */
-export const DOC_TABLES = ['objects', 'plantGroups', 'events', 'files', 'references', 'planDrafts', 'importArchive', 'consumables', 'folkSigns', 'planWorks', 'wateringZones'] as const
+export const DOC_TABLES = ['objects', 'plantGroups', 'events', 'files', 'references', 'planDrafts', 'importArchive', 'consumables', 'folkSigns', 'planWorks', 'wateringZones', 'shoppingItems'] as const
 
 export const db = new DiaryDatabase()

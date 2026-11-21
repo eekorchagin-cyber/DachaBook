@@ -1,5 +1,6 @@
 import { MONTHS_GENITIVE } from '../domain/dates'
-import type { WorkCondition } from '../domain/types'
+import { observationDate } from '../domain/observations'
+import type { DiaryEvent, WorkCondition } from '../domain/types'
 
 /** Суточные минимумы температуры воздуха (из архива или прогноза Open-Meteo). */
 export interface DailyMinimums {
@@ -109,16 +110,24 @@ const inYear = (today: string, monthDay: string) => `${today.slice(0, 4)}-${mont
 
 /** Сезоны, в которых условие имеет смысл: весенние работы — март — июнь, осенние — август — декабрь. */
 export function conditionSeason(condition: WorkCondition, year: number): { start: string; end: string } {
-  if (condition.type === 'label') return { start: `${year}-01-01`, end: `${year}-12-31` }
+  if (condition.type === 'label' || condition.type === 'observation') return { start: `${year}-01-01`, end: `${year}-12-31` }
   return condition.type === 'afterSpringFrost' ? { start: `${year}-03-01`, end: `${year}-06-30` } : { start: `${year}-08-01`, end: `${year}-12-31` }
 }
 
 /**
- * Готовность работы, привязанной к заморозкам: по прогнозу (неделя назад и вперёд) и многолетним данным архива.
+ * Готовность работы: заморозки по прогнозу и архиву, либо наблюдение в дневнике («снег сошёл»).
  * Без прогноза и многолетних данных — «требуется проверка», а не «условия выполнены».
  */
-export function evaluateCondition(condition: WorkCondition, context: { today: string; forecast?: DailyMinimums; climate?: FrostStats }): ConditionResult {
-  const { today, forecast, climate } = context
+export function evaluateCondition(
+  condition: WorkCondition,
+  context: { today: string; forecast?: DailyMinimums; climate?: FrostStats; observations?: Pick<DiaryEvent, 'type' | 'date' | 'comment' | 'deletedAt'>[] },
+): ConditionResult {
+  const { today, forecast, climate, observations } = context
+  if (condition.type === 'observation') {
+    const seen = observationDate(observations ?? [], condition.text, today.slice(0, 4))
+    if (seen) return { state: 'ready', dueDate: seen, message: `В дневнике есть «${condition.text}» (${dateText(seen)}).` }
+    return { state: 'waiting', message: `Ждём в дневнике наблюдение «${condition.text}».` }
+  }
   if (condition.type === 'label') {
     return { state: 'planned', message: `${condition.text} Дата сама не назначается — отметьте работу, когда условие на участке выполнено.` }
   }

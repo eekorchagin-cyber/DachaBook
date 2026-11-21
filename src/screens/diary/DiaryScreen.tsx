@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import type { AppSettings } from '../../app/store'
-import { rangeText } from '../../domain/dates'
+import { rangeText, todayAtSite } from '../../domain/dates'
 import { filterEvents, type DiaryFilter } from '../../domain/diaryFilter'
 import { db } from '../../storage/db'
 import { EmptyState, Screen } from '../../ui/Screen'
@@ -39,6 +39,12 @@ export function DiaryScreen({ settings, initialFilter }: { settings: AppSettings
         <>
           <a className="button small secondary" href="#/diary/book">
             PDF
+          </a>
+          <a className="button small secondary" href="#/diary/album">
+            Альбом
+          </a>
+          <a className="button small secondary" href={`#/diary/day?date=${filter.from && filter.from === filter.to ? filter.from : todayAtSite().date}`}>
+            В этот день
           </a>
           <a className="button small" href="#/diary/new">
             + Запись

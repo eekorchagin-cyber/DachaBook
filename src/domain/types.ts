@@ -221,6 +221,11 @@ export interface PlanDraftItem extends DocMeta {
 export type WorkCondition =
   | { type: 'beforeAutumnFrost'; leadDays: number; thresholdC?: number }
   | { type: 'afterSpringFrost'; weekday?: number; calmDays?: number; thresholdC?: number }
+  /**
+   * Готовность по наблюдению в дневнике: когда появилась запись с таким текстом в этом году,
+   * работа становится готовой. Примеры: «Снег сошёл», «Почва просохла».
+   */
+  | { type: 'observation'; text: string }
   /** Подпись из справочника условий. День сама не назначает: в прогнозе нет правила для этого текста. */
   | { type: 'label'; text: string }
 
@@ -327,6 +332,20 @@ export interface WateringZone extends DocMeta {
   active: boolean
 }
 
+/** Строка списка «Возьми»: рассчитанная покупка материала. */
+export type ShoppingStatus = 'toBuy' | 'bought'
+
+export interface ShoppingItem extends DocMeta {
+  consumableId: string
+  name: string
+  /** Сколько купить в unit. */
+  quantity: number
+  unit: string
+  status: ShoppingStatus
+  /** Работы плана, из которых позиция попала в список. */
+  workIds: string[]
+}
+
 export interface Collections {
   objects: CareObject
   plantGroups: PlantGroup
@@ -339,6 +358,7 @@ export interface Collections {
   folkSigns: FolkSign
   planWorks: PlanWork
   wateringZones: WateringZone
+  shoppingItems: ShoppingItem
 }
 
 export type CollectionName = keyof Collections

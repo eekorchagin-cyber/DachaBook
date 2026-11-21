@@ -99,6 +99,9 @@ export function DateJump({ events }: { events: DiaryEvent[] }) {
           <button type="button" className="button secondary" disabled={!day} onClick={() => go(day, day)}>
             Показать
           </button>
+          <button type="button" className="button secondary" disabled={!day} onClick={() => navigate(`/diary/day?date=${day}`)}>
+            В разные годы
+          </button>
         </span>
       </label>
     </section>

@@ -71,4 +71,15 @@ describe('заморозки', () => {
     expect(evaluateCondition({ type: 'afterSpringFrost' }, { today: '2026-05-06' }).state).toBe('check')
     expect(evaluateCondition({ type: 'beforeAutumnFrost', leadDays: 7 }, { today: '2026-09-06' }).state).toBe('check')
   })
+
+  it('снег сошёл: ждём наблюдение, затем работа готова', () => {
+    const condition = { type: 'observation' as const, text: 'Снег сошёл' }
+    expect(evaluateCondition(condition, { today: '2026-04-10' })).toMatchObject({ state: 'waiting' })
+    expect(
+      evaluateCondition(condition, {
+        today: '2026-04-10',
+        observations: [{ type: 'observation', date: '2026-04-08', comment: 'Снег сошёл у дорожки' }],
+      }),
+    ).toMatchObject({ state: 'ready', dueDate: '2026-04-08' })
+  })
 })
