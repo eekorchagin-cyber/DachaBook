@@ -80,8 +80,8 @@ export function BackupScreen() {
       <section className="card">
         <h2>Экспорт</h2>
         <p className="hint">
-          Все записи, объекты, статьи, черновик плана, архив импорта, оригиналы фото и вложения — в одном ZIP-архиве. Каждая запись — отдельный
-          JSON-файл. Личные настройки устройства и пароли в копию не входят.
+          В ZIP попадают все записи дневника, объекты, статьи, план, справочники и уменьшенные копии фото. Личные настройки устройства и пароли
+          в копию не входят. Оригиналы фото после выгрузки в облако на телефоне не хранятся — они остаются на Яндекс Диске.
         </p>
         <p className="small">
           Последняя копия: {lastBackup?.value ? new Date(lastBackup.value as string).toLocaleString('ru-RU') : 'ещё не создавалась'}
@@ -111,7 +111,17 @@ export function BackupScreen() {
             </p>
             <Counts counts={exported.manifest.counts} />
             {!exported.manifest.complete && (
-              <p className="error">Копия неполная: нет оригиналов у файлов ({exported.manifest.missingOriginals.length}). Остальное сохранено.</p>
+              <div className="hint">
+                <p>
+                  В этот ZIP не вошли оригиналы {exported.manifest.missingOriginals.length} фото и файлов: на этом устройстве их нет — после
+                  синхронизации здесь остаются только уменьшенные копии, а полные снимки лежат на Яндекс Диске в папке{' '}
+                  <strong>DachaBook/diary/files/originals</strong>.
+                </p>
+                <p>
+                  Записи дневника, план и превью в копии есть. Так и задумано: ZIP остаётся компактным, а оригиналы не дублируются. Для полного
+                  восстановления дневника достаточно этой копии и подключённого Яндекс Диска (или скачанных оригиналов).
+                </p>
+              </div>
             )}
           </div>
         )}
@@ -146,7 +156,12 @@ export function BackupScreen() {
               Добавлено: {restored.added}, обновлено: {restored.updated}, без изменений: {restored.same}, местная версия новее: {restored.keptLocal}, файлов
               восстановлено: {restored.files}.
             </p>
-            {!restored.manifest.complete && <p className="error">Копия была неполной: в ней не было части оригиналов файлов.</p>}
+            {!restored.manifest.complete && (
+              <p className="hint">
+                В импортированной копии не было части оригиналов фото — превью и записи восстановлены. Полные снимки, если они есть, возьмите с
+                Яндекс Диска (DachaBook/diary/files/originals) или скачайте нужные в просмотрщике.
+              </p>
+            )}
             {restored.conflicts.length > 0 && (
               <p className="error">Расхождения (оставлена версия этого устройства): {restored.conflicts.join('; ')}</p>
             )}
