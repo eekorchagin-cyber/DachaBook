@@ -5,6 +5,9 @@ export interface Route {
   query: URLSearchParams
 }
 
+/** Корни нижнего меню: переход на них сбрасывает вложенную историю «назад». */
+const TAB_ROOTS = new Set(['/', '/diary', '/objects', '/library', '/more'])
+
 /** Путь внутри приложения из hash: «/sync», «/diary?text=…». */
 export function pathFromHash(hash?: string): string {
   const value = hash ?? (typeof location === 'undefined' ? '' : location.hash)
@@ -23,13 +26,23 @@ export function routeKey(path: string): string {
   return rest ? `${page}?${rest}` : page
 }
 
+function pageRoot(path: string): string {
+  const base = routeKey(path).split('?')[0] || '/'
+  return base || '/'
+}
+
+function isTabRoot(path: string): boolean {
+  return TAB_ROOTS.has(pageRoot(path))
+}
+
 function parse(): Route {
   const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?')
   return { path: path.split('/').filter(Boolean), query: new URLSearchParams(query) }
 }
 
 let currentHashPath = pathFromHash(typeof location === 'undefined' ? '' : location.hash)
-let previousHashPath: string | undefined
+/** Экраны, с которых заходили глубже: стрелка «назад» снимает верхний, а не прыгает туда-сюда. */
+let backStack: string[] = []
 
 function rememberHashChange(nextHash?: string): void {
   const next = pathFromHash(nextHash)
@@ -37,13 +50,36 @@ function rememberHashChange(nextHash?: string): void {
     currentHashPath = next
     return
   }
-  previousHashPath = currentHashPath
+  // Возврат на экран, с которого открыли текущий — снимаем его со стека, не записываем «вниз» обратно.
+  if (backStack.length > 0 && routeKey(next) === routeKey(backStack[backStack.length - 1]!)) {
+    backStack.pop()
+    currentHashPath = next
+    return
+  }
+  // Нижнее меню: новая ветка, старая вложенность больше не нужна.
+  if (isTabRoot(next)) {
+    backStack = []
+    currentHashPath = next
+    return
+  }
+  backStack.push(currentHashPath)
   currentHashPath = next
 }
 
-/** Предыдущий экран внутри приложения — куда логично вести стрелку «назад». */
+/** Верх стека — куда ведёт стрелка «назад», если не задан ?back=. */
 export function previousPath(): string | undefined {
-  return previousHashPath
+  return backStack.at(-1)
+}
+
+/** Только для проверок: выставляет текущий экран и историю возврата. */
+export function resetNavigationForTests(current = '/', stack: string[] = []): void {
+  currentHashPath = current
+  backStack = [...stack]
+}
+
+/** Только для проверок: как при смене hash. */
+export function rememberNavigationForTests(next: string): void {
+  rememberHashChange(next.startsWith('#') ? next : `#${next}`)
 }
 
 export function useRoute(): Route {
@@ -72,10 +108,10 @@ export function localPath(value: string | null | undefined): string | undefined 
 }
 
 /**
- * Куда вести стрелку «назад»: явный ?back=, иначе экран, с которого пришли, иначе запасной путь экрана.
- * Так с главной в «Яндекс Диск» возврат — на главную, а из меню облака — в «Облако и резервное копирование».
+ * Куда вести стрелку «назад»: явный ?back=, иначе экран из стека переходов, иначе запасной путь меню.
+ * Стек при возврате снимается: из уровня 4 на 3, затем на 2, а не снова на 4.
  */
-export function resolveBack(fallback?: string, queryBack?: string | null, previous = previousPath(), current = pathFromHash()): string | undefined {
+export function resolveBack(fallback?: string, queryBack?: string | null, previous = previousPath(), current = currentHashPath): string | undefined {
   const fromQuery = localPath(queryBack)
   if (fromQuery && routeKey(fromQuery) !== routeKey(current)) return fromQuery
   const fromHistory = localPath(previous)
@@ -83,9 +119,8 @@ export function resolveBack(fallback?: string, queryBack?: string | null, previo
   return localPath(fallback ?? null)
 }
 
-/** Стрелка «назад» с учётом экрана, с которого открыли текущий. */
+/** Стрелка «назад» с учётом стека экранов, с которых заходили. */
 export function useBackTarget(fallback?: string): string | undefined {
   const route = useRoute()
-  // previousPath читается на каждом рендере после hashchange — отдельный state не нужен.
   return resolveBack(fallback, route.query.get('back'))
 }
