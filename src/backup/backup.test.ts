@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { DiaryDatabase } from '../storage/db'
 import { Repository } from '../storage/repository'
 import { seedFolkSigns } from '../app/seed'
-import { buildBackup, restoreBackup } from './backup'
+import { buildBackup, normalizeZipEntries, restoreBackup } from './backup'
 
 async function filled() {
   const database = new DiaryDatabase(`backup-${crypto.randomUUID()}`)
@@ -95,6 +95,18 @@ describe('резервная копия', () => {
     const conflict = await restoreBackup(target, await bytes((await buildBackup(source.database, 'test')).blob))
     expect(conflict.conflicts).toEqual(['Местная правка'])
     expect((await target.events.get(source.event.id))?.comment).toBe('Местная правка')
+  })
+
+  it('копия внутри лишней папки всё равно восстанавливается', async () => {
+    const source = await filled()
+    const inner = unzipSync(new Uint8Array(await bytes((await buildBackup(source.database, 'test')).blob)))
+    const wrapped: Record<string, Uint8Array> = {}
+    for (const [path, data] of Object.entries(inner)) wrapped[`копия/${path}`] = data
+    expect(normalizeZipEntries(wrapped)['manifest.json']).toBeTruthy()
+    const target = new DiaryDatabase(`nested-${crypto.randomUUID()}`)
+    const result = await restoreBackup(target, zipSync(wrapped).buffer as ArrayBuffer)
+    expect(result.added).toBeGreaterThan(0)
+    expect(await target.events.get(source.event.id)).toBeTruthy()
   })
 
   it('повреждённая запись не загружается; чужой и более новый архив отклоняются без изменений', async () => {

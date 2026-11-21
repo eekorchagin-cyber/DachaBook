@@ -213,7 +213,19 @@ async function ensureLayout(cloud: CloudAdapter): Promise<void> {
 async function applySnapshot(database: DiaryDatabase, cloud: CloudAdapter, path: string, result: SyncResult): Promise<boolean> {
   const blob = await cloud.read(path)
   if (!blob) return false
-  const entries = unzipSync(new Uint8Array(await blob.arrayBuffer()))
+  const raw = new Uint8Array(await blob.arrayBuffer())
+  // Битый или неполный файл (часто после обрыва загрузки) не должен останавливать всю синхронизацию.
+  if (raw.byteLength < 4 || raw[0] !== 0x50 || raw[1] !== 0x4b) {
+    result.errors.push('Снимок в облаке повреждён или это не ZIP — загружаю записи по одной')
+    return false
+  }
+  let entries: Record<string, Uint8Array>
+  try {
+    entries = unzipSync(raw)
+  } catch {
+    result.errors.push('Снимок в облаке не читается (Invalid zip data) — загружаю записи по одной')
+    return false
+  }
   for (const [name, bytes] of Object.entries(entries)) {
     const match = name.match(/^([A-Za-z]+)\/(?:\d{4}\/)?[0-9a-f-]{36}\.json$/)
     if (!match || !(DOC_TABLES as readonly string[]).includes(match[1])) continue
@@ -642,10 +654,19 @@ export async function synchronize(database: DiaryDatabase, cloud: CloudAdapter, 
     }
     if (manifest.snapshot) {
       report('Загрузка снимка дневника…')
-      result.bootstrapped = await applySnapshot(database, cloud, manifest.snapshot.path, result)
+      try {
+        result.bootstrapped = await applySnapshot(database, cloud, manifest.snapshot.path, result)
+      } catch (caught) {
+        result.errors.push(`Снимок в облаке: ${errorText(caught)} — загружаю записи по одной`)
+        result.bootstrapped = false
+      }
       if (result.bootstrapped) {
         const since = new Date(Date.parse(manifest.snapshot.at) - SNAPSHOT_OVERLAP_MS).toISOString()
         for (const name of DOC_TABLES) meta.cursors[name] = since
+      } else {
+        // Убираем указатель на битый снимок, чтобы следующее устройство не спотыкалось о том же файл.
+        manifest = { app: manifest.app, format: manifest.format, diaryId: manifest.diaryId, createdAt: manifest.createdAt }
+        await cloud.write(MANIFEST, new Blob([docText(manifest)], { type: 'application/json' }))
       }
     }
   }

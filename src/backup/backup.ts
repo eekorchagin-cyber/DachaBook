@@ -127,6 +127,25 @@ function title(doc: Record<string, unknown>): string {
   return String(value).slice(0, 60)
 }
 
+/** Пути из «Поделиться» / «Файлы» иногда с обратными слэшами или лишней корневой папкой вокруг копии. */
+export function normalizeZipEntries(raw: Record<string, Uint8Array>): Record<string, Uint8Array> {
+  const entries: Record<string, Uint8Array> = {}
+  for (const [path, data] of Object.entries(raw)) {
+    const normalized = path.replace(/\\/g, '/').replace(/^\.?\//, '')
+    if (!normalized || normalized.endsWith('/')) continue
+    entries[normalized] = data
+  }
+  if (entries['manifest.json']) return entries
+  const nested = Object.keys(entries).filter((path) => /^[^/]+\/manifest\.json$/.test(path))
+  if (nested.length !== 1) return entries
+  const prefix = nested[0].slice(0, -'manifest.json'.length)
+  const stripped: Record<string, Uint8Array> = {}
+  for (const [path, data] of Object.entries(entries)) {
+    if (path.startsWith(prefix)) stripped[path.slice(prefix.length)] = data
+  }
+  return stripped
+}
+
 /**
  * Импорт копии с объединением: новые записи добавляются, одинаковые пропускаются, ничего не удаляется.
  * Если запись по-разному изменена здесь и в копии, остаётся местная версия, а расхождение попадает в отчёт.
@@ -153,13 +172,17 @@ export async function restoreBackup(database: DiaryDatabase, data: ArrayBuffer):
   }
   let entries: Record<string, Uint8Array>
   try {
-    entries = unzipSync(bytes)
+    entries = normalizeZipEntries(unzipSync(bytes))
   } catch {
     throw new Error('Файл не похож на резервную копию DachaBook: это не ZIP-архив или он повреждён')
   }
   const manifestData = entries['manifest.json']
   const manifest = manifestData ? (JSON.parse(strFromU8(manifestData)) as BackupManifest) : null
-  if (!manifest || manifest.app !== 'dachabook') throw new Error('В архиве нет описания копии DachaBook (manifest.json)')
+  if (!manifest || manifest.app !== 'dachabook') {
+    throw new Error(
+      'В архиве нет описания копии DachaBook (manifest.json). Нужен файл dachabook-backup-….zip целиком, без распаковки и без повторного сжатия папки.',
+    )
+  }
   if (manifest.format > BACKUP_FORMAT || manifest.schemaVersion > SCHEMA_VERSION) {
     throw new Error('Копия создана более новой версией DachaBook. Обновите приложение и повторите импорт — сейчас ничего не изменено')
   }

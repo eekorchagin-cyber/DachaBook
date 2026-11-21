@@ -236,6 +236,24 @@ describe('синхронизация двух устройств через об
     expect(await pendingCount(windows.database)).toBe(0)
   })
 
+  it('битый снимок в облаке не роняет синхронизацию: записи подтягиваются по одной', async () => {
+    const cloud = new MemoryCloud()
+    const mac = device('Mac')
+    await mac.repo.create('events', event('Живая запись'))
+    await synchronize(mac.database, cloud, options('Mac', { snapshotIntervalMs: 0 }))
+    const manifest = JSON.parse(await (await cloud.read('dachabook.json'))!.text()) as { snapshot?: { path: string; at: string } }
+    expect(manifest.snapshot?.path).toBeTruthy()
+    await cloud.write(manifest.snapshot!.path, new Blob([new TextEncoder().encode('это не zip')]))
+
+    const phone = device('iPhone')
+    const result = await synchronize(phone.database, cloud, options('iPhone'))
+    expect(result.bootstrapped).toBe(false)
+    expect(result.errors.some((item) => /снимок|ZIP|zip/i.test(item))).toBe(true)
+    expect((await phone.database.events.toArray()).map((item) => item.comment)).toEqual(['Живая запись'])
+    const cleared = JSON.parse(await (await cloud.read('dachabook.json'))!.text()) as { snapshot?: unknown }
+    expect(cleared.snapshot).toBeUndefined()
+  })
+
   it('«взять из облака»: свои данные устройства уходят в снимок и заменяются дневником из облака', async () => {
     const cloud = new MemoryCloud()
     const mac = device('Mac')

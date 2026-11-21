@@ -49,16 +49,25 @@ export function BackupScreen() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
-  const importFile = async (file: File | undefined) => {
+  const importFile = async (file: File | undefined, input: HTMLInputElement) => {
     if (!file) return
     setError(null)
     setRestored(null)
     try {
-      // Файл читается до диалога подтверждения: на iPhone после диалога содержимое может оказаться пустым.
+      // Читаем сразу: на iPhone после паузы или системного confirm содержимое файла часто становится пустым.
+      // Системный confirm на iPhone PWA иногда молча отменяет выбор — поэтому импорт идёт без него.
       const data = await file.arrayBuffer()
-      if (!confirm(`Импортировать «${file.name}» (${formatBytes(file.size)})? Новые записи добавятся, существующие не удалятся. Перед импортом сохранится снимок данных.`)) return
+      input.value = ''
       setBusy('Импорт копии…')
-      setRestored(await restoreBackup(db, data))
+      const result = await restoreBackup(db, data)
+      setRestored(result)
+      if (result.added + result.updated + result.files === 0 && result.same === 0) {
+        setError(
+          `В «${file.name}» не нашлось записей для добавления` +
+            (result.corrupted.length ? ` (повреждены: ${result.corrupted.length})` : '') +
+            '. Нужен файл dachabook-backup-….zip, не папка и не повторно сжатый архив.',
+        )
+      }
     } catch (caught) {
       setError(errorText(caught))
     } finally {
@@ -114,12 +123,21 @@ export function BackupScreen() {
         <h2>Импорт копии</h2>
         <p className="hint">
           Добавляет данные из копии к данным этого устройства: новые записи появятся, одинаковые пропустятся, ничего не удаляется. Если запись по-разному
-          изменена здесь и в копии, остаётся версия этого устройства, а расхождение будет в отчёте.
+          изменена здесь и в копии, остаётся версия этого устройства, а расхождение будет в отчёте. Перед импортом сохранится снимок данных этого устройства.
         </p>
         <div className="actions">
-          <label className="button secondary">
-            Выбрать файл копии (.zip)
-            <input type="file" hidden onChange={(event) => void importFile(event.target.files?.[0])} />
+          <label className={`button secondary${busy ? ' disabled' : ''}`}>
+            {busy === 'Импорт копии…' ? 'Импорт…' : 'Выбрать файл копии (.zip)'}
+            <input
+              type="file"
+              accept=".zip,application/zip,application/x-zip-compressed,application/octet-stream"
+              hidden
+              disabled={!!busy}
+              onChange={(event) => {
+                const input = event.currentTarget
+                void importFile(input.files?.[0], input)
+              }}
+            />
           </label>
         </div>
         {restored && (
