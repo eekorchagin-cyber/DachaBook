@@ -2084,6 +2084,13 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
   margin: 4px 0;
 }
 
+.book-selection {
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin: 8px auto 0;
+  max-width: 28rem;
+}
+
 .book-year h2 {
   font-size: 1.45rem;
   margin: 28px 0 8px;

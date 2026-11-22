@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { localPath, navigate, useRoute } from './app/router'
 import { inboxHasFiles } from './share/inbox'
 import { applyAppearance, useSettings } from './app/store'
+import { diaryFilterFromQuery } from './domain/diaryFilter'
 import type { EventType } from './domain/types'
 import { setWorkKinds } from './import/suggest'
 import { LabScreen } from './lab/LabScreen'
@@ -71,7 +72,15 @@ export default function App() {
     case 'share':
       return <ShareScreen />
     case 'diary':
-      if (param === 'book') return <DiaryBookScreen settings={settings} />
+      if (param === 'book') {
+        return (
+          <DiaryBookScreen
+            key={route.query.toString()}
+            settings={settings}
+            filter={diaryFilterFromQuery(route.query)}
+          />
+        )
+      }
       if (param === 'album') return <AlbumScreen />
       if (param === 'day') return <SameDayScreen settings={settings} date={route.query.get('date') ?? undefined} />
       if (param) {
@@ -91,9 +100,9 @@ export default function App() {
       }
       return (
         <DiaryScreen
-          key={`${route.query.get('from') ?? ''}-${route.query.get('to') ?? ''}-${route.query.get('text') ?? ''}`}
+          key={route.query.toString()}
           settings={settings}
-          initialFilter={{ from: route.query.get('from') ?? undefined, to: route.query.get('to') ?? undefined, text: route.query.get('text') ?? undefined }}
+          initialFilter={diaryFilterFromQuery(route.query)}
         />
       )
     case 'objects':
