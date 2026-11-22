@@ -1,7 +1,15 @@
+import fontkit from '@pdf-lib/fontkit'
+import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
+import boldFontUrl from '../assets/fonts/DejaVuSans-Bold.ttf?url'
+import regularFontUrl from '../assets/fonts/DejaVuSans.ttf?url'
+
 const PAGE_W = 595
 const PAGE_H = 842
 const MARGIN = 48
 const SCALE = 2
+
+/** Печатный макет (JPEG-страницы) или текстовый PDF с копируемой кириллицей. */
+export type PdfExportFormat = 'layout' | 'text'
 
 export interface PdfPhoto {
   blob: Blob
@@ -29,6 +37,25 @@ export interface PdfBook {
   range: string
   printedAt: string
   chapters: PdfChapter[]
+}
+
+export interface PdfFonts {
+  regular: Uint8Array
+  bold: Uint8Array
+}
+
+let cachedFonts: PdfFonts | undefined
+
+/** Загружает DejaVu Sans с кириллицей (из сборки Vite). */
+export async function loadPdfFonts(): Promise<PdfFonts> {
+  if (cachedFonts) return cachedFonts
+  const load = async (url: string) => {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('Не удалось загрузить шрифт для PDF')
+    return new Uint8Array(await response.arrayBuffer())
+  }
+  cachedFonts = { regular: await load(regularFontUrl), bold: await load(boldFontUrl) }
+  return cachedFonts
 }
 
 const encoder = new TextEncoder()
@@ -122,8 +149,114 @@ async function photoBitmap(blob: Blob): Promise<ImageBitmap | undefined> {
   }
 }
 
-/** Рисует книгу дневника по страницам A4 и собирает PDF-файл. */
-export async function renderBookPdf(book: PdfBook): Promise<Blob> {
+function wrapByWidth(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
+  const lines: string[] = []
+  for (const paragraph of text.split('\n')) {
+    const words = paragraph.split(/\s+/).filter(Boolean)
+    if (words.length === 0) {
+      lines.push('')
+      continue
+    }
+    let line = words[0]
+    for (const word of words.slice(1)) {
+      const next = `${line} ${word}`
+      if (font.widthOfTextAtSize(next, size) <= maxWidth) line = next
+      else {
+        lines.push(line)
+        line = word
+      }
+    }
+    lines.push(line)
+  }
+  return lines
+}
+
+/**
+ * Текстовый PDF: кириллица копируется, фото не вставляются (только подпись «N фото» и подписи к снимкам).
+ * Шрифт DejaVu встраивается в файл — стандартные Helvetica/Times кириллицу не держат.
+ */
+export async function renderTextBookPdf(book: PdfBook, fonts?: PdfFonts): Promise<Blob> {
+  const face = fonts ?? (await loadPdfFonts())
+  const doc = await PDFDocument.create()
+  doc.registerFontkit(fontkit)
+  const regular = await doc.embedFont(face.regular, { subset: true })
+  const bold = await doc.embedFont(face.bold, { subset: true })
+  const ink = rgb(0.11, 0.14, 0.09)
+  const muted = rgb(0.36, 0.42, 0.32)
+  const width = PAGE_W - MARGIN * 2
+  let page: PDFPage = doc.addPage([PAGE_W, PAGE_H])
+  let y = PAGE_H - MARGIN
+
+  const ensure = (need: number) => {
+    if (y - need < MARGIN) {
+      page = doc.addPage([PAGE_W, PAGE_H])
+      y = PAGE_H - MARGIN
+    }
+  }
+  const drawLines = (font: PDFFont, size: number, color: ReturnType<typeof rgb>, text: string, gap = 4) => {
+    for (const line of wrapByWidth(font, text, size, width)) {
+      ensure(size + gap)
+      page.drawText(line || ' ', { x: MARGIN, y: y - size, size, font, color })
+      y -= size + gap * 0.6
+    }
+    y -= gap * 0.4
+  }
+  const center = (font: PDFFont, size: number, color: ReturnType<typeof rgb>, text: string, gap = 10) => {
+    ensure(size + gap)
+    const textWidth = font.widthOfTextAtSize(text, size)
+    page.drawText(text, { x: (PAGE_W - textWidth) / 2, y: y - size, size, font, color })
+    y -= size + gap
+  }
+
+  y = PAGE_H - 220
+  center(regular, 12, muted, 'DACHABOOK', 14)
+  center(bold, 28, ink, 'Дневник дачи', 16)
+  if (book.place) center(regular, 14, ink, book.place, 10)
+  center(regular, 14, ink, book.author, 10)
+  center(regular, 14, ink, book.range, 12)
+  center(regular, 11, muted, `составлено ${book.printedAt}`, 8)
+  center(regular, 10, muted, 'Текстовый формат: текст копируется, фото в файл не входят', 8)
+
+  for (const chapter of book.chapters) {
+    page = doc.addPage([PAGE_W, PAGE_H])
+    y = PAGE_H - MARGIN
+    drawLines(bold, 20, ink, chapter.title, 12)
+    for (const month of chapter.months) {
+      drawLines(bold, 14, ink, month.title, 8)
+      for (const event of month.events) {
+        const head = [event.dateLabel, event.typeLabel, event.where].filter(Boolean).join(' · ')
+        drawLines(bold, 11, ink, head, 4)
+        if (event.workKind) drawLines(regular, 10, ink, event.workKind, 3)
+        if (event.comment) drawLines(regular, 11, ink, event.comment, 4)
+        for (const extra of event.extras) drawLines(regular, 9, muted, extra, 2)
+        if (event.photos.length > 0) {
+          drawLines(regular, 9, muted, `Фото в макете: ${event.photos.length}`, 2)
+          for (const photo of event.photos) {
+            if (photo.caption) drawLines(regular, 9, muted, `· ${photo.caption}`, 2)
+          }
+        }
+        y -= 8
+        ensure(2)
+        page.drawLine({
+          start: { x: MARGIN, y },
+          end: { x: PAGE_W - MARGIN, y },
+          thickness: 0.5,
+          color: rgb(0.84, 0.82, 0.77),
+        })
+        y -= 12
+      }
+    }
+  }
+
+  const bytes = await doc.save({ useObjectStreams: false })
+  const copy = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(copy).set(bytes)
+  return new Blob([copy], { type: 'application/pdf' })
+}
+
+/** Рисует книгу дневника по страницам A4 и собирает PDF-файл (страницы-изображения). */
+export async function renderBookPdf(book: PdfBook, format: PdfExportFormat = 'layout', fonts?: PdfFonts): Promise<Blob> {
+  if (format === 'text') return renderTextBookPdf(book, fonts)
   const canvas = document.createElement('canvas')
   canvas.width = PAGE_W * SCALE
   canvas.height = PAGE_H * SCALE
