@@ -27,6 +27,8 @@ export interface PdfBook {
   author: string
   place?: string
   range: string
+  /** Отбор по фильтру дневника — под периодом на обложке. */
+  subtitle?: string
   printedAt: string
   chapters: PdfChapter[]
 }
@@ -184,7 +186,19 @@ export async function renderBookPdf(book: PdfBook): Promise<Blob> {
   context.fillText(book.author, PAGE_W / 2, y)
   y += 24
   context.fillText(book.range, PAGE_W / 2, y)
-  y += 28
+  y += 24
+  if (book.subtitle) {
+    context.font = '13px "Iowan Old Style", Palatino, serif'
+    context.fillStyle = '#5b6b52'
+    for (const line of wrap(context, book.subtitle, width)) {
+      context.fillText(line, PAGE_W / 2, y)
+      y += 18
+    }
+    context.fillStyle = '#1c2418'
+    y += 6
+  } else {
+    y += 4
+  }
   context.fillStyle = '#5b6b52'
   context.font = '12px system-ui, sans-serif'
   context.fillText(`составлено ${book.printedAt}`, PAGE_W / 2, y)

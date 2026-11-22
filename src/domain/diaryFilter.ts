@@ -1,3 +1,4 @@
+import { rangeText } from './dates'
 import type { DiaryEvent, EventType } from './types'
 
 export interface DiaryFilter {
@@ -8,6 +9,88 @@ export interface DiaryFilter {
   plantGroupId?: string
   workKind?: string
   type?: EventType
+}
+
+const EVENT_TYPES: EventType[] = ['work', 'observation', 'measurement']
+
+const TYPE_LABEL: Record<EventType, string> = {
+  work: 'работы',
+  observation: 'наблюдения',
+  measurement: 'измерения',
+}
+
+/** Есть ли хотя бы одно условие отбора (не считая пустой строки поиска). */
+export function hasDiaryFilter(filter: DiaryFilter): boolean {
+  return Boolean(
+    filter.text?.trim() || filter.from || filter.to || filter.objectId || filter.plantGroupId || filter.workKind || filter.type,
+  )
+}
+
+/** Читает фильтр дневника из query hash-роутера. */
+export function diaryFilterFromQuery(query: URLSearchParams): DiaryFilter {
+  const type = query.get('type')
+  return {
+    text: query.get('text') || undefined,
+    from: query.get('from') || undefined,
+    to: query.get('to') || undefined,
+    objectId: query.get('objectId') || undefined,
+    plantGroupId: query.get('plantGroupId') || undefined,
+    workKind: query.get('workKind') || undefined,
+    type: type && EVENT_TYPES.includes(type as EventType) ? (type as EventType) : undefined,
+  }
+}
+
+/** Query-строка для перехода на экспорт PDF / ленту с тем же отбором. */
+export function diaryFilterToQuery(filter: DiaryFilter): string {
+  const params = new URLSearchParams()
+  if (filter.text?.trim()) params.set('text', filter.text.trim())
+  if (filter.from) params.set('from', filter.from)
+  if (filter.to) params.set('to', filter.to)
+  if (filter.objectId) params.set('objectId', filter.objectId)
+  if (filter.plantGroupId) params.set('plantGroupId', filter.plantGroupId)
+  if (filter.workKind) params.set('workKind', filter.workKind)
+  if (filter.type) params.set('type', filter.type)
+  return params.toString()
+}
+
+export function diaryBookHref(filter: DiaryFilter = {}): string {
+  const query = diaryFilterToQuery(filter)
+  return query ? `#/diary/book?${query}` : '#/diary/book'
+}
+
+function entriesWord(count: number): string {
+  const mod100 = count % 100
+  const mod10 = count % 10
+  if (mod100 >= 11 && mod100 <= 14) return `${count} записей`
+  if (mod10 === 1) return `${count} запись`
+  if (mod10 >= 2 && mod10 <= 4) return `${count} записи`
+  return `${count} записей`
+}
+
+/** Краткие части отбора для подписи: период, поиск, объект, группа, вид работы, тип. */
+export function diaryFilterParts(
+  filter: DiaryFilter,
+  names?: { object?: string; plantGroup?: string },
+): string[] {
+  const parts: string[] = []
+  const period = rangeText(filter.from, filter.to)
+  if (period) parts.push(period)
+  if (filter.text?.trim()) parts.push(`поиск «${filter.text.trim()}»`)
+  if (filter.objectId) parts.push(names?.object || 'объект')
+  if (filter.plantGroupId) parts.push(names?.plantGroup || 'группа растений')
+  if (filter.workKind) parts.push(filter.workKind)
+  if (filter.type) parts.push(TYPE_LABEL[filter.type])
+  return parts
+}
+
+/** Подзаголовок обложки PDF при отборе: «Отбор · 12 записей · …». Без фильтра — undefined. */
+export function diarySelectionLabel(
+  filter: DiaryFilter,
+  entryCount: number,
+  names?: { object?: string; plantGroup?: string },
+): string | undefined {
+  if (!hasDiaryFilter(filter)) return undefined
+  return ['Отбор', entriesWord(entryCount), ...diaryFilterParts(filter, names)].join(' · ')
 }
 
 /** Регистр и «ё» не влияют на поиск. */

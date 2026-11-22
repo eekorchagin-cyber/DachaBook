@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import type { AppSettings } from '../../app/store'
 import { rangeText, todayAtSite } from '../../domain/dates'
-import { filterEvents, type DiaryFilter } from '../../domain/diaryFilter'
+import { diaryBookHref, filterEvents, type DiaryFilter } from '../../domain/diaryFilter'
 import { db } from '../../storage/db'
 import { EmptyState, Screen } from '../../ui/Screen'
 import { FilterButton, SearchButton, SearchQuery } from '../../ui/SearchDialog'
@@ -50,6 +50,11 @@ export function DiaryScreen({ settings, initialFilter }: { settings: AppSettings
         <a className="chip" href={`#/diary/day?date=${filter.from && filter.from === filter.to ? filter.from : todayAtSite().date}`}>
           В этот день
         </a>
+        {found.length > 0 && (
+          <a className="chip" href={diaryBookHref(filter)}>
+            Экспорт в PDF
+          </a>
+        )}
       </div>
       <SearchQuery query={filter.text ?? ''} onClear={() => set({ text: undefined })} />
       {showFilters && (

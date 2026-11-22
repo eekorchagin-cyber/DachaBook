@@ -45,4 +45,12 @@ describe('книга дневника', () => {
     expect(bookPhotoCount(year)).toBe(2)
     expect(bookRange(diaryBook(events))).toBe('2024–2026')
   })
+
+  it('строит книгу только из уже отфильтрованного списка', () => {
+    const events = [event('a', '2024-05-01'), event('b', '2025-06-01'), event('c', '2026-07-01')]
+    const selected = events.filter((item) => item.date >= '2025-01-01' && item.date <= '2025-12-31')
+    const chapters = diaryBook(selected)
+    expect(chapters.map((chapter) => chapter.year)).toEqual([2025])
+    expect(chapters[0].months[0].events.map((item) => item.id)).toEqual(['b'])
+  })
 })

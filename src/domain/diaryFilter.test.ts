@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { excerptAround, filterEvents, includesAllWords } from './diaryFilter'
+import {
+  diaryBookHref,
+  diaryFilterFromQuery,
+  diaryFilterToQuery,
+  diarySelectionLabel,
+  excerptAround,
+  filterEvents,
+  hasDiaryFilter,
+  includesAllWords,
+} from './diaryFilter'
 import type { DiaryEvent } from './types'
 
 function event(partial: Partial<DiaryEvent>): DiaryEvent {
@@ -71,5 +80,43 @@ describe('filterEvents', () => {
     const start = performance.now()
     filterEvents(many, { text: 'подкормка газона', from: '2015-01-01' })
     expect(performance.now() - start).toBeLessThan(50)
+  })
+})
+
+describe('фильтр в query и подпись отбора для PDF', () => {
+  it('сериализует и читает все поля фильтра', () => {
+    const filter = {
+      text: 'редис',
+      from: '2024-05-01',
+      to: '2024-06-30',
+      objectId: 'lawn',
+      plantGroupId: 'conifers',
+      workKind: 'Подкормка',
+      type: 'work' as const,
+    }
+    const query = diaryFilterToQuery(filter)
+    expect(query).toContain('text=%D1%80%D0%B5%D0%B4%D0%B8%D1%81')
+    expect(diaryFilterFromQuery(new URLSearchParams(query))).toEqual(filter)
+    expect(diaryBookHref(filter)).toBe(`#/diary/book?${query}`)
+    expect(diaryBookHref({})).toBe('#/diary/book')
+    expect(hasDiaryFilter({})).toBe(false)
+    expect(hasDiaryFilter({ text: '  ' })).toBe(false)
+    expect(hasDiaryFilter(filter)).toBe(true)
+  })
+
+  it('игнорирует неизвестный type в query', () => {
+    expect(diaryFilterFromQuery(new URLSearchParams('type=note&text=газон'))).toEqual({ text: 'газон' })
+  })
+
+  it('собирает подпись отбора для обложки', () => {
+    expect(diarySelectionLabel({}, 10)).toBeUndefined()
+    expect(
+      diarySelectionLabel({ from: '2024-05-01', to: '2024-05-01', text: 'редис', type: 'work' }, 1, {
+        object: 'Газон',
+      }),
+    ).toBe('Отбор · 1 запись · 1 мая 2024 · поиск «редис» · работы')
+    expect(diarySelectionLabel({ objectId: 'lawn', workKind: 'Полив' }, 12, { object: 'Газон' })).toBe(
+      'Отбор · 12 записей · Газон · Полив',
+    )
   })
 })

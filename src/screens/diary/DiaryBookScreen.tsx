@@ -5,6 +5,12 @@ import { renderBookPdf, sharePdf, type PdfBook } from '../../diary/pdfBook'
 import { quantityText } from '../../domain/consumables'
 import { formatDate } from '../../domain/dates'
 import { bookPhotoCount, bookRange, bookYears, diaryBook, type BookChapter } from '../../domain/diaryBook'
+import {
+  diarySelectionLabel,
+  filterEvents,
+  hasDiaryFilter,
+  type DiaryFilter,
+} from '../../domain/diaryFilter'
 import { EVENT_TYPES, measurementText, weatherText } from '../../domain/labels'
 import type { CareObject, Consumable, DiaryEvent, PlantGroup } from '../../domain/types'
 import { useFileUrl } from '../../files/files'
@@ -15,35 +21,44 @@ import { WeatherBadge } from '../../ui/WeatherBadge'
 
 const NONE: never[] = []
 
-/** Предпросмотр книги дневника и сохранение в PDF через системный диалог печати. */
-export function DiaryBookScreen({ settings }: { settings: AppSettings }) {
+/** Предпросмотр книги дневника и сохранение в PDF. filter — отбор из ленты дневника (query). */
+export function DiaryBookScreen({ settings, filter = {} }: { settings: AppSettings; filter?: DiaryFilter }) {
   const events = useLiveQuery(() => db.events.toArray(), [])
   const objects = useLiveQuery(() => db.objects.toArray(), [])
   const groups = useLiveQuery(() => db.plantGroups.toArray(), [])
   const consumables = useLiveQuery(() => db.consumables.toArray(), [])
   const [year, setYear] = useState<number | 'all'>('all')
   const [printedAt] = useState(() => new Date().toLocaleDateString('ru-RU'))
-  const live = events ?? NONE
-  const years = useMemo(() => bookYears(live), [live])
-  const chapters = useMemo(() => diaryBook(live, year === 'all' ? undefined : year), [live, year])
+  const selected = useMemo(() => filterEvents(events ?? NONE, filter), [events, filter])
+  const years = useMemo(() => bookYears(selected), [selected])
+  const chapters = useMemo(() => diaryBook(selected, year === 'all' ? undefined : year), [selected, year])
   const objectMap = useMemo(() => new Map((objects ?? NONE).map((item) => [item.id, item])), [objects])
   const groupMap = useMemo(() => new Map((groups ?? NONE).map((item) => [item.id, item])), [groups])
   const consumableMap = useMemo(() => new Map((consumables ?? NONE).map((item) => [item.id, item])), [consumables])
   const photos = bookPhotoCount(chapters)
   const entries = chapters.reduce((sum, chapter) => sum + chapter.months.reduce((monthSum, month) => monthSum + month.events.length, 0), 0)
+  const filtered = hasDiaryFilter(filter)
+  const selectionNames = {
+    object: filter.objectId ? objectMap.get(filter.objectId)?.name : undefined,
+    plantGroup: filter.plantGroupId ? groupMap.get(filter.plantGroupId)?.name : undefined,
+  }
+  const selection = diarySelectionLabel(filter, entries, selectionNames)
   const savePdf = async () => {
     const thumbs = await loadThumbs(chapters)
-    const blob = await renderBookPdf(toPdfBook(settings, chapters, objectMap, groupMap, consumableMap, printedAt, thumbs))
-    await sharePdf(blob, `dachabook-dnevnik-${bookRange(chapters).replace('–', '-') || 'dnevnik'}.pdf`)
+    const blob = await renderBookPdf(toPdfBook(settings, chapters, objectMap, groupMap, consumableMap, printedAt, thumbs, selection))
+    const stamp = bookRange(chapters).replace('–', '-') || (filtered ? 'otbor' : 'dnevnik')
+    await sharePdf(blob, `dachabook-dnevnik-${stamp}.pdf`)
   }
 
   return (
     <Screen title="Экспорт в PDF" help="book" tab="/more" back="/more/service">
       <div className="no-print">
         <p className="hint">
-          Книга дневника: главы — годы, параграфы — месяцы. На iPhone после «Сохранить PDF» откроется «Поделиться» — выберите «Сохранить в Файлы». На компьютере файл
-          скачается или откроется системное меню.
+          {filtered
+            ? 'Книга по текущему отбору дневника: главы — годы, параграфы — месяцы. На iPhone после «Сохранить PDF» откроется «Поделиться» — выберите «Сохранить в Файлы».'
+            : 'Книга дневника: главы — годы, параграфы — месяцы. На iPhone после «Сохранить PDF» откроется «Поделиться» — выберите «Сохранить в Файлы». На компьютере файл скачается или откроется системное меню.'}
         </p>
+        {filtered && selection && <p className="period-line">{selection}</p>}
         <div className="actions">
           <ActionButton disabled={entries === 0} onRun={savePdf}>
             Сохранить PDF
@@ -68,7 +83,9 @@ export function DiaryBookScreen({ settings }: { settings: AppSettings }) {
           </p>
         )}
       </div>
-      {events && entries === 0 && <EmptyState>В дневнике нет записей для выбранного периода.</EmptyState>}
+      {events && entries === 0 && (
+        <EmptyState>{filtered ? 'По этому отбору нет записей для PDF.' : 'В дневнике нет записей для выбранного периода.'}</EmptyState>
+      )}
       {entries > 0 && (
         <article className="book">
           <header className="book-cover">
@@ -77,6 +94,7 @@ export function DiaryBookScreen({ settings }: { settings: AppSettings }) {
             {settings.plotAddress && <p className="book-place">{settings.plotAddress}</p>}
             <p>{settings.authorName}</p>
             <p>{bookRange(chapters)}</p>
+            {selection && <p className="book-selection">{selection}</p>}
             <p className="muted small">
               {entries} {entries === 1 ? 'запись' : entries < 5 ? 'записи' : 'записей'} · составлено {printedAt}
             </p>
@@ -183,11 +201,13 @@ function toPdfBook(
   consumables: Map<string, Consumable>,
   printedAt: string,
   thumbs: Map<string, Blob>,
+  subtitle?: string,
 ): PdfBook {
   return {
     author: settings.authorName,
     place: settings.plotAddress || undefined,
     range: bookRange(chapters),
+    subtitle,
     printedAt,
     chapters: chapters.map((chapter) => ({
       title: chapter.title,
