@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import type { AppSettings } from '../../app/store'
-import { renderBookPdf, sharePdf, type PdfBook } from '../../diary/pdfBook'
+import { renderBookPdf, sharePdf, type PdfBook, type PdfExportFormat } from '../../diary/pdfBook'
 import { quantityText } from '../../domain/consumables'
 import { formatDate } from '../../domain/dates'
 import { bookPhotoCount, bookRange, bookYears, diaryBook, type BookChapter } from '../../domain/diaryBook'
@@ -28,6 +28,7 @@ export function DiaryBookScreen({ settings, filter = {} }: { settings: AppSettin
   const groups = useLiveQuery(() => db.plantGroups.toArray(), [])
   const consumables = useLiveQuery(() => db.consumables.toArray(), [])
   const [year, setYear] = useState<number | 'all'>('all')
+  const [format, setFormat] = useState<PdfExportFormat>('layout')
   const [printedAt] = useState(() => new Date().toLocaleDateString('ru-RU'))
   const selected = useMemo(() => filterEvents(events ?? NONE, filter), [events, filter])
   const years = useMemo(() => bookYears(selected), [selected])
@@ -44,10 +45,11 @@ export function DiaryBookScreen({ settings, filter = {} }: { settings: AppSettin
   }
   const selection = diarySelectionLabel(filter, entries, selectionNames)
   const savePdf = async () => {
-    const thumbs = await loadThumbs(chapters)
-    const blob = await renderBookPdf(toPdfBook(settings, chapters, objectMap, groupMap, consumableMap, printedAt, thumbs, selection))
+    const thumbs = format === 'layout' ? await loadThumbs(chapters) : new Map<string, Blob>()
+    const blob = await renderBookPdf(toPdfBook(settings, chapters, objectMap, groupMap, consumableMap, printedAt, thumbs, selection), format)
+    const kind = format === 'text' ? 'tekst' : 'maket'
     const stamp = bookRange(chapters).replace('–', '-') || (filtered ? 'otbor' : 'dnevnik')
-    await sharePdf(blob, `dachabook-dnevnik-${stamp}.pdf`)
+    await sharePdf(blob, `dachabook-dnevnik-${kind}-${stamp}.pdf`)
   }
 
   return (
@@ -59,6 +61,21 @@ export function DiaryBookScreen({ settings, filter = {} }: { settings: AppSettin
             : 'Книга дневника: главы — годы, параграфы — месяцы. На iPhone после «Сохранить PDF» откроется «Поделиться» — выберите «Сохранить в Файлы». На компьютере файл скачается или откроется системное меню.'}
         </p>
         {filtered && selection && <p className="period-line">{selection}</p>}
+        <div className="actions">
+          <div className="segmented" role="radiogroup" aria-label="Формат PDF" style={{ flex: '1 1 100%' }}>
+            <button type="button" role="radio" aria-checked={format === 'layout'} className={format === 'layout' ? 'active' : ''} onClick={() => setFormat('layout')}>
+              Печатный макет
+            </button>
+            <button type="button" role="radio" aria-checked={format === 'text'} className={format === 'text' ? 'active' : ''} onClick={() => setFormat('text')}>
+              С копируемым текстом
+            </button>
+          </div>
+        </div>
+        <p className="muted small">
+          {format === 'layout'
+            ? 'Страницы как картинки: вёрстка и фото. Текст из файла скопировать нельзя.'
+            : 'Настоящий текст (кириллица копируется). Фото в файл не входят — только подписи и пометки.'}
+        </p>
         <div className="actions">
           <ActionButton disabled={entries === 0} onRun={savePdf}>
             Сохранить PDF
@@ -79,7 +96,7 @@ export function DiaryBookScreen({ settings, filter = {} }: { settings: AppSettin
         {entries > 0 && (
           <p className="muted small">
             Записей: {entries} · фото: {photos}
-            {photos > 80 && ' · если телефон задумается, сохраните по одному году'}
+            {format === 'layout' && photos > 80 && ' · если телефон задумается, сохраните по одному году'}
           </p>
         )}
       </div>
