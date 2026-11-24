@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { navigate } from '../../app/router'
+import { navigate, setLeaveBlocker } from '../../app/router'
 import { richTextToHtml } from '../../lib/richText'
 import { htmlToText } from '../../lib/sanitize'
 import { repo, type AppSettings } from '../../app/store'
@@ -22,6 +22,7 @@ import { db } from '../../storage/db'
 import { AttachmentRow } from '../../ui/AttachmentRow'
 import { Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
+import { ConfirmDialog } from '../../ui/ConfirmDialog'
 import { FormatToolbar } from '../../ui/FormatToolbar'
 import { LeaveDirtyDialog } from '../../ui/LeaveDirtyDialog'
 import { EVENT_TYPES, WEATHER_CONDITIONS, weatherText } from '../../domain/labels'
@@ -213,11 +214,39 @@ function EventForm({
   const [planOffer, setPlanOffer] = useState<{ event: DiaryEvent; input: DocInput<PlanWork> } | null>(null)
   const [planBusy, setPlanBusy] = useState(false)
   const [leavePath, setLeavePath] = useState<string | null>(null)
+  const [trashAsk, setTrashAsk] = useState(false)
+  const [trashBusy, setTrashBusy] = useState(false)
   const commentRef = useRef<HTMLTextAreaElement>(null)
+
+  const moveToTrash = async () => {
+    if (!event || trashBusy) return
+    setTrashBusy(true)
+    setError(null)
+    try {
+      const fresh = await db.events.get(event.id)
+      if (!fresh || fresh.deletedAt) {
+        releaseLeave()
+        setInitial(JSON.stringify(draft))
+        navigate('/diary')
+        return
+      }
+      await repo.remove('events', fresh.id, fresh.revision)
+      releaseLeave()
+      setInitial(JSON.stringify(draft))
+      navigate('/diary')
+    } catch (caught) {
+      setError(errorText(caught))
+    } finally {
+      setTrashBusy(false)
+      setTrashAsk(false)
+    }
+  }
 
   const dirty = useMemo(() => JSON.stringify(draft) !== initial, [draft, initial])
   const defaultBack = plan && !event ? '/works' : zone && !event ? '/watering' : '/diary'
   const commentPlain = useMemo(() => htmlToText(richTextToHtml(draft.comment)), [draft.comment])
+
+  const allowLeaveRef = useRef(false)
 
   useEffect(() => {
     if (!dirty) return
@@ -226,10 +255,31 @@ function EventForm({
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
 
+  useEffect(() => {
+    if (!dirty) {
+      setLeaveBlocker(null)
+      return
+    }
+    setLeaveBlocker((next) => {
+      if (allowLeaveRef.current) {
+        allowLeaveRef.current = false
+        return false
+      }
+      setLeavePath(next)
+      return true
+    })
+    return () => setLeaveBlocker(null)
+  }, [dirty])
+
   const update = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch })
   const toggle = (key: 'objectIds' | 'plantGroupIds', value: string) =>
     update({ [key]: draft[key].includes(value) ? draft[key].filter((item) => item !== value) : [...draft[key], value] })
+  const releaseLeave = () => {
+    allowLeaveRef.current = true
+    setLeaveBlocker(null)
+  }
   const go = (path: string) => {
+    releaseLeave()
     setInitial(JSON.stringify(draft))
     setLeavePath(null)
     navigate(path)
@@ -265,6 +315,7 @@ function EventForm({
           return
         }
       }
+      releaseLeave()
       setInitial(JSON.stringify(draft))
       setLeavePath(null)
       navigate(afterPath ?? (plan && !event ? '/works' : zone && !event ? '/watering' : '/diary'))
@@ -281,6 +332,7 @@ function EventForm({
       const created = await repo.create('planWorks', planOffer.input)
       await attachPlanWork([planOffer.event.id], created.id)
       setPlanOffer(null)
+      releaseLeave()
       navigate(`/works?work=${created.id}`)
     } catch (caught) {
       setError(errorText(caught))
@@ -293,6 +345,7 @@ function EventForm({
   const declinePlanOffer = () => {
     if (planBusy) return
     setPlanOffer(null)
+    releaseLeave()
     navigate('/diary')
   }
 
@@ -631,19 +684,24 @@ function EventForm({
           </button>
         )}
         {event && (
-          <ActionButton
-            secondary
-            onRun={async () => {
-              if (!confirm('Переместить запись в корзину? Её можно будет восстановить.')) return
-              await repo.remove('events', event.id, event.revision)
-              setInitial(JSON.stringify(draft))
-              navigate('/diary')
-            }}
-          >
-            В корзину
-          </ActionButton>
+          <button type="button" className="button secondary" disabled={trashBusy || !!planOffer} onClick={() => setTrashAsk(true)}>
+            {trashBusy ? 'Выполняется…' : 'В корзину'}
+          </button>
         )}
       </div>
+      {trashAsk &&
+        createPortal(
+          <ConfirmDialog
+            title="В корзину?"
+            message="Переместить запись в корзину? Её можно будет восстановить."
+            confirmLabel="В корзину"
+            onCancel={() => {
+              if (!trashBusy) setTrashAsk(false)
+            }}
+            onConfirm={() => void moveToTrash()}
+          />,
+          document.body,
+        )}
       {leavePath &&
         createPortal(
           <LeaveDirtyDialog

@@ -6,6 +6,7 @@ import {
   resetNavigationForTests,
   resolveBack,
   routeKey,
+  setLeaveBlocker,
 } from './router'
 
 describe('возврат на предыдущий экран', () => {
@@ -97,5 +98,20 @@ describe('возврат на предыдущий экран', () => {
     rememberNavigationForTests('/more/service')
     expect(previousPath()).toBe('/more')
     expect(resolveBack('/more')).toBe('/more')
+  })
+
+  it('leaveBlocker останавливает смену экрана и оставляет текущий путь', () => {
+    resetNavigationForTests('/diary/abc', ['/diary'])
+    const blocked: string[] = []
+    setLeaveBlocker((next) => {
+      blocked.push(next)
+      return true
+    })
+    rememberNavigationForTests('/diary')
+    expect(blocked).toEqual(['/diary'])
+    expect(previousPath()).toBe('/diary')
+    setLeaveBlocker(null)
+    rememberNavigationForTests('/diary')
+    expect(previousPath()).toBeUndefined()
   })
 })

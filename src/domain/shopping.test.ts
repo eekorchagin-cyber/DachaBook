@@ -35,11 +35,16 @@ describe('список Купить', () => {
   it('описывает фасовку упаковки', () => {
     expect(shoppingPackText({ quantity: 5, unit: 'уп.', packQuantity: 0.5, packUnit: 'кг' })).toBe('5 уп. × 0,5 кг')
     expect(shoppingPackText({ quantity: 2, unit: 'уп.' })).toBeUndefined()
+    // Учёт в кг: packUnit в карточке не хранится, единица берётся из материала.
+    expect(shoppingPackText({ quantity: 4.2, unit: 'уп.', packQuantity: 10, materialUnit: 'кг' })).toBe('4,2 уп. × 10 кг')
   })
 
   it('собирает строки для импорта в Возьми', () => {
     expect(shoppingVoimiLine({ name: 'Известь', quantity: 5, unit: 'уп.', packQuantity: 0.5, packUnit: 'кг' })).toBe(
       '- [ ] Известь (0,5 кг): 5 уп.',
+    )
+    expect(shoppingVoimiLine({ name: 'Fertika', quantity: 4.2, unit: 'уп.', packQuantity: 10, materialUnit: 'кг' })).toBe(
+      '- [ ] Fertika (10 кг): 4,2 уп.',
     )
     expect(shoppingVoimiLine({ name: 'Мульча', quantity: 2, unit: 'уп.' })).toBe('- [ ] Мульча: 2 уп.')
     expect(

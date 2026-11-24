@@ -45,7 +45,15 @@ export function ActionButton(props: {
         disabled={busy || props.disabled}
         onMouseDown={(event) => {
           // Не снимать фокус с поля до щелчка: иначе клавиатура закрывается, меню возвращается и кнопка смещается.
-          if (event.button === 0) event.preventDefault()
+          // Только когда фокус уже в поле — иначе preventDefault ломает системный confirm в PWA/Safari.
+          if (event.button !== 0) return
+          const active = document.activeElement
+          if (
+            active instanceof HTMLElement &&
+            (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable)
+          ) {
+            event.preventDefault()
+          }
         }}
         onClick={async () => {
           setBusy(true)
