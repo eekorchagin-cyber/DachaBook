@@ -17,7 +17,10 @@ import { useFileUrl } from '../../files/files'
 import { db } from '../../storage/db'
 import { EmptyState, Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
+import { RichText } from '../../ui/RichText'
 import { WeatherBadge } from '../../ui/WeatherBadge'
+import { richTextToHtml } from '../../lib/richText'
+import { htmlToText } from '../../lib/sanitize'
 
 const NONE: never[] = []
 
@@ -166,7 +169,7 @@ function BookEntry({
       {plants && <p className="small muted">{plants}</p>}
       {event.workKind && <div className="tag">{event.workKind}</div>}
       {event.type === 'measurement' && <p>{measurementText(event)}</p>}
-      {event.comment && <p className="book-text">{event.comment}</p>}
+      {event.comment && <RichText className="book-text" text={event.comment} />}
       {event.consumables && event.consumables.length > 0 && (
         <p className="small muted">
           Израсходовано:{' '}
@@ -253,7 +256,7 @@ function toPdfBook(
               .filter(Boolean)
               .join(' · '),
             workKind: event.workKind,
-            comment: event.comment,
+            comment: htmlToText(richTextToHtml(event.comment)),
             extras,
             photos: event.photoIds.flatMap((id) => {
               const blob = thumbs.get(id)

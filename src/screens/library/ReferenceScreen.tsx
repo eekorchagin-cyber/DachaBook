@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { navigate } from '../../app/router'
 import { pageLink } from '../../domain/labelProgram'
@@ -7,10 +7,12 @@ import { repo } from '../../app/store'
 import type { DocInput, ReferenceMaterial } from '../../domain/types'
 import { addAttachment } from '../../files/files'
 import { errorText } from '../../lib/format'
-import { htmlToText, textToHtml } from '../../lib/sanitize'
+import { htmlToRichText, richTextToHtml } from '../../lib/richText'
+import { sanitizeHtml } from '../../lib/sanitize'
 import { db } from '../../storage/db'
 import { AttachmentRow } from '../../ui/AttachmentRow'
 import { CopyLinkButton } from '../../ui/CopyLinkButton'
+import { FormatToolbar } from '../../ui/FormatToolbar'
 import { LeaveDirtyDialog } from '../../ui/LeaveDirtyDialog'
 import { Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
@@ -77,7 +79,7 @@ interface Draft {
 function toDraft(material?: ReferenceMaterial): Draft {
   return {
     title: material?.title ?? '',
-    text: material ? htmlToText(material.html) : '',
+    text: material ? htmlToRichText(material.html) : '',
     tags: material?.tags.join(', ') ?? '',
     objectIds: material?.objectIds ?? [],
     plantGroupIds: material?.plantGroupIds ?? [],
@@ -99,6 +101,7 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
   const [error, setError] = useState<string | null>(null)
   const [processing, setProcessing] = useState(0)
   const [leavePath, setLeavePath] = useState<string | null>(null)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
   const dirty = useMemo(() => JSON.stringify(draft) !== initial, [draft, initial])
   /** Импортированная статья хранит оформление; её текст правится только вместе с потерей оформления. */
   const formatted = !!material?.source
@@ -130,7 +133,7 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
     try {
       const input: DocInput<ReferenceMaterial> = {
         title: draft.title.trim(),
-        html: editBody ? textToHtml(draft.text) : (material?.html ?? ''),
+        html: editBody ? sanitizeHtml(richTextToHtml(draft.text)) : (material?.html ?? ''),
         tags: draft.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
         objectIds: draft.objectIds,
         plantGroupIds: draft.plantGroupIds,
@@ -176,10 +179,12 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
           <input value={draft.title} onChange={(event) => update({ title: event.target.value })} />
         </label>
         {editBody ? (
-          <label className="field">
-            Текст
-            <textarea rows={10} value={draft.text} onChange={(event) => update({ text: event.target.value })} />
-          </label>
+          <div className="field">
+            <span className="field-label">Текст</span>
+            <FormatToolbar value={draft.text} onChange={(value) => update({ text: value })} textareaRef={bodyRef} />
+            <textarea ref={bodyRef} rows={10} value={draft.text} onChange={(event) => update({ text: event.target.value })} />
+            <p className="hint">Выделите фрагмент и нажмите Ж / К / Ч / З — жирный, курсив, подчёркнутый, зачёркнутый.</p>
+          </div>
         ) : (
           <div className="hint">
             <p>Текст импортирован из Evernote с оформлением, картинками и таблицами — он хранится как есть.</p>
@@ -187,10 +192,11 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
               type="button"
               className="button secondary small"
               onClick={() => {
-                if (confirm('Перейти к правке текста? Оформление, таблицы и картинки в тексте будут потеряны, вложения останутся.')) setEditBody(true)
+                if (confirm('Перейти к правке текста? Таблицы и картинки внутри текста будут потеряны; жирный и курсив сохранятся. Вложения останутся.'))
+                  setEditBody(true)
               }}
             >
-              Править текст (без оформления)
+              Править текст
             </button>
           </div>
         )}

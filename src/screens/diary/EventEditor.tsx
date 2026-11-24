@@ -1,7 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect, useEffectEvent, useMemo, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { navigate } from '../../app/router'
+import { richTextToHtml } from '../../lib/richText'
+import { htmlToText } from '../../lib/sanitize'
 import { repo, type AppSettings } from '../../app/store'
 import { todayAtSite } from '../../domain/dates'
 import { findConsumable, resolveUses, rowProblems, type ConsumableRow } from '../../domain/consumables'
@@ -20,6 +22,7 @@ import { db } from '../../storage/db'
 import { AttachmentRow } from '../../ui/AttachmentRow'
 import { Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
+import { FormatToolbar } from '../../ui/FormatToolbar'
 import { LeaveDirtyDialog } from '../../ui/LeaveDirtyDialog'
 import { EVENT_TYPES, WEATHER_CONDITIONS, weatherText } from '../../domain/labels'
 import { processWeatherQueue, queueWeather } from '../../weather/service'
@@ -210,9 +213,11 @@ function EventForm({
   const [planOffer, setPlanOffer] = useState<{ event: DiaryEvent; input: DocInput<PlanWork> } | null>(null)
   const [planBusy, setPlanBusy] = useState(false)
   const [leavePath, setLeavePath] = useState<string | null>(null)
+  const commentRef = useRef<HTMLTextAreaElement>(null)
 
   const dirty = useMemo(() => JSON.stringify(draft) !== initial, [draft, initial])
   const defaultBack = plan && !event ? '/works' : zone && !event ? '/watering' : '/diary'
+  const commentPlain = useMemo(() => htmlToText(richTextToHtml(draft.comment)), [draft.comment])
 
   useEffect(() => {
     if (!dirty) return
@@ -371,13 +376,13 @@ function EventForm({
   }, [])
 
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'ru')
-  const canSplitEvent = splitSentences(draft.comment).length > 1 && (!event || !dirty)
+  const canSplitEvent = splitSentences(commentPlain).length > 1 && (!event || !dirty)
   if (splitParts) {
     const mediaCount = (event?.photoIds.length ?? draft.photoIds.length) + (event?.attachmentIds.length ?? draft.attachmentIds.length)
     return (
       <Screen title="Разделить запись" help="event" tab="/diary" back="/diary" onBack={() => setSplitParts(null)}>
         <section className="card">
-          <p className="import-text">{draft.comment}</p>
+          <p className="import-text">{commentPlain}</p>
           <SplitEditor
             parts={splitParts}
             onChange={setSplitParts}
@@ -507,10 +512,16 @@ function EventForm({
             </label>
           </div>
         )}
-        <label className="field">
-          Комментарий
-          <textarea rows={4} value={draft.comment} onChange={(change) => update({ comment: change.target.value })} />
-        </label>
+        <div className="field">
+          <span className="field-label">Комментарий</span>
+          <FormatToolbar value={draft.comment} onChange={(value) => update({ comment: value })} textareaRef={commentRef} />
+          <textarea
+            ref={commentRef}
+            rows={4}
+            value={draft.comment}
+            onChange={(change) => update({ comment: change.target.value })}
+          />
+        </div>
       </section>
 
       <section className="card">
@@ -614,7 +625,7 @@ function EventForm({
           <button
             type="button"
             className="button secondary"
-            onClick={() => setSplitParts(makeParts(draft.comment, objects.filter((item) => item.active), groups.filter((item) => item.active), draft.type === 'work'))}
+            onClick={() => setSplitParts(makeParts(commentPlain, objects.filter((item) => item.active), groups.filter((item) => item.active), draft.type === 'work'))}
           >
             Разделить запись
           </button>

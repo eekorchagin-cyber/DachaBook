@@ -631,6 +631,58 @@ textarea::placeholder {
   display: block;
 }
 
+.format-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+
+.format-btn {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.format-btn:hover,
+.format-btn:focus-visible {
+  border-color: var(--accent, #3d6b35);
+}
+
+.format-btn.format-b {
+  font-weight: 700;
+}
+
+.format-btn.format-i {
+  font-style: italic;
+}
+
+.format-btn.format-u {
+  text-decoration: underline;
+}
+
+.format-btn.format-s {
+  text-decoration: line-through;
+}
+
+.event-text p,
+.reference-body p {
+  margin: 0 0 0.4em;
+}
+
+.event-text p:last-child,
+.reference-body p:last-child {
+  margin-bottom: 0;
+}
+
 .field .measure-line input {
   width: 5.5rem;
   flex: 0 1 5.5rem;
