@@ -2010,8 +2010,9 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
 
 .period-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  align-items: center;
+  align-items: flex-end;
   min-width: 0;
   max-width: 100%;
 }
@@ -2030,8 +2031,17 @@ body:has(:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='
 }
 
 .period-row .field {
-  flex: 1;
+  flex: 1 1 calc(50% - 6px);
+  min-width: 0;
+  max-width: 100%;
   margin-top: 0;
+}
+
+.period-row input[type='time'] {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .periods > .button {

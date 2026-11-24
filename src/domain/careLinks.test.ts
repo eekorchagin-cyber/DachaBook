@@ -66,6 +66,7 @@ describe('связка группа — вид работ — материал',
     expect(line.perUse).toBe(2)
     expect(line.need).toBeUndefined()
     expect(line.warnings.join(' ')).toContain('на сезон не умножается')
+    expect(line.warnings.join(' ')).toContain('группу растений')
   })
 
   it('работа без этой группы не входит в число внесений', () => {
@@ -77,6 +78,51 @@ describe('связка группа — вид работ — материал',
     })
     expect(line.times).toBe(0)
     expect(line.need).toBeUndefined()
+  })
+
+  it('работа только по объекту группы считается, если явной группы в плане нет', () => {
+    const [line] = fertilizerLines({
+      consumables: [material([{ plantGroupId: 'lawn-grass', workKind: 'Внесение удобрений' }])],
+      groups: [{ id: 'lawn-grass', name: 'Трава газонная', areaM2: 210, objectIds: ['lawn'] }],
+      works: [
+        work({
+          id: 'obj',
+          workKind: 'Внесение удобрений',
+          plantGroupIds: [],
+          objectIds: ['lawn'],
+          periods: [{ month: 5 }, { month: 6 }],
+        }),
+      ],
+      today: '2026-11-01',
+    })
+    expect(line.times).toBe(2)
+    expect(line.need).toBe(21)
+  })
+
+  it('при явной группе работа только по объекту не удваивает внесения', () => {
+    const [line] = fertilizerLines({
+      consumables: [material([{ plantGroupId: 'lawn-grass', workKind: 'Внесение удобрений' }])],
+      groups: [{ id: 'lawn-grass', name: 'Трава газонная', areaM2: 210, objectIds: ['lawn'] }],
+      works: [
+        work({
+          id: 'by-group',
+          workKind: 'Внесение удобрений',
+          plantGroupIds: ['lawn-grass'],
+          objectIds: ['lawn'],
+          periods: [{ month: 5 }],
+        }),
+        work({
+          id: 'by-object',
+          workKind: 'Внесение удобрений',
+          plantGroupIds: [],
+          objectIds: ['lawn'],
+          periods: [{ month: 6 }],
+        }),
+      ],
+      today: '2026-11-01',
+    })
+    expect(line.times).toBe(1)
+    expect(line.need).toBe(10.5)
   })
 
   it('другая связка того же материала не подмешивает чужую площадь и вид', () => {

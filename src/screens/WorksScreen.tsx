@@ -551,11 +551,13 @@ function MaterialNeed({
   onRateUnit: (value: string) => void
 }) {
   const stockInvalid = !!stock.trim() && parseNonNegative(stock) === undefined
+  const manualQty = parseQuantity(rate)
   const plan = purchasePlan({
     unit: item.unit,
     ratePerM2: item.ratePerM2,
     rateUnit: item.rateUnit,
     applications: times,
+    seasonQuantity: !item.ratePerM2 && manualQty !== undefined ? manualQty * Math.max(1, times || 1) : undefined,
     packQuantity: item.packQuantity,
     packUnit: item.packUnit,
     areas,
@@ -565,6 +567,12 @@ function MaterialNeed({
   })
   const packs = item.packQuantity ? plan.unitsNeed : undefined
   const buy = buyPackages(packs, parseNonNegative(stock))
+  const autoPerUse = plan.perUse !== undefined
+  const perUseLabel = autoPerUse
+    ? `${num(plan.perUse)} ${plan.measureUnit}`
+    : rate.trim()
+      ? `${rate.trim()} ${rateUnit}`
+      : ''
   return (
     <div className="material-block">
       <div className="calc-grid">
@@ -572,22 +580,33 @@ function MaterialNeed({
           <button type="button" className="source-link button-link" onClick={() => void onEdit()}>
             {item.name}
           </button>
-          {rate.trim() ? `, ${rate.trim()} ${rateUnit} на 1 раз` : ''}
+          {perUseLabel ? `, ${perUseLabel} на 1 раз` : ''}
         </p>
         <label className="field span">
           На 1 раз для этой работы
-          <span className="measure-line">
-            <input aria-label={`На 1 раз ${item.name}`} inputMode="decimal" placeholder="Например: 400" value={rate} onChange={(event) => onRate(event.target.value)} />
-            <select aria-label={`Единица на 1 раз ${item.name}`} value={rateUnit} onChange={(event) => onRateUnit(event.target.value)}>
-              {units.map((unit) => (
-                <option key={unit} value={unit}>
-                  {unit}
-                </option>
-              ))}
-            </select>
-          </span>
+          {autoPerUse ? (
+            <span className="result-line">
+              <input aria-label={`На 1 раз ${item.name}`} readOnly value={num(plan.perUse)} />
+              <span className="suffix">{plan.measureUnit}</span>
+            </span>
+          ) : (
+            <span className="measure-line">
+              <input aria-label={`На 1 раз ${item.name}`} inputMode="decimal" placeholder="Например: 400" value={rate} onChange={(event) => onRate(event.target.value)} />
+              <select aria-label={`Единица на 1 раз ${item.name}`} value={rateUnit} onChange={(event) => onRateUnit(event.target.value)}>
+                {units.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </select>
+            </span>
+          )}
         </label>
-        <p className="hint span">Пусто — для группы растений считается по норме на 1 м². Для бойлера, газонокосилки и других объектов укажите количество здесь.</p>
+        <p className="hint span">
+          {autoPerUse
+            ? `Посчитано по норме на 1 м² × площадь ${areaKind === 'groups' ? 'групп растений' : 'объектов'}. Норму для удобрений задают у группы растений, а не у объекта участка.`
+            : 'Для удобрений задайте норму на 1 м² в карточке материала и выберите группы с площадью — количество подставится само. Для бойлера, газонокосилки и других объектов без площади укажите количество здесь.'}
+        </p>
         <label className="field">
           Количество внесений за 1 сезон
           <span className="result-line">
@@ -734,9 +753,24 @@ function WorkForm({
     setError('')
     const consumableRates = Object.fromEntries(
       ids.flatMap((id) => {
-        const quantity = parseQuantity(rateText[id] ?? '')
-        if (!quantity) return []
-        return [[id, { quantity, unit: rateUnits[id] || undefined }]]
+        const manual = parseQuantity(rateText[id] ?? '')
+        if (manual) return [[id, { quantity: manual, unit: rateUnits[id] || undefined }]]
+        const item = consumables.find((entry) => entry.id === id)
+        if (!item?.ratePerM2) return []
+        const auto = purchasePlan({
+          unit: item.unit,
+          ratePerM2: item.ratePerM2,
+          rateUnit: item.rateUnit,
+          applications: 1,
+          packQuantity: item.packQuantity,
+          packUnit: item.packUnit,
+          areas: rated.areas,
+          areaKind: rated.areaKind,
+          usedThisYear: 0,
+          pastUsage: [],
+        })
+        if (auto.perUse === undefined) return []
+        return [[id, { quantity: auto.perUse, unit: auto.measureUnit || item.unit }]]
       }),
     )
     const condition: WorkCondition | undefined =
@@ -893,7 +927,9 @@ function WorkForm({
         </fieldset>
       )}
       {plantGroups.length > 0 && (
-        <p className="hint">Если группы выбраны, удобрения этой работы считаются по их площади, а не по площади объектов. Сколько нужно конкретной группе, видно в её карточке: там группа связана с видом работ и материалом.</p>
+        <p className="hint">
+          Норму удобрений считают по площади группы растений (трава газонная), а не по объекту участка (газон): на объекте могут быть и другие культуры. Если группы выбраны, площадь объектов в расчёт не входит — двойного учёта нет. Сколько нужно группе, видно в её карточке и в связке материала с видом работ.
+        </p>
       )}
       {recurrence === 'season' ? (
         <SeasonEditor schedule={schedule} rhythm={rhythm} onSchedule={setSchedule} onRhythm={setRhythm} />

@@ -60,7 +60,7 @@ function UsedInWorks({ consumableId }: { consumableId: string }) {
   return (
     <div className="material-works">
       <h3 className="section-title">Где используется</h3>
-      <p className="hint">Норма на 1 раз задаётся в карточке работы. Один и тот же материал может быть и у группы растений, и у объекта.</p>
+      <p className="hint">Для удобрений количество на 1 раз считается по площади группы растений × норму на м². Для объектов без площади (масло, бойлер) норму на 1 раз задают в карточке работы.</p>
       {listed.map((work) => {
         const rate = work.consumableRates?.[consumableId]
         const where = [...nameOf(work.plantGroupIds, groups).map((name) => `группа «${name}»`), ...nameOf(work.objectIds, objects).map((name) => `объект «${name}»`)]
@@ -116,6 +116,12 @@ function ConsumableForm({
   const materialUnit = unit.trim() || 'шт.'
   const substance = substanceUnit(rateUnit, materialUnit)
   const separate = convertQuantity(1, materialUnit, substance) === null
+  const plantGroups = useLiveQuery(() => db.plantGroups.filter((group) => !group.deletedAt).toArray(), []) ?? []
+  const linkedGroupAreas = (consumable?.plantUses ?? [])
+    .map((use) => plantGroups.find((group) => group.id === use.plantGroupId))
+    .filter((group): group is PlantGroup => !!group)
+    .map((group) => ({ name: group.name, areaM2: group.areaM2 }))
+  const uniqueGroupAreas = [...new Map(linkedGroupAreas.map((area) => [area.name, area])).values()]
   const plan = purchasePlan({
     unit: materialUnit,
     ratePerM2: parseQuantity(rate),
@@ -123,7 +129,8 @@ function ConsumableForm({
     applications: 1,
     packQuantity: parseQuantity(pack),
     packUnit: separate ? substance : undefined,
-    areas: objects.filter((object) => objectIds.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 })),
+    areas: uniqueGroupAreas,
+    areaKind: 'groups',
     usedThisYear: 0,
     pastUsage: [],
   })
@@ -226,7 +233,8 @@ function ConsumableForm({
       )}
       {objects.length > 0 && (
         <fieldset className="chips">
-          <legend>Для каких объектов</legend>
+          <legend>Для каких объектов (справочно)</legend>
+          <p className="hint">Отметка «где ещё применяют», без расчёта нормы. Норму удобрений считают по группе растений в связке ниже, чтобы не удваивать площадь газона и травы.</p>
           {objects
             .filter((object) => object.active || objectIds.includes(object.id))
             .map((object) => (
@@ -275,7 +283,9 @@ function ConsumableForm({
             {warning}
           </p>
         ))}
-        <p className="hint span">Сколько раз вносить и сколько купить на сезон считается в карточке работы, где выбран этот материал. Количество для группы растений — в связке ниже.</p>
+        <p className="hint span">
+          «На 1 раз» здесь — по площади групп из связок ниже (не по объектам участка). Сколько раз вносить и сколько купить на сезон — в карточке работы плана.
+        </p>
       </div>
       {consumable ? (
         <CareLinks
@@ -376,7 +386,6 @@ export function ConsumablesScreen() {
   }
 
   const objectNames = (ids: string[]) => ids.map((id) => objects.find((object) => object.id === id)?.name).filter(Boolean).join(', ')
-  const linked = (ids: string[]) => objects.filter((object) => ids.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 }))
   const active = consumables.filter((item) => item.active && includesAllWords(query, `${item.name} ${item.kind ?? ''} ${item.place ?? ''} ${item.description ?? ''}`)).sort(byName)
   const archived = consumables.filter((item) => !item.active).sort(byName)
   const placeGroups = groupByPlace(active)
@@ -386,7 +395,7 @@ export function ConsumablesScreen() {
     <Screen
       title="Расходные материалы"
       help="consumables"
-      back="/dictionaries"
+      back="/more"
       tab="/more"
       add={{ label: 'Добавить материал', onClick: () => setEditing({}) }}
       actions={<SearchButton query={query} label="Поиск по материалам" placeholder="Например: уксус" onFind={setQuery} />}
@@ -403,26 +412,18 @@ export function ConsumablesScreen() {
           <ul className="list">
             {group.items.map((item) => {
               const used = usage.get(item.id) ?? 0
-              const plan = purchasePlan({
-                unit: item.unit,
-                ratePerM2: item.ratePerM2,
-                rateUnit: item.rateUnit,
-                applications: 1,
-                packQuantity: item.packQuantity,
-                packUnit: item.packUnit,
-                areas: linked(item.objectIds),
-                usedThisYear: 0,
-                pastUsage: [],
-              })
+              const rateLabel = item.ratePerM2
+                ? `норма ${quantityText(item.ratePerM2, item.rateUnit || 'г')}/м²`
+                : `единица: ${item.unit}`
               return (
                 <li key={item.id}>
                   <button type="button" className="list-item" onClick={() => setEditing({ id: item.id })}>
                     <strong>{item.name}</strong>
                     <span className="muted">
-                      {plan.perUse !== undefined ? `на один раз ${quantityText(plan.perUse, plan.measureUnit)}` : `единица: ${item.unit}`}
+                      {rateLabel}
                       {` · израсходовано в ${year}: ${quantityText(used, item.unit)}`}
                     </span>
-                    {item.objectIds.length > 0 && <span className="small">Для: {objectNames(item.objectIds)}</span>}
+                    {item.objectIds.length > 0 && <span className="small">Отмечен для: {objectNames(item.objectIds)}</span>}
                     {item.description && <span className="small">{item.description}</span>}
                     {item.note && <span className="small">{item.note}</span>}
                     {item.url && <span className="small muted">Источник: {urlHost(item.url)}</span>}
