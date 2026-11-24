@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { repo } from '../app/store'
-import { SHOPPING_STATUS, shoppingPackText, shoppingQuantityText } from '../domain/shopping'
+import { SHOPPING_STATUS, shoppingPackText, shoppingQuantityText, shoppingVoimiText } from '../domain/shopping'
 import type { ShoppingDraft } from '../domain/shopping'
 import { buyPackages, packagesFromStore, purchasePlan, rateAreas } from '../domain/purchases'
 import { workTimes } from '../domain/applications'
@@ -11,6 +11,23 @@ import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
 import { errorText } from '../lib/format'
 import { useState } from 'react'
+
+/** Скопировать текст в буфер; если нельзя — скачать .txt для вставки в «Возьми». */
+async function copyOrDownloadVoimi(text: string, fileName: string): Promise<'copied' | 'downloaded'> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return 'copied'
+  } catch {
+    /* запасной путь ниже */
+  }
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  return 'downloaded'
+}
 
 /** Рассчитанные покупки по всем работам плана — без уже купленных дублей. */
 async function draftsFromPlan(): Promise<ShoppingDraft[]> {
@@ -80,7 +97,11 @@ export function ShoppingScreen() {
 
   return (
     <Screen title="Список покупок" help="shopping" back="/more" tab="/more">
-      <p className="hint">Рассчитанные покупки из плана. Один материал — одна строка. Нажмите название в «К покупке», чтобы перенести в «Куплено». Если в справочнике задана фасовка, под количеством видно размер упаковки.</p>
+      <p className="hint">
+        Рассчитанные покупки из плана. Один материал — одна строка. Нажмите название в «К покупке», чтобы перенести в «Куплено».
+        Если в справочнике задана фасовка, под количеством видно размер упаковки. «В „Возьми“» отдаёт позиции «к покупке» текстом
+        (буфер или файл .txt) для импорта в семейный список.
+      </p>
       <div className="actions">
         <ActionButton
           onRun={async () => {
@@ -103,6 +124,41 @@ export function ShoppingScreen() {
           }}
         >
           Добавить рассчитанные
+        </ActionButton>
+        <ActionButton
+          secondary
+          disabled={open.length === 0}
+          onRun={async () => {
+            setError('')
+            const lines = open.map((item) => {
+              const material = consumableById.get(item.consumableId)
+              return {
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                packQuantity: material?.packQuantity,
+                packUnit: material?.packUnit,
+              }
+            })
+            const text = shoppingVoimiText(lines)
+            if (!text.trim()) {
+              alert('В «К покупке» сейчас пусто.')
+              return
+            }
+            try {
+              const stamp = todayAtSite().date.replaceAll('-', '')
+              const how = await copyOrDownloadVoimi(text, `dachabook-voimi-${stamp}.txt`)
+              alert(
+                how === 'copied'
+                  ? `Скопировано ${open.length} поз. Откройте «Возьми» → вставить список из буфера.`
+                  : `Сохранён файл со списком (${open.length} поз.). В «Возьми» импортируйте его из файла.`,
+              )
+            } catch (caught) {
+              setError(errorText(caught))
+            }
+          }}
+        >
+          В «Возьми»
         </ActionButton>
       </div>
       {error && <p className="error">{error}</p>}
