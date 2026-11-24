@@ -64,6 +64,39 @@ export function shoppingPackText(item: {
   return `${shoppingQuantityText(item)} × ${pack}`
 }
 
+const qtyRu = (value: number) => value.toLocaleString('ru-RU', { maximumFractionDigits: 3 })
+
+/**
+ * Одна строка для импорта в «Возьми» (family-lists):
+ * `- [ ] Известь (0,5 кг): 5 уп.` — двоеточие, чтобы единица «уп.» не потерялась.
+ */
+export function shoppingVoimiLine(item: {
+  name: string
+  quantity: number
+  unit: string
+  packQuantity?: number
+  packUnit?: string
+}): string {
+  const pack =
+    item.packQuantity && item.packQuantity > 0
+      ? ` (${qtyRu(item.packQuantity)} ${item.packUnit?.trim() || 'ед.'})`
+      : ''
+  return `- [ ] ${item.name.trim()}${pack}: ${qtyRu(item.quantity)} ${item.unit.trim()}`
+}
+
+/** Текст списка «к покупке» для буфера / .txt → «Возьми». */
+export function shoppingVoimiText(
+  items: Array<{
+    name: string
+    quantity: number
+    unit: string
+    packQuantity?: number
+    packUnit?: string
+  }>,
+): string {
+  return items.map(shoppingVoimiLine).join('\n')
+}
+
 export const SHOPPING_STATUS: Record<ShoppingItem['status'], string> = {
   toBuy: 'к покупке',
   bought: 'куплено',
