@@ -52,6 +52,18 @@ export function shoppingQuantityText(item: Pick<ShoppingItem, 'quantity' | 'unit
   return quantityText(item.quantity, item.unit)
 }
 
+/** Подпись фасовки из справочника: «5 уп. × 0,5 кг». */
+export function shoppingPackText(item: {
+  quantity: number
+  unit: string
+  packQuantity?: number
+  packUnit?: string
+}): string | undefined {
+  if (!(item.packQuantity && item.packQuantity > 0)) return undefined
+  const pack = quantityText(item.packQuantity, item.packUnit?.trim() || 'ед.')
+  return `${shoppingQuantityText(item)} × ${pack}`
+}
+
 export const SHOPPING_STATUS: Record<ShoppingItem['status'], string> = {
   toBuy: 'к покупке',
   bought: 'куплено',

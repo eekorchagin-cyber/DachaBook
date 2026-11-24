@@ -5,9 +5,11 @@ import { repo } from '../app/store'
 import { fertilizerSummary } from '../domain/careLinks'
 import { includesAllWords } from '../domain/diaryFilter'
 import { pageLink } from '../domain/labelProgram'
+import { objectDeleteBlockers } from '../domain/objectLinks'
 import { OBJECT_TYPES } from '../domain/labels'
 import type { CareObject, DocInput, ObjectType, PlantGroup } from '../domain/types'
 import { db } from '../storage/db'
+import { purgeDoc } from '../sync/engine'
 import { EmptyState, Screen } from '../ui/Screen'
 import { PhotoFields } from '../ui/PhotoFields'
 import { SearchButton, SearchQuery } from '../ui/SearchDialog'
@@ -97,6 +99,36 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
         {object && (
           <ActionButton secondary onRun={() => save(!object.active)}>
             {object.active ? 'В архив' : 'Вернуть из архива'}
+          </ActionButton>
+        )}
+        {object && (
+          <ActionButton
+            secondary
+            onRun={async () => {
+              const [events, works, zones, groups] = await Promise.all([
+                db.events.toArray(),
+                db.planWorks.toArray(),
+                db.wateringZones.toArray(),
+                db.plantGroups.toArray(),
+              ])
+              const blockers = objectDeleteBlockers({
+                objectId: object.id,
+                events,
+                works,
+                zones,
+                groups,
+                object,
+              })
+              if (blockers.length > 0) {
+                alert(`Нельзя удалить навсегда: ${blockers.join('; ')}. Сначала уберите связи или перенесите объект в архив.`)
+                return
+              }
+              if (!confirm(`Удалить объект «${object.name}» навсегда? Восстановить будет нельзя.`)) return
+              await purgeDoc(db, 'objects', object.id)
+              onClose()
+            }}
+          >
+            Удалить навсегда
           </ActionButton>
         )}
         <button type="button" className="button secondary" onClick={onClose}>

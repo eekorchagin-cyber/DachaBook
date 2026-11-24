@@ -606,21 +606,40 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .measure-line input {
   width: 5.5rem;
-  flex: 0 0 5.5rem;
+  flex: 0 1 5.5rem;
+  min-width: 0;
+  max-width: 40%;
 }
 
+/* Важнее общего `.field select { width: 100% }` — иначе единица нормы уезжает за край. */
+.field .measure-line select,
 .measure-line select {
   width: auto;
-  flex: 0 0 auto;
+  max-width: 9rem;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.field-label {
+  display: block;
+}
+
+.field .measure-line input {
+  width: 5.5rem;
+  flex: 0 1 5.5rem;
+  max-width: 40%;
 }
 
 .measure-line .suffix {
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .calc-grid {

@@ -4,7 +4,7 @@ import { suggestParts } from './split'
 
 export interface PartDraft {
   text: string
-  type: 'work' | 'observation'
+  type: 'work' | 'observation' | 'measurement'
   objectId: string
   workKind?: string
   plantGroupIds: string[]

@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { repo } from '../app/store'
-import { SHOPPING_STATUS, shoppingQuantityText } from '../domain/shopping'
+import { SHOPPING_STATUS, shoppingPackText, shoppingQuantityText } from '../domain/shopping'
 import type { ShoppingDraft } from '../domain/shopping'
 import { buyPackages, packagesFromStore, purchasePlan, rateAreas } from '../domain/purchases'
 import { workTimes } from '../domain/applications'
@@ -62,14 +62,25 @@ async function draftsFromPlan(): Promise<ShoppingDraft[]> {
 
 export function ShoppingScreen() {
   const items = useLiveQuery(() => db.shoppingItems.filter((item) => !item.deletedAt).toArray(), [])
+  const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), [])
   const [error, setError] = useState('')
   const list = [...(items ?? [])].sort((a, b) => Number(a.status === 'bought') - Number(b.status === 'bought') || a.name.localeCompare(b.name, 'ru'))
   const open = list.filter((item) => item.status === 'toBuy')
   const bought = list.filter((item) => item.status === 'bought')
+  const consumableById = new Map((consumables ?? []).map((item) => [item.id, item]))
+  const packLine = (item: { consumableId: string; quantity: number; unit: string }) => {
+    const material = consumableById.get(item.consumableId)
+    return shoppingPackText({
+      quantity: item.quantity,
+      unit: item.unit,
+      packQuantity: material?.packQuantity,
+      packUnit: material?.packUnit,
+    })
+  }
 
   return (
     <Screen title="Список покупок" help="shopping" back="/more" tab="/more">
-      <p className="hint">Рассчитанные покупки из плана. Один материал — одна строка. Нажмите название в «К покупке», чтобы перенести в «Куплено».</p>
+      <p className="hint">Рассчитанные покупки из плана. Один материал — одна строка. Нажмите название в «К покупке», чтобы перенести в «Куплено». Если в справочнике задана фасовка, под количеством видно размер упаковки.</p>
       <div className="actions">
         <ActionButton
           onRun={async () => {
@@ -100,21 +111,24 @@ export function ShoppingScreen() {
         <section>
           <h2 className="section-title">К покупке</h2>
           <ul className="list">
-            {open.map((item) => (
-              <li key={item.id} className="list-row">
-                <button
-                  type="button"
-                  className="button-link"
-                  onClick={() => void repo.update('shoppingItems', item.id, { status: 'bought' }, item.revision)}
-                >
-                  {item.name}
-                  <span className="muted">
-                    {' '}
-                    {shoppingQuantityText(item)} · {SHOPPING_STATUS[item.status]}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {open.map((item) => {
+              const pack = packLine(item)
+              return (
+                <li key={item.id} className="list-row">
+                  <button
+                    type="button"
+                    className="button-link"
+                    onClick={() => void repo.update('shoppingItems', item.id, { status: 'bought' }, item.revision)}
+                  >
+                    {item.name}
+                    <span className="muted">
+                      {' '}
+                      {pack ?? shoppingQuantityText(item)} · {SHOPPING_STATUS[item.status]}
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
@@ -122,35 +136,38 @@ export function ShoppingScreen() {
         <section>
           <h2 className="section-title">Куплено</h2>
           <ul className="list">
-            {bought.map((item) => (
-              <li key={item.id} className="list-row">
-                <span>
-                  <strong>{item.name}</strong>{' '}
-                  <span className="muted">
-                    {shoppingQuantityText(item)} · {SHOPPING_STATUS[item.status]}
+            {bought.map((item) => {
+              const pack = packLine(item)
+              return (
+                <li key={item.id} className="list-row">
+                  <span>
+                    <strong>{item.name}</strong>{' '}
+                    <span className="muted">
+                      {pack ?? shoppingQuantityText(item)} · {SHOPPING_STATUS[item.status]}
+                    </span>
                   </span>
-                </span>
-                <span className="actions">
-                  <ActionButton
-                    secondary
-                    onRun={async () => {
-                      await repo.update('shoppingItems', item.id, { status: 'toBuy' }, item.revision)
-                    }}
-                  >
-                    Снова к покупке
-                  </ActionButton>
-                  <ActionButton
-                    secondary
-                    onRun={async () => {
-                      if (!confirm(`Убрать «${item.name}» из списка?`)) return
-                      await repo.remove('shoppingItems', item.id, item.revision)
-                    }}
-                  >
-                    Убрать
-                  </ActionButton>
-                </span>
-              </li>
-            ))}
+                  <span className="actions">
+                    <ActionButton
+                      secondary
+                      onRun={async () => {
+                        await repo.update('shoppingItems', item.id, { status: 'toBuy' }, item.revision)
+                      }}
+                    >
+                      Снова к покупке
+                    </ActionButton>
+                    <ActionButton
+                      secondary
+                      onRun={async () => {
+                        if (!confirm(`Убрать «${item.name}» из списка?`)) return
+                        await repo.remove('shoppingItems', item.id, item.revision)
+                      }}
+                    >
+                      Убрать
+                    </ActionButton>
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}

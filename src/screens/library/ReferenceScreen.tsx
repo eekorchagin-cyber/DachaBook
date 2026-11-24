@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { navigate } from '../../app/router'
 import { pageLink } from '../../domain/labelProgram'
 import { repo } from '../../app/store'
@@ -10,6 +11,7 @@ import { htmlToText, textToHtml } from '../../lib/sanitize'
 import { db } from '../../storage/db'
 import { AttachmentRow } from '../../ui/AttachmentRow'
 import { CopyLinkButton } from '../../ui/CopyLinkButton'
+import { LeaveDirtyDialog } from '../../ui/LeaveDirtyDialog'
 import { Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
 import { ReferenceBody } from './ReferenceBody'
@@ -93,9 +95,10 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
   const objects = useLiveQuery(() => db.objects.filter((item) => !item.deletedAt && item.active).toArray(), []) ?? []
   const groups = useLiveQuery(() => db.plantGroups.filter((item) => !item.deletedAt && item.active).toArray(), []) ?? []
   const [draft, setDraft] = useState<Draft>(() => toDraft(material))
-  const [initial] = useState(() => JSON.stringify(toDraft(material)))
+  const [initial, setInitial] = useState(() => JSON.stringify(toDraft(material)))
   const [error, setError] = useState<string | null>(null)
   const [processing, setProcessing] = useState(0)
+  const [leavePath, setLeavePath] = useState<string | null>(null)
   const dirty = useMemo(() => JSON.stringify(draft) !== initial, [draft, initial])
   /** Импортированная статья хранит оформление; её текст правится только вместе с потерей оформления. */
   const formatted = !!material?.source
@@ -112,8 +115,17 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
   const toggle = (key: 'objectIds' | 'plantGroupIds', value: string) =>
     update({ [key]: draft[key].includes(value) ? draft[key].filter((item) => item !== value) : [...draft[key], value] })
   const back = material ? `/library/${material.id}` : '/library'
+  const go = (path: string) => {
+    setInitial(JSON.stringify(draft))
+    setLeavePath(null)
+    navigate(path)
+  }
+  const requestLeave = (path: string) => {
+    if (!dirty) go(path)
+    else setLeavePath(path)
+  }
 
-  const save = async () => {
+  const save = async (afterPath?: string) => {
     setError(null)
     try {
       const input: DocInput<ReferenceMaterial> = {
@@ -126,7 +138,9 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
         source: material?.source,
       }
       const saved = material ? await repo.update('references', material.id, input, material.revision) : await repo.create('references', input)
-      navigate(`/library/${saved.id}`)
+      setInitial(JSON.stringify(draft))
+      setLeavePath(null)
+      navigate(afterPath ?? `/library/${saved.id}`)
     } catch (caught) {
       setError(errorText(caught))
     }
@@ -148,7 +162,14 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
   }
 
   return (
-    <Screen title={material ? 'Изменить статью' : 'Новая статья'} help="library" back={back} tab="/library">
+    <Screen
+      title={material ? 'Изменить статью' : 'Новая статья'}
+      help="library"
+      back={back}
+      tab="/library"
+      onBack={() => requestLeave(back)}
+      leaveGuard={(path) => requestLeave(path)}
+    >
       <section className="card">
         <label className="field">
           Заголовок
@@ -211,17 +232,11 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
       </section>
       {error && <p className="error">{error}</p>}
       <div className="actions">
-        <ActionButton disabled={!draft.title.trim() || !dirty || processing > 0} onRun={save}>
+        <ActionButton disabled={!draft.title.trim() || !dirty || processing > 0} onRun={() => save()}>
           Сохранить
         </ActionButton>
         {processing > 0 && <span className="hint">Обрабатываются файлы ({processing})…</span>}
-        <button
-          type="button"
-          className="button secondary"
-          onClick={() => {
-            if (!dirty || confirm('Изменения не сохранены. Выйти без сохранения?')) navigate(back)
-          }}
-        >
+        <button type="button" className="button secondary" onClick={() => requestLeave(back)}>
           {dirty ? 'Отмена' : 'Закрыть'}
         </button>
         {material && (
@@ -237,6 +252,17 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
           </ActionButton>
         )}
       </div>
+      {leavePath &&
+        createPortal(
+          <LeaveDirtyDialog
+            onChoice={(choice) => {
+              if (choice === 'stay') setLeavePath(null)
+              else if (choice === 'discard') go(leavePath)
+              else void save(leavePath)
+            }}
+          />,
+          document.body,
+        )}
     </Screen>
   )
 }

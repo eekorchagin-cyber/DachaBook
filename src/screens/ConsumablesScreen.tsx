@@ -247,10 +247,10 @@ function ConsumableForm({
           {separate ? `В одной ${materialUnit}, ${substance}` : `В одной упаковке, ${materialUnit}`}
           <input aria-label="В одной единице учёта" inputMode="decimal" placeholder={separate ? 'Например: 10' : 'необязательно'} value={pack} onChange={(event) => setPack(event.target.value)} />
         </label>
-        <label className="field span">
-          Норма внесения на 1 м²
+        <div className="field span">
+          <span className="field-label">Норма внесения на 1 м²</span>
           <span className="measure-line">
-            <input aria-label="Норма на 1 м²" inputMode="decimal" placeholder="Например: 50" value={rate} onChange={(event) => setRate(event.target.value)} />
+            <input aria-label="Число нормы на 1 м²" inputMode="decimal" placeholder="50" value={rate} onChange={(event) => setRate(event.target.value)} />
             <select aria-label="Единица нормы" value={rateUnit} onChange={(event) => setRateUnit(event.target.value)}>
               {units.map((item) => (
                 <option key={item} value={item}>
@@ -260,7 +260,7 @@ function ConsumableForm({
             </select>
             <span className="suffix">/ м²</span>
           </span>
-        </label>
+        </div>
         <label className="field">
           На 1 раз
           <span className="result-line">

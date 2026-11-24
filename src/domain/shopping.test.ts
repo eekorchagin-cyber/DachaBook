@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mergeShoppingDraft, shoppingQuantityText } from './shopping'
+import { mergeShoppingDraft, shoppingPackText, shoppingQuantityText } from './shopping'
 
 describe('список Купить', () => {
   it('создаёт позицию к покупке и не дублирует материал', () => {
@@ -30,5 +30,10 @@ describe('список Купить', () => {
 
   it('пишет количество с единицей', () => {
     expect(shoppingQuantityText({ quantity: 2, unit: 'уп.' })).toContain('2')
+  })
+
+  it('описывает фасовку упаковки', () => {
+    expect(shoppingPackText({ quantity: 5, unit: 'уп.', packQuantity: 0.5, packUnit: 'кг' })).toBe('5 уп. × 0,5 кг')
+    expect(shoppingPackText({ quantity: 2, unit: 'уп.' })).toBeUndefined()
   })
 })

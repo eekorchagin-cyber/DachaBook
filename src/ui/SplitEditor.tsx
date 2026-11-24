@@ -35,7 +35,10 @@ export function SplitEditor(props: {
 
   return (
     <div className="split-editor">
-      <p className="hint">Каждая часть станет отдельной записью с той же датой. Проверьте тип, место и группы растений.</p>
+      <p className="hint">
+        Каждая часть станет отдельной записью с той же датой. Проверьте тип (работа, наблюдение или измерение), место и группы растений. У измерения
+        температуру и влажность дозаполните после разделения.
+      </p>
       <ol className="split-parts">
         {parts.map((part, index) => (
           <li key={index} className="split-part">
@@ -46,6 +49,7 @@ export function SplitEditor(props: {
                 <select value={part.type} onChange={(event) => update(index, { type: event.target.value as PartDraft['type'] })}>
                   <option value="work">Работа</option>
                   <option value="observation">Наблюдение</option>
+                  <option value="measurement">Измерение</option>
                 </select>
               </label>
               <label className="field">

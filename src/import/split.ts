@@ -35,7 +35,7 @@ export function splitSentences(text: string): string[] {
 
 export interface PartSuggestion {
   text: string
-  type: 'work' | 'observation'
+  type: 'work' | 'observation' | 'measurement'
   objectName: string
   workKind?: string
 }

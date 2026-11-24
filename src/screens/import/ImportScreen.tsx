@@ -216,7 +216,14 @@ function PlanRow(props: {
         <button
           type="button"
           className="button secondary small"
-          onClick={() => props.onParts(suggestParts(candidate.text, candidate.itemType === 'work').map((part) => ({ text: part.text, itemType: part.type })))}
+          onClick={() =>
+            props.onParts(
+              suggestParts(candidate.text, candidate.itemType === 'work').map((part) => ({
+                text: part.text,
+                itemType: part.type === 'work' ? 'work' : 'observation',
+              })),
+            )
+          }
         >
           Разделить на {sentences.length} позиции
         </button>

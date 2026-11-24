@@ -20,6 +20,7 @@ import { db } from '../../storage/db'
 import { AttachmentRow } from '../../ui/AttachmentRow'
 import { Screen } from '../../ui/Screen'
 import { ActionButton } from '../../ui/Section'
+import { LeaveDirtyDialog } from '../../ui/LeaveDirtyDialog'
 import { EVENT_TYPES, WEATHER_CONDITIONS, weatherText } from '../../domain/labels'
 import { processWeatherQueue, queueWeather } from '../../weather/service'
 import { needsWeather, snapshotKindLabel } from '../../weather/snapshot'
@@ -29,7 +30,7 @@ import { SplitEditor } from '../../ui/SplitEditor'
 import { PlaceHint } from '../../ui/PlaceHint'
 import { SuggestInput } from '../../ui/SuggestInput'
 import { PhotoThumb } from './EventCard'
-import { splitEvent } from './splitEvent'
+import { createSplitEvents, splitEvent } from './splitEvent'
 
 interface Draft {
   type: EventType
@@ -208,8 +209,10 @@ function EventForm({
   const [processing, setProcessing] = useState(0)
   const [planOffer, setPlanOffer] = useState<{ event: DiaryEvent; input: DocInput<PlanWork> } | null>(null)
   const [planBusy, setPlanBusy] = useState(false)
+  const [leavePath, setLeavePath] = useState<string | null>(null)
 
   const dirty = useMemo(() => JSON.stringify(draft) !== initial, [draft, initial])
+  const defaultBack = plan && !event ? '/works' : zone && !event ? '/watering' : '/diary'
 
   useEffect(() => {
     if (!dirty) return
@@ -221,15 +224,18 @@ function EventForm({
   const update = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch })
   const toggle = (key: 'objectIds' | 'plantGroupIds', value: string) =>
     update({ [key]: draft[key].includes(value) ? draft[key].filter((item) => item !== value) : [...draft[key], value] })
-  const leave = (path: string) => {
-    if (!dirty || confirm('Изменения не сохранены. Выйти без сохранения?')) {
-      setInitial(JSON.stringify(draft))
-      navigate(path)
-    }
+  const go = (path: string) => {
+    setInitial(JSON.stringify(draft))
+    setLeavePath(null)
+    navigate(path)
+  }
+  const requestLeave = (path: string) => {
+    if (!dirty) go(path)
+    else setLeavePath(path)
   }
   const missing = problems(draft)
 
-  const save = async () => {
+  const save = async (afterPath?: string) => {
     setError(null)
     try {
       const uses =
@@ -244,17 +250,19 @@ function EventForm({
         await queueWeather(saved.id)
         void processWeatherQueue()
       }
-      if (!event && saved.type === 'work' && !plan) {
+      if (!event && saved.type === 'work' && !plan && !afterPath) {
         const input = planInputFromEvent(saved)
         const already = input ? planAlreadyHas(await db.planWorks.toArray(), input.title) : true
         if (input && !already) {
           setInitial(JSON.stringify(draft))
+          setLeavePath(null)
           setPlanOffer({ event: saved, input })
           return
         }
       }
       setInitial(JSON.stringify(draft))
-      navigate(plan && !event ? '/works' : zone && !event ? '/watering' : '/diary')
+      setLeavePath(null)
+      navigate(afterPath ?? (plan && !event ? '/works' : zone && !event ? '/watering' : '/diary'))
     } catch (caught) {
       setError(caught instanceof ConflictError ? 'Запись изменили в другом месте. Откройте её заново, чтобы не потерять чужую правку.' : errorText(caught))
     }
@@ -363,12 +371,13 @@ function EventForm({
   }, [])
 
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'ru')
-  const canSplitEvent = !!event && !dirty && draft.type !== 'measurement' && splitSentences(draft.comment).length > 1
-  if (event && splitParts) {
+  const canSplitEvent = splitSentences(draft.comment).length > 1 && (!event || !dirty)
+  if (splitParts) {
+    const mediaCount = (event?.photoIds.length ?? draft.photoIds.length) + (event?.attachmentIds.length ?? draft.attachmentIds.length)
     return (
-      <Screen title="Разделить запись" help="event" tab="/diary" back="/diary">
+      <Screen title="Разделить запись" help="event" tab="/diary" back="/diary" onBack={() => setSplitParts(null)}>
         <section className="card">
-          <p className="import-text">{event.comment}</p>
+          <p className="import-text">{draft.comment}</p>
           <SplitEditor
             parts={splitParts}
             onChange={setSplitParts}
@@ -376,14 +385,21 @@ function EventForm({
             objects={objects.filter((item) => item.active).sort(byName)}
             groups={groups.filter((item) => item.active).sort(byName)}
             workKinds={settings.workKinds}
-            hasMedia={event.photoIds.length + event.attachmentIds.length > 0}
+            hasMedia={mediaCount > 0}
           />
         </section>
         <div className="actions">
           <ActionButton
             disabled={splitParts.length < 2 || splitParts.some((part) => !part.text.trim())}
             onRun={async () => {
-              await splitEvent(event, splitParts)
+              if (event) await splitEvent(event, splitParts)
+              else {
+                await createSplitEvents(
+                  { date: draft.date, time: draft.time || undefined, photoIds: draft.photoIds, attachmentIds: draft.attachmentIds, fileNotes: draft.fileNotes },
+                  splitParts,
+                )
+                setInitial(JSON.stringify(draft))
+              }
               navigate('/diary')
             }}
           >
@@ -401,7 +417,9 @@ function EventForm({
       title={event ? 'Запись дневника' : plan ? 'Выполнение работы' : zone ? 'Полив' : 'Новая запись'}
       help="event"
       tab="/diary"
-      back={plan && !event ? '/works' : zone && !event ? '/watering' : '/diary'}
+      back={defaultBack}
+      onBack={() => requestLeave(defaultBack)}
+      leaveGuard={(path) => requestLeave(path)}
     >
       {zone && !event && (
         <p className="notice">
@@ -585,11 +603,11 @@ function EventForm({
       {missing.length > 0 && <p className="hint">Чтобы сохранить: {missing.join(', ')}.</p>}
       {error && <p className="error">{error}</p>}
       <div className="actions">
-        <ActionButton disabled={missing.length > 0 || !dirty || processing > 0 || !!planOffer} onRun={save}>
+        <ActionButton disabled={missing.length > 0 || !dirty || processing > 0 || !!planOffer} onRun={() => save()}>
           Сохранить
         </ActionButton>
         {processing > 0 && <span className="hint">Обрабатываются файлы ({processing})…</span>}
-        <button type="button" className="button secondary" onClick={() => leave('/diary')}>
+        <button type="button" className="button secondary" onClick={() => requestLeave(defaultBack)}>
           {dirty ? 'Отмена' : 'Закрыть'}
         </button>
         {canSplitEvent && (
@@ -615,6 +633,17 @@ function EventForm({
           </ActionButton>
         )}
       </div>
+      {leavePath &&
+        createPortal(
+          <LeaveDirtyDialog
+            onChoice={(choice) => {
+              if (choice === 'stay') setLeavePath(null)
+              else if (choice === 'discard') go(leavePath)
+              else void save(leavePath)
+            }}
+          />,
+          document.body,
+        )}
       {planOffer &&
         createPortal(
           <div className="dialog-backdrop" role="presentation">

@@ -15,12 +15,14 @@ const TABS = [
 /** Круглый «+» справа: ссылка или действие без смены адреса. */
 export type ScreenAdd = { label: string; href: string } | { label: string; onClick: () => void }
 
-/** back — запасной путь; onBack — закрыть карточку. Справа: доп. кнопки, «?», затем «+». */
+/** back — запасной путь; onBack — закрыть карточку. leaveGuard — перехват вкладок при несохранённых правках. */
 export function Screen(props: {
   title: string
   help?: string
   back?: string
   onBack?: () => void
+  /** Если задан: клик по вкладке не уводит сразу — вызывается с целевым путём. */
+  leaveGuard?: (path: string) => void
   actions?: ReactNode
   add?: ScreenAdd
   children: ReactNode
@@ -80,7 +82,16 @@ export function Screen(props: {
       <main className="content">{props.children}</main>
       <nav ref={tabbar} className="tabbar" aria-label="Разделы">
         {TABS.map((tab) => (
-          <a key={tab.path} href={`#${tab.path}`} className={tab.path === props.tab ? 'tab active' : 'tab'}>
+          <a
+            key={tab.path}
+            href={`#${tab.path}`}
+            className={tab.path === props.tab ? 'tab active' : 'tab'}
+            onClick={(event) => {
+              if (!props.leaveGuard || tab.path === props.tab) return
+              event.preventDefault()
+              props.leaveGuard(tab.path)
+            }}
+          >
             <span aria-hidden="true">{tab.icon}</span>
             {tab.label}
           </a>
