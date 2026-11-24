@@ -1,4 +1,3 @@
-import { useLiveQuery } from 'dexie-react-hooks'
 import { removeUnit, removeWorkKind, renameUnit, renameWorkKind } from '../app/dictionaries'
 import { localPath, navigate } from '../app/router'
 import { DEFAULT_SETTINGS, getSetting, repo, setSetting, type AppSettings } from '../app/store'
@@ -33,14 +32,10 @@ async function renameWorkCondition(from: string, to: string): Promise<boolean> {
 
 /** Перечень справочников: каждый открывается своим экраном. */
 export function DictionariesScreen({ settings }: { settings: AppSettings }) {
-  const counts = useLiveQuery(async () => ({
-    consumables: await db.consumables.filter((item) => !item.deletedAt && item.active).count(),
-  }))
   const items = [
     { href: '#/dictionaries/work-kinds', title: 'Виды работ', text: 'Стрижка газона, полив, внесение удобрений… — выбор в записях работ', count: settings.workKinds.length },
     { href: '#/dictionaries/consumable-kinds', title: 'Виды расходных материалов', text: 'Удобрение, горюче-смазочные, бытовая химия — без остатков и норм', count: settings.consumableKinds.length },
     { href: '#/dictionaries/units', title: 'Единицы измерения расходных материалов', text: 'кг, л, шт. — для норм и расхода материалов', count: settings.consumableUnits.length },
-    { href: '#/consumables', title: 'Расходные материалы', text: 'Удобрения, средства, масло, уксус: нормы и описания', count: counts?.consumables },
     { href: '#/dictionaries/work-conditions', title: 'Условия для проведения работ', text: '«Снег сошёл» и «Почва просохла» сами открывают работу; остальные — подпись', count: settings.workConditions.length },
   ].sort((a, b) => a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }))
   return (

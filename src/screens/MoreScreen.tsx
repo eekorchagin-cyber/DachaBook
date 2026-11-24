@@ -13,6 +13,7 @@ const TOP = [
   { href: '#/more/plot', title: 'Участок' },
   { href: '#/more/works', title: 'Работы' },
   { href: '#/shopping', title: 'Список покупок' },
+  { href: '#/consumables', title: 'Расходные материалы' },
   { href: '#/dictionaries', title: 'Справочники' },
   { href: '#/more/program', title: 'Настройки программы' },
   { href: '#/more/service', title: 'Сервис' },

@@ -42,15 +42,32 @@ export interface FertilizerLine {
   warnings: string[]
 }
 
-type WorkSlice = Pick<PlanWork, 'deletedAt' | 'active' | 'workKind' | 'plantGroupIds' | 'recurrence' | 'periods' | 'seasonSchedule'>
+type WorkSlice = Pick<PlanWork, 'deletedAt' | 'active' | 'workKind' | 'plantGroupIds' | 'objectIds' | 'recurrence' | 'periods' | 'seasonSchedule'>
+
+type GroupSlice = { id: string; name: string; areaM2?: number; objectIds?: string[]; deletedAt?: string }
+
+/**
+ * Работы плана для связки «группа + вид».
+ * Сначала работы, где группа выбрана явно — так нет двойного учёта, если рядом есть работа только по объекту.
+ * Если таких нет — работы того же вида только по объектам этой группы (миграция со старых планов).
+ */
+export function worksForPlantUse(works: WorkSlice[], group: GroupSlice, workKind: string): WorkSlice[] {
+  const live = works.filter((work) => !work.deletedAt && work.active && work.workKind === workKind)
+  const withGroup = live.filter((work) => work.plantGroupIds.includes(group.id))
+  if (withGroup.length > 0) return withGroup
+  const objectIds = group.objectIds ?? []
+  if (objectIds.length === 0) return []
+  return live.filter((work) => work.plantGroupIds.length === 0 && work.objectIds.some((id) => objectIds.includes(id)))
+}
 
 /**
  * Сколько материала нужно группе по связке «группа — вид работ — материал».
- * Площадь — у группы, норма — у материала, число внесений — сумма работ плана этого вида, где группа выбрана.
+ * Площадь — у группы растений, норма — у материала, число внесений — из плана.
+ * Объект участка (газон) сам по себе норму не даёт: на нём могут быть разные культуры.
  */
 export function fertilizerLines(input: {
   consumables: Consumable[]
-  groups: { id: string; name: string; areaM2?: number; deletedAt?: string }[]
+  groups: GroupSlice[]
   works: WorkSlice[]
   today: string
   plantGroupId?: string
@@ -66,7 +83,7 @@ export function fertilizerLines(input: {
       if (input.workKind && use.workKind !== input.workKind) continue
       const group = input.groups.find((entry) => entry.id === use.plantGroupId && !entry.deletedAt)
       if (!group) continue
-      const matched = input.works.filter((work) => !work.deletedAt && work.active && work.workKind === use.workKind && work.plantGroupIds.includes(group.id))
+      const matched = worksForPlantUse(input.works, group, use.workKind)
       const times = matched.reduce((sum, work) => sum + workTimes(work, input.today), 0)
       const base = {
         consumableId: item.id,
