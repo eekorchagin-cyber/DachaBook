@@ -36,27 +36,10 @@ async function copyText(value: string): Promise<boolean> {
 }
 
 /**
- * Отдать список в «Возьми»: на телефоне — системное «Поделиться», иначе буфер.
- * Скачивание .txt на iPhone часто молчит, поэтому не считаем его успехом без проверки.
+ * В буфер — только строки товаров (без заголовка).
+ * Системное «Поделиться» с title на iPhone при «Скопировать» кладёт в буфер одно «Список покупок».
  */
-async function shareVoimiList(text: string, fileName: string): Promise<'shared' | 'copied' | 'manual'> {
-  const file = new File([text], fileName, { type: 'text/plain' })
-  try {
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'Список покупок' })
-      return 'shared'
-    }
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error
-  }
-  try {
-    if (navigator.share) {
-      await navigator.share({ text, title: 'Список покупок' })
-      return 'shared'
-    }
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error
-  }
+async function copyVoimiList(text: string): Promise<'copied' | 'manual'> {
   if (await copyText(text)) return 'copied'
   return 'manual'
 }
@@ -134,8 +117,8 @@ export function ShoppingScreen() {
     <Screen title="Список покупок" help="shopping" back="/more" tab="/more">
       <p className="hint">
         Рассчитанные покупки из плана. Один материал — одна строка. Нажмите название в «К покупке», чтобы перенести в «Куплено».
-        Если в справочнике задана фасовка, под количеством видно размер упаковки. «В „Возьми“» отдаёт позиции «к покупке» текстом
-        (поделиться или буфер) для импорта в семейный список.
+        Если в справочнике задана фасовка, под количеством видно размер упаковки. «В „Возьми“» копирует позиции «к покупке» в буфер
+        (только строки товаров, без заголовка) — затем в «Возьми»: «Вставить список → Из буфера».
       </p>
       <div className="actions">
         <ActionButton
@@ -184,22 +167,15 @@ export function ShoppingScreen() {
               return
             }
             try {
-              const stamp = todayAtSite().date.replaceAll('-', '')
-              const how = await shareVoimiList(text, `dachabook-voimi-${stamp}.txt`)
+              const how = await copyVoimiList(text)
               if (how === 'manual') {
                 setManualText(text)
                 return
               }
               setNotice(
-                how === 'shared'
-                  ? `Список из ${open.length} поз. готов — выберите «Возьми» в меню «Поделиться» или сохраните файл.`
-                  : `Скопировано ${open.length} поз. Откройте «Возьми» → вставить список из буфера.`,
+                `Скопировано ${open.length} поз. Откройте «Возьми» → Вставить список → Из буфера.`,
               )
             } catch (caught) {
-              if (caught instanceof DOMException && caught.name === 'AbortError') {
-                setNotice('Отправка отменена.')
-                return
-              }
               setError(errorText(caught))
             }
           }}
