@@ -52,15 +52,25 @@ export function shoppingQuantityText(item: Pick<ShoppingItem, 'quantity' | 'unit
   return quantityText(item.quantity, item.unit)
 }
 
+/**
+ * Единица содержимого упаковки: packUnit (если учёта в уп.), иначе единица учёта материала
+ * (когда в карточке «В одной упаковке, кг» и packUnit не пишется).
+ */
+export function shoppingPackContentUnit(packUnit: string | undefined, materialUnit: string | undefined): string {
+  return packUnit?.trim() || materialUnit?.trim() || 'ед.'
+}
+
 /** Подпись фасовки из справочника: «5 уп. × 0,5 кг». */
 export function shoppingPackText(item: {
   quantity: number
   unit: string
   packQuantity?: number
   packUnit?: string
+  /** Единица учёта материала, если packUnit пуст. */
+  materialUnit?: string
 }): string | undefined {
   if (!(item.packQuantity && item.packQuantity > 0)) return undefined
-  const pack = quantityText(item.packQuantity, item.packUnit?.trim() || 'ед.')
+  const pack = quantityText(item.packQuantity, shoppingPackContentUnit(item.packUnit, item.materialUnit))
   return `${shoppingQuantityText(item)} × ${pack}`
 }
 
@@ -76,10 +86,11 @@ export function shoppingVoimiLine(item: {
   unit: string
   packQuantity?: number
   packUnit?: string
+  materialUnit?: string
 }): string {
   const pack =
     item.packQuantity && item.packQuantity > 0
-      ? ` (${qtyRu(item.packQuantity)} ${item.packUnit?.trim() || 'ед.'})`
+      ? ` (${qtyRu(item.packQuantity)} ${shoppingPackContentUnit(item.packUnit, item.materialUnit)})`
       : ''
   return `- [ ] ${item.name.trim()}${pack}: ${qtyRu(item.quantity)} ${item.unit.trim()}`
 }
@@ -92,6 +103,7 @@ export function shoppingVoimiText(
     unit: string
     packQuantity?: number
     packUnit?: string
+    materialUnit?: string
   }>,
 ): string {
   return items.map(shoppingVoimiLine).join('\n')

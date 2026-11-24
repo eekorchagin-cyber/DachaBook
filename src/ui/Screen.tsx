@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
-import { goBack, useBackTarget } from '../app/router'
+import { goBack, pathFromHash, useBackTarget } from '../app/router'
 import { WorkBadge } from '../plan/WorkBadge'
 import { HelpButton } from './HelpButton'
 import { UpdateBanner } from './UpdateBanner'
@@ -87,7 +87,11 @@ export function Screen(props: {
             href={`#${tab.path}`}
             className={tab.path === props.tab ? 'tab active' : 'tab'}
             onClick={(event) => {
-              if (!props.leaveGuard || tab.path === props.tab) return
+              if (!props.leaveGuard) return
+              // Не сравнивать с props.tab: у редактора дневника tab="/diary", а путь — /diary/id.
+              // Клик по «Дневник» должен спрашивать про несохранённые правки.
+              const current = (pathFromHash(location.hash).split('?')[0] || '/')
+              if (tab.path === current) return
               event.preventDefault()
               props.leaveGuard(tab.path)
             }}

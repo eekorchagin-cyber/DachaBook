@@ -45,6 +45,17 @@ let currentHashPath = pathFromHash(typeof location === 'undefined' ? '' : locati
 let backStack: string[] = []
 /** Следующая смена hash уже учтена в goBack/navigate — повторно стек не трогаем. */
 let ignoreHashOnce: string | null = null
+/**
+ * Блокировка ухода с формы с несохранёнными правками.
+ * Вернуть true — откатить hash и не обновлять стек; false — обычный переход.
+ */
+type LeaveBlocker = (nextPath: string) => boolean
+let leaveBlocker: LeaveBlocker | null = null
+
+/** Редактор с dirty-формой регистрирует блокировку; перед осознанным уходом снимает её. */
+export function setLeaveBlocker(blocker: LeaveBlocker | null): void {
+  leaveBlocker = blocker
+}
 
 function truncateStackTo(next: string): boolean {
   const key = routeKey(next)
@@ -63,6 +74,16 @@ function rememberHashChange(nextHash?: string): void {
   }
   if (routeKey(next) === routeKey(currentHashPath)) {
     currentHashPath = next
+    return
+  }
+  // Несохранённая форма: откатываем hash (системная «назад», смена вкладки без leaveGuard и т.п.).
+  if (leaveBlocker && leaveBlocker(next)) {
+    const restore = currentHashPath
+    ignoreHashOnce = restore
+    const hash = restore.startsWith('#') ? restore : `#${restore}`
+    if (typeof location !== 'undefined' && pathFromHash(location.hash) !== pathFromHash(hash)) {
+      location.hash = hash
+    }
     return
   }
   // Тот же экран, другие параметры (дата «В этот день», вкладка настроек) — не новый уровень «назад».

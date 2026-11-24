@@ -11,22 +11,54 @@ import { EmptyState, Screen } from '../ui/Screen'
 import { ActionButton } from '../ui/Section'
 import { errorText } from '../lib/format'
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 
-/** Скопировать текст в буфер; если нельзя — скачать .txt для вставки в «Возьми». */
-async function copyOrDownloadVoimi(text: string, fileName: string): Promise<'copied' | 'downloaded'> {
+async function copyText(value: string): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(text)
-    return 'copied'
+    await navigator.clipboard.writeText(value)
+    return true
   } catch {
-    /* запасной путь ниже */
+    try {
+      const area = document.createElement('textarea')
+      area.value = value
+      area.setAttribute('readonly', '')
+      area.style.position = 'fixed'
+      area.style.left = '-9999px'
+      document.body.append(area)
+      area.select()
+      const ok = document.execCommand('copy')
+      area.remove()
+      return ok
+    } catch {
+      return false
+    }
   }
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileName
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 60_000)
-  return 'downloaded'
+}
+
+/**
+ * Отдать список в «Возьми»: на телефоне — системное «Поделиться», иначе буфер.
+ * Скачивание .txt на iPhone часто молчит, поэтому не считаем его успехом без проверки.
+ */
+async function shareVoimiList(text: string, fileName: string): Promise<'shared' | 'copied' | 'manual'> {
+  const file = new File([text], fileName, { type: 'text/plain' })
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Список покупок' })
+      return 'shared'
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+  }
+  try {
+    if (navigator.share) {
+      await navigator.share({ text, title: 'Список покупок' })
+      return 'shared'
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+  }
+  if (await copyText(text)) return 'copied'
+  return 'manual'
 }
 
 /** Рассчитанные покупки по всем работам плана — без уже купленных дублей. */
@@ -81,6 +113,8 @@ export function ShoppingScreen() {
   const items = useLiveQuery(() => db.shoppingItems.filter((item) => !item.deletedAt).toArray(), [])
   const consumables = useLiveQuery(() => db.consumables.filter((item) => !item.deletedAt).toArray(), [])
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [manualText, setManualText] = useState<string | null>(null)
   const list = [...(items ?? [])].sort((a, b) => Number(a.status === 'bought') - Number(b.status === 'bought') || a.name.localeCompare(b.name, 'ru'))
   const open = list.filter((item) => item.status === 'toBuy')
   const bought = list.filter((item) => item.status === 'bought')
@@ -92,6 +126,7 @@ export function ShoppingScreen() {
       unit: item.unit,
       packQuantity: material?.packQuantity,
       packUnit: material?.packUnit,
+      materialUnit: material?.unit,
     })
   }
 
@@ -100,20 +135,21 @@ export function ShoppingScreen() {
       <p className="hint">
         Рассчитанные покупки из плана. Один материал — одна строка. Нажмите название в «К покупке», чтобы перенести в «Куплено».
         Если в справочнике задана фасовка, под количеством видно размер упаковки. «В „Возьми“» отдаёт позиции «к покупке» текстом
-        (буфер или файл .txt) для импорта в семейный список.
+        (поделиться или буфер) для импорта в семейный список.
       </p>
       <div className="actions">
         <ActionButton
           onRun={async () => {
             setError('')
+            setNotice('')
             try {
               const drafts = await draftsFromPlan()
               if (drafts.length === 0) {
-                alert('Сейчас в плане нет покупок с заполненным запасом и количеством упаковок.')
+                setNotice('Сейчас в плане нет покупок с заполненным запасом и количеством упаковок.')
                 return
               }
               const result = await addToShoppingList(drafts)
-              alert(
+              setNotice(
                 result.added + result.updated > 0
                   ? `Добавлено ${result.added}, обновлено ${result.updated}.`
                   : 'Все рассчитанные покупки уже в списке.',
@@ -130,6 +166,7 @@ export function ShoppingScreen() {
           disabled={open.length === 0}
           onRun={async () => {
             setError('')
+            setNotice('')
             const lines = open.map((item) => {
               const material = consumableById.get(item.consumableId)
               return {
@@ -138,22 +175,31 @@ export function ShoppingScreen() {
                 unit: item.unit,
                 packQuantity: material?.packQuantity,
                 packUnit: material?.packUnit,
+                materialUnit: material?.unit,
               }
             })
             const text = shoppingVoimiText(lines)
             if (!text.trim()) {
-              alert('В «К покупке» сейчас пусто.')
+              setNotice('В «К покупке» сейчас пусто.')
               return
             }
             try {
               const stamp = todayAtSite().date.replaceAll('-', '')
-              const how = await copyOrDownloadVoimi(text, `dachabook-voimi-${stamp}.txt`)
-              alert(
-                how === 'copied'
-                  ? `Скопировано ${open.length} поз. Откройте «Возьми» → вставить список из буфера.`
-                  : `Сохранён файл со списком (${open.length} поз.). В «Возьми» импортируйте его из файла.`,
+              const how = await shareVoimiList(text, `dachabook-voimi-${stamp}.txt`)
+              if (how === 'manual') {
+                setManualText(text)
+                return
+              }
+              setNotice(
+                how === 'shared'
+                  ? `Список из ${open.length} поз. готов — выберите «Возьми» в меню «Поделиться» или сохраните файл.`
+                  : `Скопировано ${open.length} поз. Откройте «Возьми» → вставить список из буфера.`,
               )
             } catch (caught) {
+              if (caught instanceof DOMException && caught.name === 'AbortError') {
+                setNotice('Отправка отменена.')
+                return
+              }
               setError(errorText(caught))
             }
           }}
@@ -161,6 +207,7 @@ export function ShoppingScreen() {
           В «Возьми»
         </ActionButton>
       </div>
+      {notice && <p className="notice">{notice}</p>}
       {error && <p className="error">{error}</p>}
       {items && list.length === 0 && <EmptyState>Список пуст. В карточке работы нажмите «В «Купить»» или добавьте рассчитанные здесь.</EmptyState>}
       {open.length > 0 && (
@@ -227,6 +274,34 @@ export function ShoppingScreen() {
           </ul>
         </section>
       )}
+      {manualText !== null &&
+        createPortal(
+          <div className="dialog-backdrop" role="presentation">
+            <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="voimi-manual-title">
+              <h2 id="voimi-manual-title">Скопируйте для «Возьми»</h2>
+              <p>Буфер и «Поделиться» недоступны. Выделите текст и скопируйте, затем вставьте в «Возьми».</p>
+              <textarea className="input" rows={8} readOnly value={manualText} onFocus={(event) => event.currentTarget.select()} />
+              <div className="actions dialog-actions">
+                <ActionButton
+                  onRun={async () => {
+                    if (await copyText(manualText)) {
+                      setManualText(null)
+                      setNotice('Скопировано. Откройте «Возьми» → вставить список из буфера.')
+                      return
+                    }
+                    setError('Не удалось скопировать. Выделите текст вручную.')
+                  }}
+                >
+                  Скопировать
+                </ActionButton>
+                <button type="button" className="button secondary" onClick={() => setManualText(null)}>
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </Screen>
   )
 }

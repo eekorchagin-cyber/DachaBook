@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { navigate } from '../../app/router'
+import { navigate, setLeaveBlocker } from '../../app/router'
 import { pageLink } from '../../domain/labelProgram'
 import { repo } from '../../app/store'
 import type { DocInput, ReferenceMaterial } from '../../domain/types'
@@ -107,6 +107,8 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
   const formatted = !!material?.source
   const [editBody, setEditBody] = useState(!formatted)
 
+  const allowLeaveRef = useRef(false)
+
   useEffect(() => {
     if (!dirty) return
     const warn = (event: BeforeUnloadEvent) => event.preventDefault()
@@ -114,11 +116,32 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
 
+  useEffect(() => {
+    if (!dirty) {
+      setLeaveBlocker(null)
+      return
+    }
+    setLeaveBlocker((next) => {
+      if (allowLeaveRef.current) {
+        allowLeaveRef.current = false
+        return false
+      }
+      setLeavePath(next)
+      return true
+    })
+    return () => setLeaveBlocker(null)
+  }, [dirty])
+
   const update = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }))
   const toggle = (key: 'objectIds' | 'plantGroupIds', value: string) =>
     update({ [key]: draft[key].includes(value) ? draft[key].filter((item) => item !== value) : [...draft[key], value] })
   const back = material ? `/library/${material.id}` : '/library'
+  const releaseLeave = () => {
+    allowLeaveRef.current = true
+    setLeaveBlocker(null)
+  }
   const go = (path: string) => {
+    releaseLeave()
     setInitial(JSON.stringify(draft))
     setLeavePath(null)
     navigate(path)
@@ -141,6 +164,7 @@ function ReferenceForm({ material }: { material?: ReferenceMaterial }) {
         source: material?.source,
       }
       const saved = material ? await repo.update('references', material.id, input, material.revision) : await repo.create('references', input)
+      releaseLeave()
       setInitial(JSON.stringify(draft))
       setLeavePath(null)
       navigate(afterPath ?? `/library/${saved.id}`)
