@@ -386,7 +386,6 @@ export function ConsumablesScreen() {
   }
 
   const objectNames = (ids: string[]) => ids.map((id) => objects.find((object) => object.id === id)?.name).filter(Boolean).join(', ')
-  const linked = (ids: string[]) => objects.filter((object) => ids.includes(object.id)).map((object) => ({ name: object.name, areaM2: object.areaM2 }))
   const active = consumables.filter((item) => item.active && includesAllWords(query, `${item.name} ${item.kind ?? ''} ${item.place ?? ''} ${item.description ?? ''}`)).sort(byName)
   const archived = consumables.filter((item) => !item.active).sort(byName)
   const placeGroups = groupByPlace(active)
