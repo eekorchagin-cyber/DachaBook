@@ -15,69 +15,9 @@ import { SuggestInput } from '../ui/SuggestInput'
 import { ActionButton } from '../ui/Section'
 import { includesAllWords } from '../domain/diaryFilter'
 import { CareLinks } from './CareLinks'
+import { GrowingTextarea } from '../ui/GrowingTextarea'
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru')
-
-/** Группы растений из работ, где выбран материал: площадь для удобрений живёт у группы. */
-function UsedInGroups({ consumableId, fromWork }: { consumableId: string; fromWork?: string }) {
-  const works = useLiveQuery(
-    () => db.planWorks.filter((work) => !work.deletedAt && (work.consumableIds ?? []).includes(consumableId)).toArray(),
-    [consumableId],
-  )
-  const groups = useLiveQuery(() => db.plantGroups.filter((group) => !group.deletedAt).toArray(), []) ?? []
-  if (!works || works.length === 0) return null
-  const ids = [...new Set(works.flatMap((work) => work.plantGroupIds))]
-  const listed = ids
-    .map((id) => groups.find((group) => group.id === id))
-    .filter((group): group is PlantGroup => !!group)
-    .sort(byName)
-  if (listed.length === 0) return null
-  const back = encodeURIComponent(`/consumables?id=${consumableId}${fromWork ? `&work=${fromWork}` : ''}`)
-  return (
-    <div className="material-works">
-      <p className="hint">Группы растений в работах с этим материалом. Площадь для удобрений задаётся у группы.</p>
-      {listed.map((group) => (
-        <a key={group.id} className="source-link" href={`#/objects?view=groups&group=${group.id}&back=${back}`}>
-          Группа «{group.name}»
-          {group.areaM2 !== undefined ? ` · ${group.areaM2} м²` : ' · площадь не указана'}
-        </a>
-      ))}
-    </div>
-  )
-}
-
-/** Один материал может быть в разных работах: уксус — хвойным и бойлеру, масло — газонокосилке. Норма на 1 раз у каждой работы своя. */
-function UsedInWorks({ consumableId }: { consumableId: string }) {
-  const works = useLiveQuery(
-    () => db.planWorks.filter((work) => !work.deletedAt && (work.consumableIds ?? []).includes(consumableId)).toArray(),
-    [consumableId],
-  )
-  const objects = useLiveQuery(() => db.objects.toArray(), []) ?? []
-  const groups = useLiveQuery(() => db.plantGroups.toArray(), []) ?? []
-  if (!works || works.length === 0) return null
-  const nameOf = (ids: string[], source: { id: string; name: string }[]) => ids.map((id) => source.find((item) => item.id === id)?.name).filter(Boolean)
-  const listed = [...works].sort((a, b) => a.title.localeCompare(b.title, 'ru'))
-  return (
-    <div className="material-works">
-      <h3 className="section-title">Где используется</h3>
-      <p className="hint">Для удобрений количество на 1 раз считается по площади группы растений × норму на м². Для объектов без площади (масло, бойлер) норму на 1 раз задают в карточке работы.</p>
-      {listed.map((work) => {
-        const rate = work.consumableRates?.[consumableId]
-        const where = [...nameOf(work.plantGroupIds, groups).map((name) => `группа «${name}»`), ...nameOf(work.objectIds, objects).map((name) => `объект «${name}»`)]
-        const amount = rate ? `${quantityText(rate.quantity, rate.unit || '')} на 1 раз` : ''
-        return (
-          <p key={work.id}>
-            <a className="source-link" href={`#/works?work=${work.id}&back=${encodeURIComponent(`/consumables?id=${consumableId}`)}`}>
-              {work.title}
-            </a>
-            {where.length > 0 ? ` — ${where.join(', ')}` : ''}
-            {amount ? `, ${amount}` : ''}
-          </p>
-        )
-      })}
-    </div>
-  )
-}
 
 const num = (value: number | undefined) => (value === undefined ? '' : value.toLocaleString('ru-RU', { maximumFractionDigits: 3 }))
 
@@ -85,13 +25,11 @@ function ConsumableForm({
   consumable,
   consumables,
   objects,
-  fromWork,
   onClose,
 }: {
   consumable?: Consumable
   consumables: Consumable[]
   objects: CareObject[]
-  fromWork?: string
   onClose: () => void
 }) {
   const [name, setName] = useState(consumable?.name ?? '')
@@ -101,6 +39,7 @@ function ConsumableForm({
   const [rate, setRate] = useState(consumable?.ratePerM2?.toString() ?? '')
   const [rateUnit, setRateUnit] = useState(consumable?.rateUnit ?? suggestedRateUnit(consumable?.unit ?? 'кг'))
   const [pack, setPack] = useState(consumable?.packQuantity?.toString() ?? '')
+  const [applications, setApplications] = useState(consumable?.applications?.toString() ?? '')
   const [objectIds, setObjectIds] = useState<string[]>(consumable?.objectIds ?? [])
   const [note, setNote] = useState(consumable?.note ?? '')
   const [description, setDescription] = useState(consumable?.description ?? '')
@@ -113,6 +52,8 @@ function ConsumableForm({
   const nameTaken = !!duplicate && duplicate.id !== consumable?.id
   const rateInvalid = !!rate.trim() && parseQuantity(rate) === undefined
   const packInvalid = !!pack.trim() && parseQuantity(pack) === undefined
+  const appsParsed = applications.trim() ? Number(applications.trim()) : undefined
+  const appsInvalid = !!applications.trim() && (!Number.isFinite(appsParsed) || (appsParsed ?? 0) < 1 || !Number.isInteger(appsParsed))
   const materialUnit = unit.trim() || 'шт.'
   const substance = substanceUnit(rateUnit, materialUnit)
   const separate = convertQuantity(1, materialUnit, substance) === null
@@ -126,7 +67,7 @@ function ConsumableForm({
     unit: materialUnit,
     ratePerM2: parseQuantity(rate),
     rateUnit,
-    applications: 1,
+    applications: appsParsed && appsParsed > 0 ? appsParsed : 1,
     packQuantity: parseQuantity(pack),
     packUnit: separate ? substance : undefined,
     areas: uniqueGroupAreas,
@@ -146,6 +87,7 @@ function ConsumableForm({
       unit: materialUnit,
       ratePerM2: parseQuantity(rate),
       rateUnit: parseQuantity(rate) ? rateUnit.trim() || 'г' : undefined,
+      applications: appsParsed && appsParsed > 0 ? appsParsed : undefined,
       packQuantity: parseQuantity(pack),
       packUnit: separate && parseQuantity(pack) ? substance : undefined,
       objectIds,
@@ -171,7 +113,7 @@ function ConsumableForm({
 
   return (
     <section className="card">
-      <h2>{consumable ? 'Изменить материал' : 'Новый расходный материал'}</h2>
+      <h2 className="block-title">{consumable ? 'Изменить материал' : 'Новый расходный материал'}</h2>
       <label className="field">
         Название
         <input placeholder="Например, «Азофоска» или «Мульча из коры»" value={name} onChange={(event) => setName(event.target.value)} />
@@ -217,7 +159,13 @@ function ConsumableForm({
       </label>
       <label className="field">
         Описание
-        <textarea rows={3} placeholder="Что это и для чего: состав, действие, когда применять" value={description} onChange={(event) => setDescription(event.target.value)} />
+        <GrowingTextarea
+          aria-label="Описание"
+          rows={3}
+          placeholder="Что это и для чего: состав, действие, когда применять. Нормы для разных культур можно уточнить в связках ниже."
+          value={description}
+          onChange={setDescription}
+        />
       </label>
       <label className="field">
         Ссылка на источник в интернете
@@ -231,21 +179,6 @@ function ConsumableForm({
           </a>
         </p>
       )}
-      {objects.length > 0 && (
-        <fieldset className="chips">
-          <legend>Для каких объектов (справочно)</legend>
-          <p className="hint">Отметка «где ещё применяют», без расчёта нормы. Норму удобрений считают по группе растений в связке ниже, чтобы не удваивать площадь газона и травы.</p>
-          {objects
-            .filter((object) => object.active || objectIds.includes(object.id))
-            .map((object) => (
-              <label key={object.id} className={objectIds.includes(object.id) ? 'chip active' : 'chip'}>
-                <input type="checkbox" checked={objectIds.includes(object.id)} onChange={() => toggle(object.id)} />
-                {object.name}
-                {object.areaM2 ? ` · ${object.areaM2} м²` : ''}
-              </label>
-            ))}
-        </fieldset>
-      )}
       <div className="calc-grid">
         <label className="field">
           Единица учёта
@@ -256,7 +189,7 @@ function ConsumableForm({
           <input aria-label="В одной единице учёта" inputMode="decimal" placeholder={separate ? 'Например: 10' : 'необязательно'} value={pack} onChange={(event) => setPack(event.target.value)} />
         </label>
         <div className="field span">
-          <span className="field-label">Норма внесения на 1 м²</span>
+          <span className="field-label">Норма внесения на 1 м² (по умолчанию)</span>
           <span className="measure-line">
             <input aria-label="Число нормы на 1 м²" inputMode="decimal" placeholder="50" value={rate} onChange={(event) => setRate(event.target.value)} />
             <select aria-label="Единица нормы" value={rateUnit} onChange={(event) => setRateUnit(event.target.value)}>
@@ -270,7 +203,11 @@ function ConsumableForm({
           </span>
         </div>
         <label className="field">
-          На 1 раз
+          Раз за сезон (по умолчанию)
+          <input aria-label="Раз за сезон" inputMode="numeric" placeholder="например: 3" value={applications} onChange={(event) => setApplications(event.target.value)} />
+        </label>
+        <label className="field">
+          На 1 раз (по связанным группам)
           <span className="result-line">
             <input aria-label="На 1 раз" readOnly value={num(plan.perUse)} placeholder="—" />
             <span className="suffix">{plan.perUse === undefined ? '' : plan.measureUnit}</span>
@@ -278,13 +215,14 @@ function ConsumableForm({
         </label>
         {rateInvalid && <p className="error span">Норма — положительное число, обычно в граммах.</p>}
         {packInvalid && <p className="error span">Содержимое одной единицы — положительное число.</p>}
+        {appsInvalid && <p className="error span">Кратность — целое число раз за сезон, не меньше 1.</p>}
         {plan.warnings.map((warning) => (
           <p key={warning} className="hint span">
             {warning}
           </p>
         ))}
         <p className="hint span">
-          «На 1 раз» здесь — по площади групп из связок ниже (не по объектам участка). Сколько раз вносить и сколько купить на сезон — в карточке работы плана.
+          Общая норма и кратность подставляются в новые связки с группами. Для каждой культуры их можно изменить отдельно. Для оборудования (масло, бойлер) норму на 1 раз задают в карточке работы плана.
         </p>
       </div>
       {consumable ? (
@@ -295,6 +233,7 @@ function ConsumableForm({
             unit: materialUnit,
             ratePerM2: parseQuantity(rate),
             rateUnit: parseQuantity(rate) ? rateUnit.trim() || 'г' : undefined,
+            applications: appsParsed && appsParsed > 0 ? appsParsed : undefined,
             packQuantity: parseQuantity(pack),
             packUnit: separate && parseQuantity(pack) ? substance : undefined,
           }}
@@ -302,14 +241,30 @@ function ConsumableForm({
       ) : (
         <p className="hint">Сохраните материал, затем свяжите его с группой растений и видом работ — так посчитается количество удобрения.</p>
       )}
+      {objects.length > 0 && (
+        <section className="material-objects">
+          <h3 className="block-title">На каких объектах используется</h3>
+          <p className="hint">Справочная отметка (газон, косилка, бойлер). Норму удобрений считают по группам растений выше; для оборудования количество на 1 раз задают в плане работ.</p>
+          <fieldset className="chips">
+            <legend className="visually-hidden">Объекты</legend>
+            {objects
+              .filter((object) => object.active || objectIds.includes(object.id))
+              .map((object) => (
+                <label key={object.id} className={objectIds.includes(object.id) ? 'chip active' : 'chip'}>
+                  <input type="checkbox" checked={objectIds.includes(object.id)} onChange={() => toggle(object.id)} />
+                  {object.name}
+                  {object.areaM2 ? ` · ${object.areaM2} м²` : ''}
+                </label>
+              ))}
+          </fieldset>
+        </section>
+      )}
       <label className="field">
         Примечание
-        <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+        <GrowingTextarea aria-label="Примечание" rows={2} value={note} onChange={setNote} />
       </label>
-      {consumable && <UsedInWorks consumableId={consumable.id} />}
-      {consumable && <UsedInGroups consumableId={consumable.id} fromWork={fromWork} />}
       <div className="actions">
-        <ActionButton disabled={!name.trim() || nameTaken || rateInvalid || packInvalid || link === null} onRun={() => save()}>
+        <ActionButton disabled={!name.trim() || nameTaken || rateInvalid || packInvalid || appsInvalid || link === null} onRun={() => save()}>
           Сохранить
         </ActionButton>
         {consumable && (
@@ -380,7 +335,7 @@ export function ConsumablesScreen() {
     }
     return (
       <Screen title="Расходные материалы" help="consumables" onBack={close} tab="/more">
-        <ConsumableForm key={editing.id ?? 'new'} consumable={consumable} consumables={consumables} objects={[...objects].sort(byName)} fromWork={fromWork ?? undefined} onClose={close} />
+        <ConsumableForm key={editing.id ?? 'new'} consumable={consumable} consumables={consumables} objects={[...objects].sort(byName)} onClose={close} />
       </Screen>
     )
   }

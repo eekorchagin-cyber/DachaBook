@@ -9,6 +9,7 @@ import { EmptyState, Screen } from '../ui/Screen'
 import { SearchButton, SearchQuery } from '../ui/SearchDialog'
 import { includesAllWords } from '../domain/diaryFilter'
 import { ActionButton } from '../ui/Section'
+import { GrowingTextarea } from '../ui/GrowingTextarea'
 
 const byDate = (a: FolkSign, b: FolkSign) => a.month - b.month || a.day - b.day || a.title.localeCompare(b.title, 'ru')
 
@@ -109,7 +110,7 @@ function SignForm({ sign, onClose }: { sign?: FolkSign; onClose: () => void }) {
       </label>
       <label className="field">
         Примета или совет
-        <textarea rows={3} value={text} onChange={(event) => setText(event.target.value)} />
+        <GrowingTextarea aria-label="Примета или совет" rows={3} value={text} onChange={setText} />
       </label>
       <label className="field">
         Источник (необязательно)

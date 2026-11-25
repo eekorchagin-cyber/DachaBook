@@ -10,6 +10,7 @@ import { includesAllWords } from '../domain/diaryFilter'
 import { EmptyState, Screen } from '../ui/Screen'
 import { SearchButton, SearchQuery } from '../ui/SearchDialog'
 import { ActionButton } from '../ui/Section'
+import { GrowingTextarea } from '../ui/GrowingTextarea'
 import { useForecast } from '../weather/service'
 import { skipWateringToday, undoWateringSkip } from '../watering/actions'
 import {
@@ -241,7 +242,7 @@ function ZoneForm({ zone, objects, onClose }: { zone?: WateringZone; objects: Ca
       </div>
       <label className="field">
         Примечание
-        <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} />
+        <GrowingTextarea aria-label="Примечание" rows={3} value={note} onChange={setNote} />
       </label>
       <div className="actions">
         <ActionButton disabled={!name.trim() || weekdays.length === 0} onRun={() => save()}>

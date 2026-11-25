@@ -122,6 +122,11 @@ export interface ConsumableUse {
 export interface PlantUse {
   plantGroupId: string
   workKind: string
+  /** Норма на 1 м² для этой группы; пусто — берётся общая норма материала. */
+  ratePerM2?: number
+  rateUnit?: string
+  /** Сколько раз за сезон по инструкции для этой группы; пусто — из расписания работ плана. */
+  applications?: number
 }
 
 /** Расходный материал для ухода за участком: удобрение, средство защиты, семена, мульча. */

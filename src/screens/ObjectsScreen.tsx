@@ -15,6 +15,7 @@ import { PhotoFields } from '../ui/PhotoFields'
 import { SearchButton, SearchQuery } from '../ui/SearchDialog'
 import { CopyLinkButton } from '../ui/CopyLinkButton'
 import { ActionButton } from '../ui/Section'
+import { GrowingTextarea } from '../ui/GrowingTextarea'
 import { useFertilizerLines } from './useFertilizerLines'
 import { WorkLinks } from './WorkLinks'
 
@@ -85,7 +86,7 @@ function ObjectForm({ object, onClose }: { object?: CareObject; onClose: () => v
       </label>
       <label className="field">
         Описание
-        <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
+        <GrowingTextarea aria-label="Описание" rows={2} value={description} onChange={setDescription} />
       </label>
       <h3 className="section-title">Фотографии</h3>
       <PhotoFields ids={photoIds} notes={fileNotes} onChange={(ids, notes) => { setPhotoIds(ids); setFileNotes(notes) }} />
@@ -195,7 +196,7 @@ function GroupForm({ group, objects, fromDictionaries, onClose }: { group?: Plan
       <p className="hint">Это площадь самих растений, а не всего места, где они растут. По ней считается удобрение, когда группа связана с видом работ и материалом.</p>
       <label className="field">
         Описание, сорта
-        <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
+        <GrowingTextarea aria-label="Описание группы" rows={2} value={description} onChange={setDescription} />
       </label>
       <h3 className="section-title">Фотографии</h3>
       <PhotoFields ids={photoIds} notes={fileNotes} onChange={(ids, notes) => { setPhotoIds(ids); setFileNotes(notes) }} />
