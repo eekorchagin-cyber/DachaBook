@@ -139,8 +139,18 @@ export interface Consumable extends DocMeta {
   /** Норма одного внесения на 1 м². Единица — rateUnit, иначе unit. Пример: 20 г/м² при учёте в кг. */
   ratePerM2?: number
   rateUnit?: string
-  /** Прежнее поле кратности. Сейчас число внесений считается по расписанию работы, где выбран этот материал. */
+  /**
+   * Сколько раз за сезон по инструкции (по умолчанию для связок с группами).
+   * Если задан график инструкции — обычно совпадает с числом сроков/повторов графика.
+   */
   applications?: number
+  /**
+   * График из инструкции производителя: сроки в году или окно сезона — тот же механизм, что у плана работ.
+   * Пусто — только число applications.
+   */
+  instructionRecurrence?: 'yearly' | 'season'
+  instructionPeriods?: PlanPeriod[]
+  instructionSchedule?: SeasonSchedule
   /** Сколько есть сейчас, в unit. Ноль — запас пуст. */
   stockQuantity?: number
   /**
@@ -162,6 +172,8 @@ export interface Consumable extends DocMeta {
   /** Страница в интернете: инструкция производителя, магазин. */
   url?: string
   note?: string
+  photoIds?: string[]
+  fileNotes?: Record<string, string>
   active: boolean
 }
 

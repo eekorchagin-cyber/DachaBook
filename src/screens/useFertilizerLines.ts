@@ -15,7 +15,9 @@ export function useFertilizerLines(options?: {
   workKind?: string
   consumableId?: string
   draftArea?: string
-  draftConsumable?: Partial<Pick<Consumable, 'unit' | 'ratePerM2' | 'rateUnit' | 'packQuantity' | 'packUnit' | 'applications'>>
+  draftConsumable?: Partial<
+    Pick<Consumable, 'unit' | 'ratePerM2' | 'rateUnit' | 'packQuantity' | 'packUnit' | 'applications' | 'instructionRecurrence' | 'instructionPeriods' | 'instructionSchedule'>
+  >
 }): FertilizerLine[] | undefined {
   const consumables = useLiveQuery(() => db.consumables.toArray(), [])
   const groups = useLiveQuery(() => db.plantGroups.toArray(), [])

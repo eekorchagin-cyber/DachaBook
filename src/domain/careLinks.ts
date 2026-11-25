@@ -43,6 +43,31 @@ export function useRate(use: PlantUse, item: Pick<Consumable, 'ratePerM2' | 'rat
   }
 }
 
+/** Кратность из инструкции материала: график или число «раз за сезон». */
+export function instructionApplications(
+  item: Pick<Consumable, 'applications' | 'instructionRecurrence' | 'instructionPeriods' | 'instructionSchedule'>,
+  today: string,
+): number | undefined {
+  if (item.instructionRecurrence === 'season' && item.instructionSchedule) {
+    const times = workTimes({ recurrence: 'season', periods: [], seasonSchedule: item.instructionSchedule }, today)
+    return times > 0 ? times : undefined
+  }
+  if (item.instructionRecurrence === 'yearly' && (item.instructionPeriods?.length ?? 0) > 0) {
+    return workTimes({ recurrence: 'yearly', periods: item.instructionPeriods ?? [], seasonSchedule: undefined }, today)
+  }
+  return item.applications && item.applications > 0 ? item.applications : undefined
+}
+
+/** Кратность для связки: своя, иначе из инструкции материала. */
+export function useApplications(
+  use: PlantUse,
+  item: Pick<Consumable, 'applications' | 'instructionRecurrence' | 'instructionPeriods' | 'instructionSchedule'>,
+  today: string,
+): number | undefined {
+  if (use.applications && use.applications > 0) return use.applications
+  return instructionApplications(item, today)
+}
+
 export interface FertilizerLine {
   consumableId: string
   name: string
@@ -107,7 +132,7 @@ export function fertilizerLines(input: {
       if (!group) continue
       const matched = worksForPlantUse(input.works, group, use.workKind)
       const fromPlan = matched.reduce((sum, work) => sum + workTimes(work, input.today), 0)
-      const instructed = use.applications ?? item.applications
+      const instructed = useApplications(use, item, input.today)
       const times = instructed && instructed > 0 ? instructed : fromPlan
       const { ratePerM2, rateUnit } = useRate(use, item)
       const base = {
