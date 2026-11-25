@@ -33,7 +33,7 @@ export function WorkLinks({ plantGroupId, objectId, returnPath }: { plantGroupId
   return (
     <section className="care-links">
       <h3 className="section-title">Работы и материалы</h3>
-      <p className="hint">Название, вид, описание и кратность берутся из карточки работы. Здесь их можно только посмотреть. Количество на 1 раз стоит после названия материала.</p>
+      <p className="hint">Название, вид, описание и кратность берутся из карточки работы. Здесь их можно только посмотреть. Количество на 1 раз стоит после названия материала. Все эти работы есть и в общем плане («Ещё → Работы → План работ»); без срока они там в блоке «Нужно уточнить».</p>
       {matched.length === 0 && <p className="hint">Работ пока нет.</p>}
       <WorkGroup title="Запланированные" works={groups.planned} plantGroupId={plantGroupId} consumables={consumables} lines={lines} returnPath={returnPath} />
       <WorkGroup title="Выполненные" works={groups.done} plantGroupId={plantGroupId} consumables={consumables} lines={lines} returnPath={returnPath} />
