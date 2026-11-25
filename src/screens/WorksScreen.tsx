@@ -28,8 +28,9 @@ import { SearchButton, SearchQuery } from '../ui/SearchDialog'
 import { ActionButton } from '../ui/Section'
 
 const GROUPS: { title: string; states: WorkStatus['state'][] }[] = [
+  { title: 'Нужно уточнить', states: ['check'] },
   { title: 'Сейчас', states: ['overdue', 'ready'] },
-  { title: 'Ждёт условий', states: ['waiting', 'check'] },
+  { title: 'Ждёт условий', states: ['waiting'] },
   { title: 'Скоро и позже', states: ['soon', 'postponed', 'planned'] },
   { title: 'Выполнено в этом году', states: ['done'] },
   { title: 'Пропущено в этом году', states: ['skipped'] },
@@ -870,6 +871,9 @@ function WorkForm({
       ) : (
         <PeriodsEditor periods={periods} onChange={setPeriods} />
       )}
+      {recurrence === 'yearly' && periods.length === 0 && !conditionType && (
+        <p className="hint">Без месяца или условия работа попадёт в план в блок «Нужно уточнить» — задайте срок, чтобы она появилась среди дел на дату.</p>
+      )}
       <WorkMaterials
         workId={workId}
         consumableIds={consumableIds}
@@ -1103,6 +1107,9 @@ export function WorksScreen({ settings }: { settings: AppSettings }) {
       {groups.map((group) => (
         <section key={group.title}>
           <h2 className="section-title">{group.title}</h2>
+          {group.title === 'Нужно уточнить' && (
+            <p className="hint">Нет месяца, условия или расписания — откройте работу и задайте срок. Пока срока нет, она не попадает в «Сейчас», хотя уже есть в общем плане (в том числе если добавили из карточки объекта).</p>
+          )}
           {group.title === 'Пропущено в этом году' && (
             <p className="hint">Если пропустили по ошибке — «Вернуть в этот год». Сама работа из плана не удаляется.</p>
           )}
