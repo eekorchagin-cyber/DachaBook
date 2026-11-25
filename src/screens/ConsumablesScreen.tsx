@@ -2,17 +2,20 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
 import { localPath, navigate, useRoute } from '../app/router'
 import { repo, useSettings } from '../app/store'
+import { workTimes } from '../domain/applications'
 import { findConsumable, normalizeUrl, parseQuantity, quantityText, UNITS, urlHost, usageByConsumable } from '../domain/consumables'
 import { groupByPlace, suggestStorage } from '../domain/placeSuggestion'
 import { todayAtSite } from '../domain/dates'
 import { convertQuantity, purchasePlan, substanceUnit, suggestedRateUnit } from '../domain/purchases'
-import type { CareObject, Consumable, DocInput, PlantGroup } from '../domain/types'
+import type { CareObject, Consumable, DocInput, PlanPeriod, PlantGroup, SeasonSchedule } from '../domain/types'
 import { db } from '../storage/db'
 import { EmptyState, Screen } from '../ui/Screen'
 import { SearchButton, SearchQuery } from '../ui/SearchDialog'
 import { PlaceHint } from '../ui/PlaceHint'
+import { PhotoFields } from '../ui/PhotoFields'
 import { SuggestInput } from '../ui/SuggestInput'
 import { ActionButton } from '../ui/Section'
+import { defaultSchedule, PeriodsEditor, scheduleProblem, SeasonEditor } from '../ui/ScheduleEditors'
 import { includesAllWords } from '../domain/diaryFilter'
 import { CareLinks } from './CareLinks'
 import { GrowingTextarea } from '../ui/GrowingTextarea'
@@ -40,10 +43,16 @@ function ConsumableForm({
   const [rateUnit, setRateUnit] = useState(consumable?.rateUnit ?? suggestedRateUnit(consumable?.unit ?? 'кг'))
   const [pack, setPack] = useState(consumable?.packQuantity?.toString() ?? '')
   const [applications, setApplications] = useState(consumable?.applications?.toString() ?? '')
+  const [instrKind, setInstrKind] = useState<'none' | 'yearly' | 'season'>(consumable?.instructionRecurrence ?? 'none')
+  const [periods, setPeriods] = useState<PlanPeriod[]>(consumable?.instructionPeriods ?? [])
+  const [schedule, setSchedule] = useState<SeasonSchedule>(consumable?.instructionSchedule ?? defaultSchedule())
+  const [rhythm, setRhythm] = useState<'weeks' | 'days'>(consumable?.instructionSchedule?.weekdays?.length ? 'days' : 'weeks')
   const [objectIds, setObjectIds] = useState<string[]>(consumable?.objectIds ?? [])
   const [note, setNote] = useState(consumable?.note ?? '')
   const [description, setDescription] = useState(consumable?.description ?? '')
   const [url, setUrl] = useState(consumable?.url ?? '')
+  const [photoIds, setPhotoIds] = useState(consumable?.photoIds ?? [])
+  const [fileNotes, setFileNotes] = useState(consumable?.fileNotes ?? {})
   const settings = useSettings()
   const units = settings?.consumableUnits ?? UNITS
   const kinds = settings?.consumableKinds ?? []
@@ -52,8 +61,18 @@ function ConsumableForm({
   const nameTaken = !!duplicate && duplicate.id !== consumable?.id
   const rateInvalid = !!rate.trim() && parseQuantity(rate) === undefined
   const packInvalid = !!pack.trim() && parseQuantity(pack) === undefined
+  const today = todayAtSite().date
+  const scheduleApps =
+    instrKind === 'season'
+      ? workTimes({ recurrence: 'season', periods: [], seasonSchedule: schedule }, today)
+      : instrKind === 'yearly' && periods.length > 0
+        ? workTimes({ recurrence: 'yearly', periods, seasonSchedule: undefined }, today)
+        : undefined
   const appsParsed = applications.trim() ? Number(applications.trim()) : undefined
-  const appsInvalid = !!applications.trim() && (!Number.isFinite(appsParsed) || (appsParsed ?? 0) < 1 || !Number.isInteger(appsParsed))
+  const appsInvalid =
+    instrKind === 'none' && !!applications.trim() && (!Number.isFinite(appsParsed) || (appsParsed ?? 0) < 1 || !Number.isInteger(appsParsed))
+  const seasonProblem = instrKind === 'season' ? scheduleProblem(schedule, rhythm) : ''
+  const effectiveApps = scheduleApps && scheduleApps > 0 ? scheduleApps : appsParsed && appsParsed > 0 ? appsParsed : undefined
   const materialUnit = unit.trim() || 'шт.'
   const substance = substanceUnit(rateUnit, materialUnit)
   const separate = convertQuantity(1, materialUnit, substance) === null
@@ -67,7 +86,7 @@ function ConsumableForm({
     unit: materialUnit,
     ratePerM2: parseQuantity(rate),
     rateUnit,
-    applications: appsParsed && appsParsed > 0 ? appsParsed : 1,
+    applications: effectiveApps ?? 1,
     packQuantity: parseQuantity(pack),
     packUnit: separate ? substance : undefined,
     areas: uniqueGroupAreas,
@@ -81,13 +100,33 @@ function ConsumableForm({
     setUnit(next)
   }
 
+  useEffect(() => {
+    if (scheduleApps && scheduleApps > 0) setApplications(String(scheduleApps))
+  }, [scheduleApps])
+
   const save = async (active = consumable?.active ?? true) => {
+    if (seasonProblem) throw new Error(seasonProblem)
+    const previewSchedule: SeasonSchedule | undefined =
+      instrKind === 'season'
+        ? {
+            fromMonth: schedule.fromMonth,
+            fromDay: schedule.fromDay,
+            toMonth: schedule.toMonth,
+            toDay: schedule.toDay,
+            ...(rhythm === 'days' ? { weekdays: [...(schedule.weekdays ?? [])].sort((a, b) => a - b) } : { everyWeeks: schedule.everyWeeks ?? 2 }),
+            timeFrom: schedule.timeFrom || undefined,
+            timeTo: schedule.timeTo || undefined,
+          }
+        : undefined
     const input: DocInput<Consumable> = {
       name: name.trim().replace(/\s+/g, ' '),
       unit: materialUnit,
       ratePerM2: parseQuantity(rate),
       rateUnit: parseQuantity(rate) ? rateUnit.trim() || 'г' : undefined,
-      applications: appsParsed && appsParsed > 0 ? appsParsed : undefined,
+      applications: effectiveApps,
+      instructionRecurrence: instrKind === 'none' ? undefined : instrKind,
+      instructionPeriods: instrKind === 'yearly' ? periods : undefined,
+      instructionSchedule: previewSchedule,
       packQuantity: parseQuantity(pack),
       packUnit: separate && parseQuantity(pack) ? substance : undefined,
       objectIds,
@@ -96,6 +135,8 @@ function ConsumableForm({
       description: description.trim() || undefined,
       url: link ?? undefined,
       note: note.trim() || undefined,
+      photoIds,
+      fileNotes,
       active,
     }
     if (consumable) {
@@ -202,10 +243,32 @@ function ConsumableForm({
             <span className="suffix">/ м²</span>
           </span>
         </div>
-        <label className="field">
-          Раз за сезон (по умолчанию)
-          <input aria-label="Раз за сезон" inputMode="numeric" placeholder="например: 3" value={applications} onChange={(event) => setApplications(event.target.value)} />
+        <label className="field span">
+          Как задать кратность по инструкции
+          <select
+            aria-label="Как задать кратность"
+            value={instrKind}
+            onChange={(event) => setInstrKind(event.target.value as 'none' | 'yearly' | 'season')}
+          >
+            <option value="none">Числом «раз за сезон»</option>
+            <option value="yearly">Сроками в году (как в плане работ)</option>
+            <option value="season">Расписанием в сезоне (как в плане работ)</option>
+          </select>
         </label>
+        {instrKind === 'none' ? (
+          <label className="field">
+            Раз за сезон (по умолчанию)
+            <input aria-label="Раз за сезон" inputMode="numeric" placeholder="например: 3" value={applications} onChange={(event) => setApplications(event.target.value)} />
+          </label>
+        ) : (
+          <label className="field">
+            Раз за сезон (из графика)
+            <span className="result-line">
+              <input aria-label="Раз за сезон из графика" readOnly value={effectiveApps ? String(effectiveApps) : ''} placeholder="—" />
+              <span className="suffix">подставляется в связки</span>
+            </span>
+          </label>
+        )}
         <label className="field">
           На 1 раз (по связанным группам)
           <span className="result-line">
@@ -216,15 +279,30 @@ function ConsumableForm({
         {rateInvalid && <p className="error span">Норма — положительное число, обычно в граммах.</p>}
         {packInvalid && <p className="error span">Содержимое одной единицы — положительное число.</p>}
         {appsInvalid && <p className="error span">Кратность — целое число раз за сезон, не меньше 1.</p>}
+        {seasonProblem && <p className="error span">{seasonProblem}</p>}
         {plan.warnings.map((warning) => (
           <p key={warning} className="hint span">
             {warning}
           </p>
         ))}
         <p className="hint span">
-          Общая норма и кратность подставляются в новые связки с группами. Для каждой культуры их можно изменить отдельно. Для оборудования (масло, бойлер) норму на 1 раз задают в карточке работы плана.
+          Норма и кратность из инструкции подставляются в связки с группами; для каждой культуры их можно изменить. Для оборудования (масло, бойлер) расход на 1 раз задают в карточке работы.
         </p>
       </div>
+      {instrKind === 'yearly' && (
+        <PeriodsEditor periods={periods} onChange={setPeriods} legend="График по инструкции: сроки в году" />
+      )}
+      {instrKind === 'season' && (
+        <SeasonEditor
+          schedule={schedule}
+          rhythm={rhythm}
+          onSchedule={setSchedule}
+          onRhythm={setRhythm}
+          legend="График по инструкции: повтор в сезоне"
+        />
+      )}
+      <h3 className="block-title">Фотографии</h3>
+      <PhotoFields ids={photoIds} notes={fileNotes} onChange={(ids, notes) => { setPhotoIds(ids); setFileNotes(notes) }} />
       {consumable ? (
         <CareLinks
           consumableId={consumable.id}
@@ -233,7 +311,10 @@ function ConsumableForm({
             unit: materialUnit,
             ratePerM2: parseQuantity(rate),
             rateUnit: parseQuantity(rate) ? rateUnit.trim() || 'г' : undefined,
-            applications: appsParsed && appsParsed > 0 ? appsParsed : undefined,
+            applications: effectiveApps,
+            instructionRecurrence: instrKind === 'none' ? undefined : instrKind,
+            instructionPeriods: instrKind === 'yearly' ? periods : undefined,
+            instructionSchedule: instrKind === 'season' ? schedule : undefined,
             packQuantity: parseQuantity(pack),
             packUnit: separate && parseQuantity(pack) ? substance : undefined,
           }}
@@ -264,7 +345,7 @@ function ConsumableForm({
         <GrowingTextarea aria-label="Примечание" rows={2} value={note} onChange={setNote} />
       </label>
       <div className="actions">
-        <ActionButton disabled={!name.trim() || nameTaken || rateInvalid || packInvalid || appsInvalid || link === null} onRun={() => save()}>
+        <ActionButton disabled={!name.trim() || nameTaken || rateInvalid || packInvalid || appsInvalid || !!seasonProblem || link === null} onRun={() => save()}>
           Сохранить
         </ActionButton>
         {consumable && (

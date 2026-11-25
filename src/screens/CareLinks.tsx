@@ -1,8 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useState } from 'react'
 import { repo, useSettings } from '../app/store'
-import { replaceUse, withoutUse, withUse, type FertilizerLine } from '../domain/careLinks'
+import { instructionApplications, replaceUse, withoutUse, withUse, type FertilizerLine } from '../domain/careLinks'
 import { parseQuantity, quantityText } from '../domain/consumables'
+import { todayAtSite } from '../domain/dates'
 import type { Consumable, PlantUse } from '../domain/types'
 import { db } from '../storage/db'
 import { ActionButton } from '../ui/Section'
@@ -52,7 +53,9 @@ export function CareLinks({
   /** Куда вернуться из соседней карточки, путь без #. */
   returnPath: string
   draftArea?: string
-  draftConsumable?: Partial<Pick<Consumable, 'unit' | 'ratePerM2' | 'rateUnit' | 'packQuantity' | 'packUnit' | 'applications'>>
+  draftConsumable?: Partial<
+    Pick<Consumable, 'unit' | 'ratePerM2' | 'rateUnit' | 'packQuantity' | 'packUnit' | 'applications' | 'instructionRecurrence' | 'instructionPeriods' | 'instructionSchedule'>
+  >
 }) {
   const lines = useFertilizerLines({ plantGroupId, workKind, consumableId, draftArea, draftConsumable })
   const groups = useLiveQuery(() => db.plantGroups.filter((group) => !group.deletedAt).toArray(), []) ?? []
@@ -61,13 +64,15 @@ export function CareLinks({
   const units = useSettings()?.consumableUnits ?? ['г', 'кг', 'мл', 'л']
   const title = plantGroupId ? 'Работы и материалы' : workKind ? workKind : 'Группы растений и виды работ'
   const here = { plantGroupId, workKind, consumableId }
-  const defaults = consumableId ? materials.find((item) => item.id === consumableId) : undefined
+  const storedMaterial = consumableId ? materials.find((item) => item.id === consumableId) : undefined
+  const defaults: Partial<Consumable> | undefined = storedMaterial || draftConsumable ? { ...storedMaterial, ...draftConsumable } : undefined
+  const instructionApps = defaults ? instructionApplications(defaults, todayAtSite().date) : undefined
 
   return (
     <section className="care-links">
       <h3 className="block-title">{title}</h3>
       <p className="hint">
-        Потребность считают от группы растений: площадь группы × норма на 1 м² × сколько раз за сезон. Норма и кратность по умолчанию — из карточки материала, для каждой группы их можно изменить (например, 50 г/м² × 3 раза для газонной травы и 70 г/м² × 2 раза для другой). Объект участка норму не задаёт.
+        Потребность считают от группы растений: площадь группы × норма на 1 м² × сколько раз за сезон. Норма и кратность по умолчанию — из карточки материала (в том числе из графика инструкции), для каждой группы их можно изменить. Объект участка норму не задаёт.
       </p>
       {lines === undefined && <p className="hint">Загрузка…</p>}
       {lines?.length === 0 && <p className="hint">Связки пока нет, поэтому количество для группы не считается.</p>}
@@ -81,7 +86,15 @@ export function CareLinks({
             </h4>
           )}
           {group.map((line) => (
-            <CareLine key={`${line.plantGroupId}:${line.workKind}:${line.consumableId}`} line={line} here={here} returnPath={returnPath} units={units} defaults={defaults} />
+            <CareLine
+              key={`${line.plantGroupId}:${line.workKind}:${line.consumableId}`}
+              line={line}
+              here={here}
+              returnPath={returnPath}
+              units={units}
+              defaults={defaults}
+              instructionApps={instructionApps}
+            />
           ))}
         </div>
       ))}
@@ -93,9 +106,9 @@ export function CareLinks({
         materials={[...materials].sort(byName)}
         kinds={kinds}
         units={units}
-        defaultRate={draftConsumable?.ratePerM2 ?? defaults?.ratePerM2}
-        defaultRateUnit={draftConsumable?.rateUnit ?? defaults?.rateUnit ?? 'г'}
-        defaultApplications={draftConsumable?.applications ?? defaults?.applications}
+        defaultRate={defaults?.ratePerM2}
+        defaultRateUnit={defaults?.rateUnit ?? 'г'}
+        defaultApplications={instructionApps}
       />
     </section>
   )
@@ -107,23 +120,31 @@ function CareLine({
   returnPath,
   units,
   defaults,
+  instructionApps,
 }: {
   line: FertilizerLine
   here: { plantGroupId?: string; workKind?: string; consumableId?: string }
   returnPath: string
   units: string[]
-  defaults?: Pick<Consumable, 'ratePerM2' | 'rateUnit' | 'applications'>
+  defaults?: Partial<Pick<Consumable, 'ratePerM2' | 'rateUnit' | 'applications'>>
+  instructionApps?: number
 }) {
   const material = useLiveQuery(() => db.consumables.get(line.consumableId), [line.consumableId])
   const stored = material?.plantUses?.find((use: { plantGroupId: string; workKind: string }) => use.plantGroupId === line.plantGroupId && use.workKind === line.workKind)
-  const [rate, setRate] = useState(() => String(line.ratePerM2 ?? defaults?.ratePerM2 ?? ''))
+  const defaultApps = stored?.applications ?? instructionApps
+  const [rate, setRate] = useState(() => {
+    const value = line.ratePerM2 ?? defaults?.ratePerM2
+    return value !== undefined ? String(value) : ''
+  })
   const [rateUnit, setRateUnit] = useState(() => line.rateUnit ?? defaults?.rateUnit ?? 'г')
-  const [apps, setApps] = useState(() => String(defaults?.applications ?? ''))
+  const [apps, setApps] = useState(() => (defaultApps !== undefined ? String(defaultApps) : ''))
   useEffect(() => {
-    setRate(String(stored?.ratePerM2 ?? line.ratePerM2 ?? defaults?.ratePerM2 ?? ''))
+    const nextRate = stored?.ratePerM2 ?? line.ratePerM2 ?? defaults?.ratePerM2
+    setRate(nextRate !== undefined ? String(nextRate) : '')
     setRateUnit(stored?.rateUnit ?? line.rateUnit ?? defaults?.rateUnit ?? 'г')
-    setApps(String(stored?.applications ?? defaults?.applications ?? ''))
-  }, [stored?.ratePerM2, stored?.rateUnit, stored?.applications, line.ratePerM2, line.rateUnit, defaults?.ratePerM2, defaults?.rateUnit, defaults?.applications])
+    const nextApps = stored?.applications ?? instructionApps
+    setApps(nextApps !== undefined ? String(nextApps) : '')
+  }, [stored?.ratePerM2, stored?.rateUnit, stored?.applications, line.ratePerM2, line.rateUnit, defaults?.ratePerM2, defaults?.rateUnit, instructionApps])
   const materialName = line.active ? line.name : `${line.name} (архив)`
   const amount = perUseText(line)
   const bits: { key: string; href: string; label: string }[] = []
@@ -143,7 +164,7 @@ function CareLine({
       workKind: line.workKind,
       ratePerM2: parsedRate,
       rateUnit: parsedRate ? rateUnit.trim() || 'г' : undefined,
-      applications: parsedApps,
+      applications: parsedApps ?? instructionApps,
     }
     await repo.update('consumables', item.id, { plantUses: replaceUse(item.plantUses ?? [], nextUse) }, item.revision)
   }
@@ -198,8 +219,17 @@ function CareLine({
           </div>
           <label className="field">
             Раз за сезон
-            <input aria-label={`Кратность ${line.groupName}`} inputMode="numeric" placeholder="из плана" value={apps} onChange={(event) => setApps(event.target.value)} />
+            <input
+              aria-label={`Кратность ${line.groupName}`}
+              inputMode="numeric"
+              placeholder={instructionApps !== undefined ? String(instructionApps) : 'из инструкции'}
+              value={apps}
+              onChange={(event) => setApps(event.target.value)}
+            />
           </label>
+          {instructionApps !== undefined && !stored?.applications && (
+            <p className="hint span">Подставлено из инструкции материала ({instructionApps}). Можно изменить и сохранить.</p>
+          )}
           <div className="actions span">
             <ActionButton onRun={saveNorm}>Сохранить норму группы</ActionButton>
           </div>
@@ -273,7 +303,7 @@ function LinkForm({
       workKind: chosenKind,
       ratePerM2: parsedRate ?? item.ratePerM2,
       rateUnit: (parsedRate ?? item.ratePerM2) ? rateUnit.trim() || item.rateUnit || 'г' : undefined,
-      applications: parsedApps ?? item.applications,
+      applications: parsedApps ?? instructionApplications(item, todayAtSite().date),
     }
     const next = withUse(item.plantUses ?? [], use)
     if (next.length === (item.plantUses ?? []).length) throw new Error('Такая связка уже есть. Измените норму в карточке связки выше.')

@@ -193,4 +193,21 @@ describe('связка группа — вид работ — материал',
     expect(line.need).toBe(5.6)
     expect(line.formula).toBe('40 м² × 70 г/м² × 2 = 5,6 кг')
   })
+
+  it('график инструкции материала задаёт кратность связки', () => {
+    const [line] = fertilizerLines({
+      consumables: [
+        material([{ plantGroupId: 'hydrangea', workKind: 'Подкормка' }], {
+          instructionRecurrence: 'yearly',
+          instructionPeriods: [{ month: 4 }, { month: 6 }, { month: 8 }],
+          applications: 3,
+        }),
+      ],
+      groups,
+      works: [],
+      today: '2026-11-01',
+    })
+    expect(line.times).toBe(3)
+    expect(line.need).toBe(6)
+  })
 })
