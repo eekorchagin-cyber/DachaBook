@@ -6,7 +6,9 @@ import { workTimes } from '../domain/applications'
 import { parseNonNegative, parseQuantity } from '../domain/consumables'
 import { MONTH_NAMES, todayAtSite } from '../domain/dates'
 import { isObservationHint, OBSERVATION_HINTS } from '../domain/observations'
+import { useRate } from '../domain/careLinks'
 import { buyPackages, packagesFromStore, packagesToStore, purchasePlan, rateAreas } from '../domain/purchases'
+import { GrowingTextarea } from '../ui/GrowingTextarea'
 import type { ShoppingDraft } from '../domain/shopping'
 import { addToShoppingList } from '../plan/shoppingActions'
 import { excerptAround, includesAllWords, normalizeText } from '../domain/diaryFilter'
@@ -252,7 +254,7 @@ function WorkItem({
 function PeriodsEditor({ periods, onChange }: { periods: PlanPeriod[]; onChange: (periods: PlanPeriod[]) => void }) {
   return (
     <fieldset className="periods">
-      <legend>Сроки (месяц и неделя)</legend>
+      <legend>Когда в году</legend>
       {periods.map((period, index) => (
         <div key={index} className="period-row">
           <select aria-label="Месяц" value={period.month} onChange={(event) => onChange(periods.map((item, current) => (current === index ? { ...item, month: Number(event.target.value) } : item)))}>
@@ -358,7 +360,7 @@ function SeasonEditor({ schedule, rhythm, onSchedule, onRhythm }: { schedule: Se
           </select>
         </div>
       ))}
-      <div className="period-row">
+      <div className="period-row period-row--times">
         <label className="field">
           Время с
           <input type="time" value={schedule.timeFrom ?? ''} onChange={(event) => onSchedule(patchSchedule(schedule, { timeFrom: event.target.value }))} />
@@ -390,6 +392,8 @@ function WorkMaterials({
   times,
   areas,
   areaKind,
+  groups,
+  workKind,
   onAdd,
   onStock,
   onSave,
@@ -407,6 +411,8 @@ function WorkMaterials({
   times: number
   areas: { name: string; areaM2?: number }[]
   areaKind: 'objects' | 'groups'
+  groups: { id: string; name: string; areaM2?: number }[]
+  workKind: string
   onAdd: (id: string) => Promise<void>
   onStock: (id: string, value: string) => void
   onSave: (id: string) => Promise<void>
@@ -425,13 +431,16 @@ function WorkMaterials({
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
   const available = consumables.filter((item) => item.active && !consumableIds.includes(item.id)).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
   const drafts: ShoppingDraft[] = selected.flatMap((item) => {
-    const { buy } = materialBuy(item, stocks[item.id] ?? '', times, areas, areaKind)
+    const { buy } = materialBuy(item, stocks[item.id] ?? '', times, areas, areaKind, groups, workKind, rates[item.id] ?? '', rateUnits[item.id] || item.unit)
     if (!(buy && buy > 0)) return []
     return [{ consumableId: item.id, name: item.name, quantity: buy, unit: 'уп.', workId }]
   })
   return (
     <fieldset className="periods">
       <legend>Материалы</legend>
+      <p className="hint">
+        Для групп растений количество берётся из нормы связки (можно поправить здесь). Для оборудования без площади — укажите расход на 1 раз вручную по инструкции на объект.
+      </p>
       {selected.length === 0 && consumables.length > 0 && <p className="hint">К этой работе материалы не выбраны.</p>}
       {selected.map((item) => (
         <MaterialNeed
@@ -441,6 +450,8 @@ function WorkMaterials({
           times={times}
           areas={areas}
           areaKind={areaKind}
+          groups={groups}
+          workKind={workKind}
           onStock={(value) => onStock(item.id, value)}
           onSave={() => onSave(item.id)}
           onRemove={() => onRemove(item.id)}
@@ -496,18 +507,90 @@ function WorkMaterials({
   )
 }
 
-function materialBuy(
+/** Расчёт потребности материала в работе: у групп — норма связки, у оборудования — ручное «на 1 раз». */
+function workMaterialPlan(
   item: Consumable,
-  stock: string,
   times: number,
   areas: { name: string; areaM2?: number }[],
   areaKind: 'objects' | 'groups',
-): { packs?: number; buy?: number; planNeed?: number; measureUnit: string } {
-  const plan = purchasePlan({
+  groups: { id: string; name: string; areaM2?: number }[],
+  workKind: string,
+  rate: string,
+  _rateUnit: string,
+) {
+  const manualQty = parseQuantity(rate)
+  if (areaKind === 'groups' && groups.length > 0 && !manualQty) {
+    let perUse = 0
+    let need = 0
+    let measureUnit = item.unit
+    const formulas: string[] = []
+    const warnings: string[] = []
+    let any = false
+    for (const group of groups) {
+      const use =
+        item.plantUses?.find((entry) => entry.plantGroupId === group.id && entry.workKind === workKind) ??
+        item.plantUses?.find((entry) => entry.plantGroupId === group.id)
+      const { ratePerM2, rateUnit: useUnit } = useRate(use ?? { plantGroupId: group.id, workKind }, item)
+      const apps = use?.applications && use.applications > 0 ? use.applications : times
+      if (!ratePerM2) {
+        warnings.push(`Для группы «${group.name}» нет нормы на 1 м².`)
+        continue
+      }
+      const plan = purchasePlan({
+        unit: item.unit,
+        ratePerM2,
+        rateUnit: useUnit,
+        applications: apps,
+        packQuantity: item.packQuantity,
+        packUnit: item.packUnit,
+        areas: [{ name: group.name, areaM2: group.areaM2 }],
+        areaKind: 'groups',
+        usedThisYear: 0,
+        pastUsage: [],
+      })
+      if (plan.perUse !== undefined) {
+        any = true
+        perUse += plan.perUse
+        measureUnit = plan.measureUnit || measureUnit
+      }
+      if (plan.need !== undefined) need += plan.need
+      if (plan.formula) formulas.push(plan.formula)
+      warnings.push(...plan.warnings)
+    }
+    if (!any) {
+      return purchasePlan({
+        unit: item.unit,
+        ratePerM2: item.ratePerM2,
+        rateUnit: item.rateUnit,
+        applications: times,
+        packQuantity: item.packQuantity,
+        packUnit: item.packUnit,
+        areas,
+        areaKind,
+        usedThisYear: 0,
+        pastUsage: [],
+      })
+    }
+    return {
+      source: 'rate' as const,
+      measureUnit,
+      perUse: Math.round(perUse * 1000) / 1000,
+      need: need > 0 ? Math.round(need * 1000) / 1000 : undefined,
+      formula: formulas.join('; ') || undefined,
+      used: 0,
+      stock: undefined,
+      unitsNeed: item.packQuantity && need > 0 ? Math.round((need / item.packQuantity) * 1000) / 1000 : undefined,
+      toBuy: undefined,
+      packs: undefined,
+      warnings,
+    }
+  }
+  return purchasePlan({
     unit: item.unit,
-    ratePerM2: item.ratePerM2,
+    ratePerM2: areaKind === 'groups' && !manualQty ? item.ratePerM2 : undefined,
     rateUnit: item.rateUnit,
     applications: times,
+    seasonQuantity: manualQty !== undefined ? manualQty * Math.max(1, times || 1) : undefined,
     packQuantity: item.packQuantity,
     packUnit: item.packUnit,
     areas,
@@ -515,6 +598,20 @@ function materialBuy(
     usedThisYear: 0,
     pastUsage: [],
   })
+}
+
+function materialBuy(
+  item: Consumable,
+  stock: string,
+  times: number,
+  areas: { name: string; areaM2?: number }[],
+  areaKind: 'objects' | 'groups',
+  groups: { id: string; name: string; areaM2?: number }[],
+  workKind: string,
+  rate: string,
+  rateUnit: string,
+): { packs?: number; buy?: number; planNeed?: number; measureUnit: string } {
+  const plan = workMaterialPlan(item, times, areas, areaKind, groups, workKind, rate, rateUnit)
   const packs = item.packQuantity ? plan.unitsNeed : undefined
   return { packs, buy: buyPackages(packs, parseNonNegative(stock)), planNeed: plan.need, measureUnit: plan.measureUnit || item.unit }
 }
@@ -525,6 +622,8 @@ function MaterialNeed({
   times,
   areas,
   areaKind,
+  groups,
+  workKind,
   onStock,
   onSave,
   onRemove,
@@ -540,6 +639,8 @@ function MaterialNeed({
   times: number
   areas: { name: string; areaM2?: number }[]
   areaKind: 'objects' | 'groups'
+  groups: { id: string; name: string; areaM2?: number }[]
+  workKind: string
   onStock: (value: string) => void
   onSave: () => Promise<void>
   onRemove: () => Promise<void>
@@ -551,28 +652,13 @@ function MaterialNeed({
   onRateUnit: (value: string) => void
 }) {
   const stockInvalid = !!stock.trim() && parseNonNegative(stock) === undefined
-  const manualQty = parseQuantity(rate)
-  const plan = purchasePlan({
-    unit: item.unit,
-    ratePerM2: item.ratePerM2,
-    rateUnit: item.rateUnit,
-    applications: times,
-    seasonQuantity: !item.ratePerM2 && manualQty !== undefined ? manualQty * Math.max(1, times || 1) : undefined,
-    packQuantity: item.packQuantity,
-    packUnit: item.packUnit,
-    areas,
-    areaKind,
-    usedThisYear: 0,
-    pastUsage: [],
-  })
+  const plan = workMaterialPlan(item, times, areas, areaKind, groups, workKind, rate, rateUnit)
   const packs = item.packQuantity ? plan.unitsNeed : undefined
   const buy = buyPackages(packs, parseNonNegative(stock))
-  const autoPerUse = plan.perUse !== undefined
-  const perUseLabel = autoPerUse
-    ? `${num(plan.perUse)} ${plan.measureUnit}`
-    : rate.trim()
-      ? `${rate.trim()} ${rateUnit}`
-      : ''
+  const suggested = plan.perUse !== undefined && !rate.trim() ? num(plan.perUse) : rate
+  const displayUnit = rate.trim() ? rateUnit : plan.measureUnit || rateUnit
+  const perUseLabel = suggested.trim() ? `${suggested} ${displayUnit}` : ''
+  const equipment = areaKind === 'objects' || groups.length === 0
   return (
     <div className="material-block">
       <div className="calc-grid">
@@ -584,38 +670,30 @@ function MaterialNeed({
         </p>
         <label className="field span">
           На 1 раз для этой работы
-          {autoPerUse ? (
-            <span className="result-line">
-              <input aria-label={`На 1 раз ${item.name}`} readOnly value={num(plan.perUse)} />
-              <span className="suffix">{plan.measureUnit}</span>
-            </span>
-          ) : (
-            <span className="measure-line">
-              <input aria-label={`На 1 раз ${item.name}`} inputMode="decimal" placeholder="Например: 400" value={rate} onChange={(event) => onRate(event.target.value)} />
-              <select aria-label={`Единица на 1 раз ${item.name}`} value={rateUnit} onChange={(event) => onRateUnit(event.target.value)}>
-                {units.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {unit}
-                  </option>
-                ))}
-              </select>
-            </span>
-          )}
-        </label>
-        <p className="hint span">
-          {autoPerUse
-            ? `Посчитано по норме на 1 м² × площадь ${areaKind === 'groups' ? 'групп растений' : 'объектов'}. Норму для удобрений задают у группы растений, а не у объекта участка.`
-            : 'Для удобрений задайте норму на 1 м² в карточке материала и выберите группы с площадью — количество подставится само. Для бойлера, газонокосилки и других объектов без площади укажите количество здесь.'}
-        </p>
-        <label className="field">
-          Количество внесений за 1 сезон
-          <span className="result-line">
-            <input aria-label={`Количество внесений ${item.name}`} readOnly value={times > 0 ? String(times) : ''} placeholder="—" />
-            <span className="suffix">по расписанию</span>
+          <span className="measure-line">
+            <input
+              aria-label={`На 1 раз ${item.name}`}
+              inputMode="decimal"
+              placeholder={plan.perUse !== undefined ? num(plan.perUse) : 'Например: 400'}
+              value={rate}
+              onChange={(event) => onRate(event.target.value)}
+            />
+            <select aria-label={`Единица на 1 раз ${item.name}`} value={rateUnit} onChange={(event) => onRateUnit(event.target.value)}>
+              {units.map((unit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </select>
           </span>
         </label>
-        <label className="field">
-          Требуется на 1 сезон
+        <p className="hint span">
+          {equipment
+            ? 'Для оборудования (масло, бойлер) укажите расход на 1 раз по инструкции на объект. Пустое поле — без расчёта по м².'
+            : `Подсказка из нормы×площадь: ${plan.perUse !== undefined ? `${num(plan.perUse)} ${plan.measureUnit}` : '—'}. Можно поправить для этой работы. Сроки и кратность задаются выше в повторении работы; отдельное поле «внесений» здесь не дублируется.`}
+        </p>
+        <label className="field span">
+          Требуется на сезон
           <span className="result-line">
             <input aria-label={`Требуется на сезон ${item.name}`} readOnly value={num(plan.need)} placeholder="—" />
             <span className="suffix">{plan.need === undefined ? '' : plan.measureUnit}</span>
@@ -627,6 +705,12 @@ function MaterialNeed({
             )}
           </span>
         </label>
+        {times > 0 && plan.need !== undefined && (
+          <p className="hint span">
+            Учёт кратности: {times} раз по срокам работы
+            {plan.formula ? ` · ${plan.formula}` : ''}
+          </p>
+        )}
         <label className="field">
           Запас сейчас
           <span className="result-line">
@@ -641,7 +725,6 @@ function MaterialNeed({
             <span className="suffix">уп.</span>
           </span>
         </label>
-        {plan.formula && <p className="hint span">{plan.formula}</p>}
         {!item.packQuantity && <p className="hint span">Укажите в карточке материала, сколько в одной упаковке, — иначе запас и покупка в упаковках не считаются.</p>}
         {plan.warnings.map((warning) => (
           <p key={warning} className="hint span">
@@ -896,11 +979,11 @@ function WorkForm({
         </select>
       </label>
       <label className="field">
-        Повторение
+        Как повторять
         <select value={recurrence} onChange={(event) => setRecurrence(event.target.value as PlanWork['recurrence'])}>
-          <option value="yearly">Каждый год в это время</option>
-          <option value="season">По расписанию в сезоне</option>
-          <option value="once">Один раз</option>
+          <option value="yearly">Каждый год — укажите сроки ниже</option>
+          <option value="season">В сезоне — окно дат и ритм ниже</option>
+          <option value="once">Один раз — укажите срок ниже</option>
         </select>
       </label>
       {objects.length > 0 && (
@@ -943,6 +1026,8 @@ function WorkForm({
         times={times}
         areas={rated.areas}
         areaKind={rated.areaKind}
+        groups={plantGroups.filter((group) => plantGroupIds.includes(group.id)).map((group) => ({ id: group.id, name: group.name, areaM2: group.areaM2 }))}
+        workKind={workKind}
         onAdd={addMaterial}
         onStock={(id, value) => setStocks((current) => ({ ...current, [id]: value }))}
         onSave={saveStock}
@@ -1011,7 +1096,7 @@ function WorkForm({
       <PhotoFields ids={photoIds} notes={fileNotes} onChange={(ids, notes) => { setPhotoIds(ids); setFileNotes(notes) }} />
       <label className="field">
         Примечание
-        <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} />
+        <GrowingTextarea aria-label="Примечание" rows={3} value={note} onChange={setNote} />
       </label>
       {error && <p className="error">{error}</p>}
       <div className="actions">

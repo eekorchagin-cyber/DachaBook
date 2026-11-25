@@ -176,4 +176,21 @@ describe('связка группа — вид работ — материал',
       ),
     ).toEqual([{ plantGroupId: 'hydrangea', workKind: 'Удобрение' }])
   })
+
+  it('своя норма и кратность у группы перебивают общие у материала', () => {
+    const [line] = fertilizerLines({
+      consumables: [
+        material([{ plantGroupId: 'hydrangea', workKind: 'Подкормка', ratePerM2: 70, rateUnit: 'г', applications: 2 }], {
+          ratePerM2: 50,
+        }),
+      ],
+      groups,
+      works: [work({ periods: [{ month: 5 }, { month: 6 }, { month: 7 }] })],
+      today: '2026-11-01',
+    })
+    expect(line.times).toBe(2)
+    expect(line.perUse).toBe(2.8)
+    expect(line.need).toBe(5.6)
+    expect(line.formula).toBe('40 м² × 70 г/м² × 2 = 5,6 кг')
+  })
 })

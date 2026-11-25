@@ -12,6 +12,15 @@ export function withUse(uses: PlantUse[], use: PlantUse): PlantUse[] {
   return uses.some((item) => sameUse(item, use)) ? uses : [...uses, use]
 }
 
+/** Заменяет связку целиком (норма и кратность для группы) или добавляет новую. */
+export function replaceUse(uses: PlantUse[], use: PlantUse): PlantUse[] {
+  const index = uses.findIndex((item) => sameUse(item, use))
+  if (index < 0) return [...uses, use]
+  const next = [...uses]
+  next[index] = use
+  return next
+}
+
 export function withoutUse(uses: PlantUse[], use: PlantUse): PlantUse[] {
   return uses.filter((item) => !sameUse(item, use))
 }
@@ -20,10 +29,18 @@ export function withoutUse(uses: PlantUse[], use: PlantUse): PlantUse[] {
 export function renamePlantUses(uses: PlantUse[] | undefined, from: string, to: string): PlantUse[] {
   const next: PlantUse[] = []
   for (const use of uses ?? []) {
-    const renamed = use.workKind === from ? { plantGroupId: use.plantGroupId, workKind: to } : use
+    const renamed = use.workKind === from ? { ...use, workKind: to } : use
     if (!next.some((item) => sameUse(item, renamed))) next.push(renamed)
   }
   return next
+}
+
+/** Норма связки: своя или общая у материала. */
+export function useRate(use: PlantUse, item: Pick<Consumable, 'ratePerM2' | 'rateUnit'>): { ratePerM2?: number; rateUnit?: string } {
+  return {
+    ratePerM2: use.ratePerM2 ?? item.ratePerM2,
+    rateUnit: use.rateUnit ?? item.rateUnit,
+  }
 }
 
 export interface FertilizerLine {
@@ -33,8 +50,13 @@ export interface FertilizerLine {
   plantGroupId: string
   groupName: string
   workKind: string
-  /** Сколько раз за сезон в плане есть работа этого вида с этой группой. Ноль — такой работы нет. */
+  /** Сколько раз за сезон: из инструкции связки или из плана. Ноль — не задано. */
   times: number
+  /** Норма на м², по которой посчитана строка (своя у группы или общая). */
+  ratePerM2?: number
+  rateUnit?: string
+  /** Кратность из инструкции связки, если задана отдельно от плана. */
+  instructedTimes?: number
   perUse?: number
   need?: number
   measureUnit: string
@@ -62,8 +84,8 @@ export function worksForPlantUse(works: WorkSlice[], group: GroupSlice, workKind
 
 /**
  * Сколько материала нужно группе по связке «группа — вид работ — материал».
- * Площадь — у группы растений, норма — у материала, число внесений — из плана.
- * Объект участка (газон) сам по себе норму не даёт: на нём могут быть разные культуры.
+ * Площадь — у группы растений; норма и кратность — у связки (с запасным вариантом из карточки материала и плана).
+ * Объект участка сам по себе норму не даёт: на нём могут быть разные культуры.
  */
 export function fertilizerLines(input: {
   consumables: Consumable[]
@@ -84,7 +106,10 @@ export function fertilizerLines(input: {
       const group = input.groups.find((entry) => entry.id === use.plantGroupId && !entry.deletedAt)
       if (!group) continue
       const matched = worksForPlantUse(input.works, group, use.workKind)
-      const times = matched.reduce((sum, work) => sum + workTimes(work, input.today), 0)
+      const fromPlan = matched.reduce((sum, work) => sum + workTimes(work, input.today), 0)
+      const instructed = use.applications ?? item.applications
+      const times = instructed && instructed > 0 ? instructed : fromPlan
+      const { ratePerM2, rateUnit } = useRate(use, item)
       const base = {
         consumableId: item.id,
         name: item.name,
@@ -93,16 +118,19 @@ export function fertilizerLines(input: {
         groupName: group.name,
         workKind: use.workKind,
         times,
+        ratePerM2,
+        rateUnit,
+        instructedTimes: instructed,
         measureUnit: item.unit,
       }
-      if (!item.ratePerM2) {
+      if (!ratePerM2) {
         lines.push({ ...base, warnings: ['У материала не задана норма на 1 м² — количество не считается.'] })
         continue
       }
       const plan = purchasePlan({
         unit: item.unit,
-        ratePerM2: item.ratePerM2,
-        rateUnit: item.rateUnit,
+        ratePerM2,
+        rateUnit,
         applications: times,
         packQuantity: item.packQuantity,
         packUnit: item.packUnit,
@@ -111,13 +139,19 @@ export function fertilizerLines(input: {
         usedThisYear: 0,
         pastUsage: [],
       })
+      const warnings = [...plan.warnings]
+      if (times === 0) {
+        // purchasePlan already warns; keep
+      } else if (instructed && fromPlan > 0 && instructed !== fromPlan) {
+        warnings.push(`В инструкции связки ${instructed} раз(а), в плане работ этого вида — ${fromPlan}. Для покупки взята инструкция.`)
+      }
       lines.push({
         ...base,
         perUse: plan.perUse,
         need: plan.need,
         measureUnit: plan.measureUnit || item.unit,
         formula: plan.formula,
-        warnings: plan.warnings,
+        warnings,
       })
     }
   }
