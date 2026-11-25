@@ -289,7 +289,7 @@ function WorkMaterials({
   })
   return (
     <fieldset className="periods">
-      <legend>Материалы</legend>
+      <legend className="block-title">Материалы</legend>
       <p className="hint">
         Для групп растений количество берётся из нормы связки (можно поправить здесь). Для оборудования без площади — укажите расход на 1 раз вручную по инструкции на объект.
       </p>
@@ -814,9 +814,15 @@ function WorkForm({
     if (saved) onClose()
   }
 
+  const byCalendar = recurrence === 'yearly' && !conditionType
+  const showCalendarPeriods = recurrence === 'once' || byCalendar
+  const showSeasonWindow = recurrence === 'season'
+
   return (
-    <section className="card">
-      <h2>{work ? 'Изменить работу' : 'Новая работа'}</h2>
+    <section className="card work-form">
+      <h2 className="block-title">{work ? 'Изменить работу' : 'Новая работа'}</h2>
+
+      <h3 className="block-title">Описание работы</h3>
       <label className="field">
         Что сделать
         <input value={title} onChange={(event) => setTitle(event.target.value)} />
@@ -830,50 +836,127 @@ function WorkForm({
           ))}
         </select>
       </label>
-      <label className="field">
-        Как повторять
-        <select value={recurrence} onChange={(event) => setRecurrence(event.target.value as PlanWork['recurrence'])}>
-          <option value="yearly">Каждый год — укажите сроки ниже</option>
-          <option value="season">В сезоне — окно дат и ритм ниже</option>
-          <option value="once">Один раз — укажите срок ниже</option>
-        </select>
-      </label>
+
+      <h3 className="block-title">Сроки проведения</h3>
+      <div className="timing-block">
+        {recurrence === 'yearly' && (
+          <label className="field">
+            Условие по срокам
+            <select
+              value={conditionType === 'observation' || conditionType === 'label' ? `${conditionType}:${conditionLabel}` : conditionType}
+              onChange={(event) => {
+                const value = event.target.value
+                if (value.startsWith('observation:')) {
+                  setConditionType('observation')
+                  setConditionLabel(value.slice('observation:'.length))
+                  return
+                }
+                if (value.startsWith('label:')) {
+                  setConditionType('label')
+                  setConditionLabel(value.slice('label:'.length))
+                  return
+                }
+                setConditionType(value as typeof conditionType)
+                setConditionLabel('')
+              }}
+            >
+              <option value="">Нет — задать месяц и неделю ниже</option>
+              <option value="beforeAutumnFrost">До первых осенних заморозков</option>
+              <option value="afterSpringFrost">После весенних заморозков, в ближайшую субботу</option>
+              {[...new Set([...OBSERVATION_HINTS, ...(conditionType === 'observation' && conditionLabel ? [conditionLabel] : [])])].map((text) => (
+                <option key={`observation:${text}`} value={`observation:${text}`}>
+                  {text}
+                </option>
+              ))}
+              {[...new Set([...(conditionType === 'label' && conditionLabel ? [conditionLabel] : []), ...settings.workConditions.filter((text) => !isObservationHint(text))])].map((text) => (
+                <option key={`label:${text}`} value={`label:${text}`}>
+                  {text}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {recurrence === 'yearly' && conditionType === 'afterSpringFrost' && (
+          <p className="hint">Срок берётся из условия: после весенних заморозков, в ближайшую субботу. Календарные месяцы не нужны.</p>
+        )}
+        {recurrence === 'yearly' && conditionType === 'observation' && conditionLabel && (
+          <p className="hint">Срок берётся из условия: работа станет готовой, когда в дневнике этого года появится наблюдение «{conditionLabel}».</p>
+        )}
+        {recurrence === 'yearly' && conditionType === 'label' && conditionLabel && (
+          <p className="hint">
+            «{conditionLabel}» — подпись из справочника. День работы она не назначает: отметьте выполнение, когда на участке так и произошло. Календарные месяцы не нужны.
+          </p>
+        )}
+        {recurrence === 'yearly' && conditionType === 'beforeAutumnFrost' && (
+          <label className="field">
+            За сколько дней до заморозков напоминать
+            <input inputMode="numeric" value={leadDays} onChange={(event) => setLeadDays(event.target.value)} />
+          </label>
+        )}
+        <label className="field">
+          Когда повторять
+          <select
+            value={recurrence}
+            onChange={(event) => {
+              const next = event.target.value as PlanWork['recurrence']
+              setRecurrence(next)
+              if (next !== 'yearly') {
+                setConditionType('')
+                setConditionLabel('')
+              }
+            }}
+          >
+            <option value="yearly">Каждый год</option>
+            <option value="season">В сезоне</option>
+            <option value="once">Один раз</option>
+          </select>
+        </label>
+        {showSeasonWindow && (
+          <SeasonEditor schedule={schedule} rhythm={rhythm} onSchedule={setSchedule} onRhythm={setRhythm} legend="Когда в году" />
+        )}
+        {showCalendarPeriods && <PeriodsEditor periods={periods} onChange={setPeriods} />}
+        {recurrence === 'yearly' && byCalendar && periods.length === 0 && (
+          <p className="hint">Без месяца или условия работа попадёт в план в блок «Нужно уточнить» — задайте срок, чтобы она появилась среди дел на дату.</p>
+        )}
+        {recurrence === 'once' && periods.length === 0 && (
+          <p className="hint">Укажите месяц (и при желании неделю), когда сделать эту работу.</p>
+        )}
+      </div>
+
       {objects.length > 0 && (
-        <fieldset className="chips">
-          <legend>Объекты</legend>
-          {objects.map((object) => (
-            <label key={object.id} className={objectIds.includes(object.id) ? 'chip active' : 'chip'}>
-              <input type="checkbox" checked={objectIds.includes(object.id)} onChange={() => toggle(object.id)} />
-              {object.name}
-            </label>
-          ))}
-        </fieldset>
+        <>
+          <h3 className="block-title">Объекты</h3>
+          <fieldset className="chips">
+            <legend className="visually-hidden">Объекты</legend>
+            {objects.map((object) => (
+              <label key={object.id} className={objectIds.includes(object.id) ? 'chip active' : 'chip'}>
+                <input type="checkbox" checked={objectIds.includes(object.id)} onChange={() => toggle(object.id)} />
+                {object.name}
+              </label>
+            ))}
+          </fieldset>
+        </>
       )}
+
       {plantGroups.length > 0 && (
-        <fieldset className="chips">
-          <legend>Группы растений</legend>
-          {plantGroups.map((group) => (
-            <label key={group.id} className={plantGroupIds.includes(group.id) ? 'chip active' : 'chip'}>
-              <input type="checkbox" checked={plantGroupIds.includes(group.id)} onChange={() => toggleGroup(group.id)} />
-              {group.name}
-              {group.areaM2 !== undefined ? ` · ${group.areaM2} м²` : ''}
-            </label>
-          ))}
-        </fieldset>
+        <>
+          <h3 className="block-title">Группы растений</h3>
+          <fieldset className="chips">
+            <legend className="visually-hidden">Группы растений</legend>
+            {plantGroups.map((group) => (
+              <label key={group.id} className={plantGroupIds.includes(group.id) ? 'chip active' : 'chip'}>
+                <input type="checkbox" checked={plantGroupIds.includes(group.id)} onChange={() => toggleGroup(group.id)} />
+                {group.name}
+                {group.areaM2 !== undefined ? ` · ${group.areaM2} м²` : ''}
+              </label>
+            ))}
+          </fieldset>
+          <p className="hint">
+            Норму удобрений считают по площади группы растений (трава газонная), а не по объекту участка (газон): на объекте могут быть и другие культуры. Если группы выбраны, площадь объектов в расчёт не входит — двойного учёта нет. Сколько нужно группе, видно в её карточке и в связке материала с видом работ.
+          </p>
+        </>
       )}
-      {plantGroups.length > 0 && (
-        <p className="hint">
-          Норму удобрений считают по площади группы растений (трава газонная), а не по объекту участка (газон): на объекте могут быть и другие культуры. Если группы выбраны, площадь объектов в расчёт не входит — двойного учёта нет. Сколько нужно группе, видно в её карточке и в связке материала с видом работ.
-        </p>
-      )}
-      {recurrence === 'season' ? (
-        <SeasonEditor schedule={schedule} rhythm={rhythm} onSchedule={setSchedule} onRhythm={setRhythm} />
-      ) : (
-        <PeriodsEditor periods={periods} onChange={setPeriods} />
-      )}
-      {recurrence === 'yearly' && periods.length === 0 && !conditionType && (
-        <p className="hint">Без месяца или условия работа попадёт в план в блок «Нужно уточнить» — задайте срок, чтобы она появилась среди дел на дату.</p>
-      )}
+
       <WorkMaterials
         workId={workId}
         consumableIds={consumableIds}
@@ -894,65 +977,16 @@ function WorkForm({
         onRate={(id, value) => setRateText((current) => ({ ...current, [id]: value }))}
         onRateUnit={(id, value) => setRateUnits((current) => ({ ...current, [id]: value }))}
       />
-      {recurrence === 'yearly' && (
-      <label className="field">
-        Условие
-        <select
-          value={conditionType === 'observation' || conditionType === 'label' ? `${conditionType}:${conditionLabel}` : conditionType}
-          onChange={(event) => {
-            const value = event.target.value
-            if (value.startsWith('observation:')) {
-              setConditionType('observation')
-              setConditionLabel(value.slice('observation:'.length))
-              return
-            }
-            if (value.startsWith('label:')) {
-              setConditionType('label')
-              setConditionLabel(value.slice('label:'.length))
-              return
-            }
-            setConditionType(value as typeof conditionType)
-            setConditionLabel('')
-          }}
-        >
-          <option value="">Без условия — по срокам</option>
-          <option value="beforeAutumnFrost">До первых осенних заморозков</option>
-          <option value="afterSpringFrost">После весенних заморозков, в ближайшую субботу</option>
-          {[...new Set([...OBSERVATION_HINTS, ...(conditionType === 'observation' && conditionLabel ? [conditionLabel] : [])])].map((text) => (
-            <option key={`observation:${text}`} value={`observation:${text}`}>
-              {text}
-            </option>
-          ))}
-          {[...new Set([...(conditionType === 'label' && conditionLabel ? [conditionLabel] : []), ...settings.workConditions.filter((text) => !isObservationHint(text))])].map((text) => (
-            <option key={`label:${text}`} value={`label:${text}`}>
-              {text}
-            </option>
-          ))}
-        </select>
-      </label>
-      )}
-      {recurrence === 'yearly' && conditionType === 'afterSpringFrost' && (
-        <p className="hint">После весенних заморозков, в ближайшую субботу.</p>
-      )}
-      {recurrence === 'yearly' && conditionType === 'observation' && conditionLabel && (
-        <p className="hint">Работа станет готовой, когда в дневнике этого года появится наблюдение «{conditionLabel}».</p>
-      )}
-      {recurrence === 'yearly' && conditionType === 'label' && conditionLabel && <p className="hint">{conditionLabel}</p>}
-      {recurrence === 'yearly' && conditionType === 'beforeAutumnFrost' && (
-        <label className="field">
-          За сколько дней до заморозков напоминать
-          <input inputMode="numeric" value={leadDays} onChange={(event) => setLeadDays(event.target.value)} />
-        </label>
-      )}
-      {recurrence === 'yearly' && conditionType === 'label' && (
-        <p className="hint">Это подпись из справочника условий. День работы она не назначает: отметьте выполнение, когда на участке так и произошло.</p>
-      )}
-      <h3 className="section-title">Фотографии</h3>
+
+      <h3 className="block-title">Фотографии</h3>
       <PhotoFields ids={photoIds} notes={fileNotes} onChange={(ids, notes) => { setPhotoIds(ids); setFileNotes(notes) }} />
+
+      <h3 className="block-title">Примечания</h3>
       <label className="field">
-        Примечание
-        <GrowingTextarea aria-label="Примечание" rows={3} value={note} onChange={setNote} />
+        <span className="visually-hidden">Примечания</span>
+        <GrowingTextarea aria-label="Примечания" rows={3} value={note} onChange={setNote} />
       </label>
+
       {error && <p className="error">{error}</p>}
       <div className="actions">
         <ActionButton disabled={!title.trim()} onRun={() => save()}>

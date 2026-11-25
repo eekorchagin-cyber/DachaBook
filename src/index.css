@@ -184,6 +184,46 @@ body {
   margin-top: 0;
 }
 
+.work-form > .block-title,
+.work-form .periods > legend.block-title {
+  margin-top: 22px;
+  color: var(--accent);
+  border-bottom-width: 3px;
+}
+
+.work-form > h2.block-title {
+  margin-top: 0;
+}
+
+.work-form .periods > legend.block-title {
+  float: none;
+  width: 100%;
+  padding: 0 0 4px;
+  margin: 22px 0 8px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.work-form .periods > legend:not(.block-title) {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.work-form .timing-block {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 8px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.work-form .timing-block .periods {
+  margin: 4px 0 0;
+}
+
 .care-group-name {
   margin: 10px 0 4px;
   font-size: 1rem;
