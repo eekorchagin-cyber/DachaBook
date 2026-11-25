@@ -114,8 +114,8 @@ function CareLine({
   units: string[]
   defaults?: Pick<Consumable, 'ratePerM2' | 'rateUnit' | 'applications'>
 }) {
-  const material = useLiveQuery(() => (here.consumableId ? db.consumables.get(here.consumableId) : Promise.resolve(undefined)), [here.consumableId])
-  const stored = material?.plantUses?.find((use) => use.plantGroupId === line.plantGroupId && use.workKind === line.workKind)
+  const material = useLiveQuery(() => db.consumables.get(line.consumableId), [line.consumableId])
+  const stored = material?.plantUses?.find((use: { plantGroupId: string; workKind: string }) => use.plantGroupId === line.plantGroupId && use.workKind === line.workKind)
   const [rate, setRate] = useState(() => String(line.ratePerM2 ?? defaults?.ratePerM2 ?? ''))
   const [rateUnit, setRateUnit] = useState(() => line.rateUnit ?? defaults?.rateUnit ?? 'г')
   const [apps, setApps] = useState(() => String(defaults?.applications ?? ''))

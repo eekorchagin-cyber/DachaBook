@@ -516,7 +516,7 @@ function workMaterialPlan(
   groups: { id: string; name: string; areaM2?: number }[],
   workKind: string,
   rate: string,
-  rateUnit: string,
+  _rateUnit: string,
 ) {
   const manualQty = parseQuantity(rate)
   if (areaKind === 'groups' && groups.length > 0 && !manualQty) {
